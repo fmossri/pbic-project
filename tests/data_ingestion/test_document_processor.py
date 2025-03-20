@@ -9,40 +9,31 @@ class TestDocumentProcessor:
     """Suite de testes para a classe DocumentProcessor."""
 
     @pytest.fixture(autouse=True)
-    def setup_and_cleanup(self):
-        """Configura os caminhos dos arquivos de teste e garante a limpeza."""
+    def setup(self):
+        """Configura os caminhos dos arquivos de teste."""
         # Obtém o caminho para o diretório test_docs
-        self.test_docs_dir = os.path.join(os.path.dirname(__file__), "test_docs")
-        self.test_pdfs_dir = os.path.join(self.test_docs_dir, "test_pdfs")
+        test_docs_dir = os.path.join(os.path.dirname(__file__), "test_docs")
+        self.test_pdfs_dir = os.path.join(test_docs_dir, "test_pdfs")
         
-        # Limpa os diretórios de teste se já existirem
-        for path in [self.test_pdfs_dir, self.test_docs_dir]:
-            if os.path.exists(path):
-                try:
-                    shutil.rmtree(path)
-                except Exception as e:
-                    print(f"Warning: Failed to clean up directory {path}: {e}")
+        # Cria o diretório de teste se não existir
+        os.makedirs(self.test_pdfs_dir, exist_ok=True)
         
-        # Cria os diretórios de teste
-        os.makedirs(self.test_docs_dir)
-        os.makedirs(self.test_pdfs_dir)
+        # Cria os arquivos PDF de teste
+        create_test_pdf()
         
         # Define os caminhos dos arquivos de teste
         self.sample_pdf_path = os.path.join(self.test_pdfs_dir, "test_document.pdf")
         self.non_pdf_path = os.path.join(self.test_pdfs_dir, "sample.txt")
         
-        # Cria os arquivos PDF de teste
-        create_test_pdf()
+        # Cria um arquivo não-PDF para teste
+        with open(self.non_pdf_path, "w") as text_file:
+            text_file.write("Este não é um arquivo PDF")
             
         yield
         
-        # Limpa os diretórios de teste após os testes
-        for path in [self.test_pdfs_dir, self.test_docs_dir]:
-            if os.path.exists(path):
-                try:
-                    shutil.rmtree(path)
-                except Exception as e:
-                    print(f"Warning: Failed to clean up directory {path}: {e}")
+        # Limpa os arquivos de teste após os testes
+        if os.path.exists(self.test_pdfs_dir):
+            shutil.rmtree(self.test_pdfs_dir)
         
     def test_calculate_hash_with_valid_pdf(self):
         """Testa o cálculo do hash para um arquivo PDF válido."""
@@ -98,8 +89,6 @@ class TestDocumentProcessor:
             # Verifica se o erro está relacionado ao stream do PDF
             assert "Stream has ended unexpectedly" in str(exc_info.value)
         finally:
-            try:
-                if os.path.exists(self.non_pdf_path):
-                    os.remove(self.non_pdf_path)
-            except Exception as e:
-                print(f"Warning: Failed to clean up test file: {e}")
+            # Garante que o arquivo é removido após o teste
+            if os.path.exists(self.non_pdf_path):
+                os.remove(self.non_pdf_path)
