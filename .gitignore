@@ -33,3 +33,6 @@ htmlcov/
 # Arquivos temporários
 *.log
 *.tmp 
+
+# resumo do projeto para IA
+summary.txt

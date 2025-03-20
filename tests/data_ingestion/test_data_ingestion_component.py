@@ -2,7 +2,7 @@ import os
 import pytest
 import shutil
 from components.data_ingestion.data_ingestion_component import DataIngestionComponent
-from .test_docs.test_pdf_generator import create_test_pdf
+from .test_docs.generate_test_pdfs import create_test_pdf
 
 class TestDataIngestionComponent:
     """Suite de testes para a classe DataIngestionComponent."""
