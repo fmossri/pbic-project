@@ -1,0 +1,40 @@
+# Ambiente virtual
+.venv/
+venv/
+ENV/
+
+# Cache Python
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Distribuição / empacotamento
+dist/
+build/
+*.egg-info/
+
+# Testes e cobertura
+.pytest_cache/
+.coverage
+htmlcov/
+.benchmarks/
+tests/data_ingestion/test_docs/test_pdfs/
+
+# IDEs e editores
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+
+# Arquivos de ambiente
+.env
+.env.*
+
+# Arquivos temporários
+*.log
+*.tmp
+
+# Arquivos gerados durante testes
+test_document.pdf
+sample.txt 
