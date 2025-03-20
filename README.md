@@ -75,13 +75,17 @@ O sistema processará todos os PDFs no diretório especificado, gerando embeddin
 │   │   ├── document_processor.py
 │   │   └── text_chunker.py
 │   └── embedding_generator/
-│       └── embedding_generator_component.py
+│       └── embedding_generator.py
+
 ├── tests/
-│   └── data_ingestion/
-│       ├── test_docs/
-│       │   └── test_pdf_generator.py
-│       ├── test_document_processor.py
-│       └── test_data_ingestion_component.py
+│   ├── data_ingestion/
+│   │   ├── test_document_processor.py
+│   │   ├── test_data_ingestion_component.py
+│   │   ├── test_text_chunker.py
+│   │   └── test_docs/
+│   │       └── test_pdf_generator.py
+│   └── embedding_generator/
+│       └── test_embedding_generator.py
 ├── main.py
 └── requirements.txt
 ```
