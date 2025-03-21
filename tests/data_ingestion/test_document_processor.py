@@ -34,21 +34,42 @@ class TestDocumentProcessor:
         # Limpa os arquivos de teste após os testes
         if os.path.exists(self.test_pdfs_dir):
             shutil.rmtree(self.test_pdfs_dir)
-        
-    def test_calculate_hash_with_valid_pdf(self):
-        """Testa o cálculo do hash para um arquivo PDF válido."""
+
+    def test_calculate_hash_with_text(self):
+        """Testa o cálculo do hash para um texto."""
         processor = DocumentProcessor()
-        hash_value = processor.calculate_hash(self.sample_pdf_path)
+        text_content = "Este é um texto de teste"
+        hash_value = processor.calculate_hash(text_content)
         
+        # Verifica o formato do hash
         assert hash_value is not None
         assert isinstance(hash_value, str)
         assert len(hash_value) == 32  # Comprimento do hash MD5
         
-    def test_calculate_hash_with_nonexistent_file(self):
-        """Testa o cálculo do hash para um arquivo inexistente."""
+        # Verifica se o mesmo texto gera o mesmo hash
+        assert processor.calculate_hash(text_content) == hash_value
+        
+    def test_calculate_hash_consistency(self):
+        """Testa se diferentes textos geram hashes diferentes."""
         processor = DocumentProcessor()
-        with pytest.raises(FileNotFoundError):
-            processor.calculate_hash("nonexistent.pdf")
+        text1 = "Este é o primeiro texto"
+        text2 = "Este é o segundo texto"
+        
+        hash1 = processor.calculate_hash(text1)
+        hash2 = processor.calculate_hash(text2)
+        
+        # Verifica se textos diferentes geram hashes diferentes
+        assert hash1 != hash2
+
+    def test_calculate_hash_empty_text(self):
+        """Testa o cálculo do hash para texto vazio."""
+        processor = DocumentProcessor()
+        hash_value = processor.calculate_hash("")
+        
+        # Verifica se texto vazio gera um hash válido
+        assert hash_value is not None
+        assert isinstance(hash_value, str)
+        assert len(hash_value) == 32
         
     def test_extract_text_from_pdf(self):
         """Testa a extração de texto de um arquivo PDF válido."""

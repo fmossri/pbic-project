@@ -1,5 +1,6 @@
 import os
 from typing import Dict, List, Optional, Tuple
+import hashlib
 
 from .document_processor import DocumentProcessor
 from .text_chunker import TextChunker
@@ -46,7 +47,7 @@ class DataIngestionComponent:
         """
         return os.path.getsize(file_path)
     
-    def _check_duplicate(self, filename: str, document_path: str) -> bool:
+    def _is_duplicate(self, document_hash: str) -> bool:
         """
         Verifica se um documento é duplicado e imprime informações se for.
         
@@ -57,27 +58,22 @@ class DataIngestionComponent:
         Returns:
             bool: True se o documento for duplicado, False caso contrário
         """
-        document_hash = self.document_processor.calculate_hash(document_path)
-        
         # Verifica se já existe um documento com o mesmo hash
         for existing_filename, existing_hash in self.document_hashes.items():
             if existing_hash == document_hash:
-                original_size = self.document_sizes[existing_filename]
-                size_diff = abs(self._get_file_size(document_path) - original_size)
+                #original_size = self.document_sizes[existing_filename]
+                #size_diff = abs(self._get_file_size(document_path) - original_size)
                 
-                print(f"\nDocumento duplicado encontrado:")
+                """print(f"\nDocumento duplicado encontrado:")
                 print(f"- Arquivo: {filename}")
                 print(f"- Hash: {document_hash}")
                 print(f"- Tamanho: {self._get_file_size(document_path):,} bytes")
                 print(f"- Original: {existing_filename}")
                 print(f"- Tamanho original: {original_size:,} bytes")
                 print(f"- Diferença de tamanho: {size_diff:,} bytes")
-                print("-" * 50)
+                print("-" * 50)"""
                 return True
         
-        # Se não é duplicado, armazena suas informações
-        self.document_hashes[filename] = document_hash
-        self.document_sizes[filename] = self._get_file_size(document_path)
         return False
     
     def list_pdf_files(self, directory_path: str) -> List[str]:
@@ -127,13 +123,24 @@ class DataIngestionComponent:
         for filename in pdf_files:
             document_path = os.path.join(directory_path, filename)
             
-            # Verifica duplicatas
-            if self._check_duplicate(filename, document_path):
+            # Extrai o texto do PDF
+            pages = self.document_processor.extract_text(document_path)
+            text_content = "\n".join(text for _, text in pages)
+            
+            # Calcula o hash do documento
+            document_hash = self.document_processor.calculate_hash(text_content)
+            
+            # Check for duplicates
+            if self._is_duplicate(document_hash):
+            #TODO:
+            #adiciona a duplicata em um arquivo de texto log. O log deve conter: caminho/nome do arquivo original - seu hash - seu tamanho:\n Lista de arquivos duplicados 
+            # soma 1 a um contador de duplicatas
                 continue
             
-            # Processa o documento página por página
-            pages = self.document_processor.extract_text(document_path)
+            self.document_hashes[filename] = document_hash
+            self.document_sizes[filename] = self._get_file_size(document_path)
             
+            # Process chunks...
             if pages:
                 all_chunks = []
                 

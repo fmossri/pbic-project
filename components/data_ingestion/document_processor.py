@@ -7,12 +7,12 @@ from pypdf.errors import PdfStreamError
 class DocumentProcessor:
     """Processa documentos PDF para extração de texto."""
     
-    def calculate_hash(self, file_path: str) -> str:
+    def calculate_hash(self, text_content: str) -> str:
         """
         Calcula o hash MD5 do conteúdo textual de um arquivo PDF.
         
         Args:
-            file_path (str): Caminho para o arquivo
+            text_content (str): Conteúdo do documento
             
         Returns:
             str: Hash MD5 do conteúdo textual
@@ -21,12 +21,7 @@ class DocumentProcessor:
             FileNotFoundError: Se o arquivo não existir
             PdfStreamError: Se o arquivo não for um PDF válido
         """
-        # Extrai o texto do PDF
-        pages = self.extract_text(file_path)
-        
-        # Concatena todo o texto em uma única string
-        text_content = "\n".join(text for _, text in pages)
-        
+
         # Calcula o hash do texto
         hash_md5 = hashlib.md5()
         hash_md5.update(text_content.encode('utf-8'))
