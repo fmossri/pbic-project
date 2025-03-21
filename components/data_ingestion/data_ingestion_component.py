@@ -1,6 +1,7 @@
 import os
 from typing import Dict, List, Optional, Tuple
 import hashlib
+from langchain.schema import Document
 
 from .document_processor import DocumentProcessor
 from .text_chunker import TextChunker
@@ -102,7 +103,7 @@ class DataIngestionComponent:
             
         return pdf_files
     
-    def process_directory(self, directory_path: str) -> Dict[str, List[Dict[str, str]]]:
+    def process_directory(self, directory_path: str) -> Dict[str, List[Document]]:
         """
         Processa todos os arquivos PDF em um diretório.
         
@@ -110,7 +111,7 @@ class DataIngestionComponent:
             directory_path (str): Caminho para o diretório contendo PDFs
             
         Returns:
-            Dict[str, List[Dict[str, str]]]: Dicionário mapeando nomes de arquivos para seus chunks de texto
+            Dict[str, List[Document]]: Dicionário mapeando nomes de arquivos para seus chunks de texto
             
         Raises:
             FileNotFoundError: Se o diretório não existir
@@ -125,7 +126,7 @@ class DataIngestionComponent:
             
             # Extrai o texto do PDF
             pages = self.document_processor.extract_text(document_path)
-            text_content = "\n".join(text for _, text in pages)
+            text_content = "\n".join(page.page_content for page in pages)
             
             # Calcula o hash do documento
             document_hash = self.document_processor.calculate_hash(text_content)
@@ -145,13 +146,12 @@ class DataIngestionComponent:
                 all_chunks = []
                 
                 # Processa cada página e coleta seus chunks
-                for page_num, page_text in pages:
+                for page in pages:
                     chunks = self.text_chunker.chunk_text(
-                        text=page_text,
+                        text=page.page_content,
                         metadata={
-                            "page": page_num,
-                            "filename": filename,
-                            "has_context": False
+                            "page": page.metadata["page"],
+                            "filename": filename
                         }
                     )
                     if chunks:

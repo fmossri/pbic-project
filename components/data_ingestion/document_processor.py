@@ -2,7 +2,9 @@ import hashlib
 import os
 from typing import List, Tuple
 from pypdf import PdfReader
+from langchain_community.document_loaders import PyPDFLoader
 from pypdf.errors import PdfStreamError
+from langchain.schema import Document
 
 class DocumentProcessor:
     """Processa documentos PDF para extração de texto."""
@@ -27,7 +29,7 @@ class DocumentProcessor:
         hash_md5.update(text_content.encode('utf-8'))
         return hash_md5.hexdigest()
     
-    def extract_text(self, file_path: str) -> List[Tuple[int, str]]:
+    def extract_text(self, file_path: str) -> List[Document]:
         """
         Extrai texto de um documento PDF, página por página.
         
@@ -35,7 +37,7 @@ class DocumentProcessor:
             file_path (str): Caminho para o arquivo PDF
             
         Returns:
-            List[Tuple[int, str]]: Lista de tuplas (número_da_página, texto)
+            List[Document]: Lista de documentos LangChain, cada um contendo o texto de uma página
             
         Raises:
             FileNotFoundError: Se o arquivo não existir
@@ -44,12 +46,8 @@ class DocumentProcessor:
         if not os.path.exists(file_path):
             raise FileNotFoundError(f"Arquivo não encontrado: {file_path}")
             
-        reader = PdfReader(file_path)
-        pages = []
-        
-        for page_num, page in enumerate(reader.pages, 1):
-            text = page.extract_text()
-            if text:
-                pages.append((page_num, text))
-        
-        return pages 
+        try:
+            loader = PyPDFLoader(file_path)
+            return loader.load_and_split()
+        except Exception as e:
+            raise PdfStreamError(f"Erro ao processar PDF: {str(e)}") 

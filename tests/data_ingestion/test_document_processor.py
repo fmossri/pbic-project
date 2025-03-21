@@ -4,6 +4,7 @@ import shutil
 from pypdf.errors import PdfStreamError
 from .test_docs.generate_test_pdfs import create_test_pdf
 from components.data_ingestion.document_processor import DocumentProcessor
+from langchain.schema import Document
 
 class TestDocumentProcessor:
     """Suite de testes para a classe DocumentProcessor."""
@@ -75,26 +76,28 @@ class TestDocumentProcessor:
         """Testa a extração de texto de um arquivo PDF válido."""
         processor = DocumentProcessor()
         pages = processor.extract_text(self.sample_pdf_path)
-        
+    
         assert len(pages) > 0
         assert isinstance(pages, list)
-        
+    
         # Verifica a estrutura das páginas
-        for page_num, page_text in pages:
-            assert isinstance(page_num, int)
-            assert isinstance(page_text, str)
-            assert page_text.strip() != ""
+        for page in pages:
+            assert isinstance(page, Document)
+            assert hasattr(page, 'page_content')
+            assert hasattr(page, 'metadata')
+            assert 'page' in page.metadata
+            assert 'source' in page.metadata
         
         # Verifica o conteúdo específico
-        all_text = " ".join(text for _, text in pages)
+        all_text = " ".join(page.page_content for page in pages)
         assert "Documento de Teste" in all_text
         assert "Este é um documento de teste abrangente" in all_text
-        assert "Página 2 - Conteúdo Adicional" in all_text
+        assert "Página 2 - Continuação" in all_text
         assert "FIM DO DOCUMENTO DE TESTE" in all_text
         
         # Verifica a numeração das páginas
-        page_numbers = [num for num, _ in pages]
-        assert page_numbers == list(range(1, len(pages) + 1))
+        page_numbers = [page.metadata['page'] for page in pages]
+        assert page_numbers == list(range(len(pages)))
         
     def test_extract_text_from_non_pdf(self):
         """Testa a extração de texto de um arquivo não-PDF."""

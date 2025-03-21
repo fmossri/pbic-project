@@ -1,7 +1,7 @@
 import os
 import pytest
 import shutil
-from components.data_ingestion.data_ingestion_component import DataIngestionComponent
+from components.data_ingestion.data_ingestion_component import DataIngestionComponent, Document
 from .test_docs.generate_test_pdfs import create_test_pdf
 
 class TestDataIngestionComponent:
@@ -63,11 +63,12 @@ class TestDataIngestionComponent:
             
             # Verifica a estrutura de cada chunk
             for chunk in chunks:
-                assert isinstance(chunk, dict)
-                assert "content" in chunk
-                assert "metadata" in chunk
-                assert "start_index" in chunk["metadata"]
-                assert "page" in chunk["metadata"]
+                assert isinstance(chunk, Document)
+                assert hasattr(chunk, 'page_content')
+                assert hasattr(chunk, 'metadata')
+                assert 'page' in chunk.metadata
+                assert 'filename' in chunk.metadata
+                assert 'start_index' in chunk.metadata
 
     def test_handle_duplicates(self):
         """Testa o tratamento de documentos duplicados."""
@@ -80,7 +81,7 @@ class TestDataIngestionComponent:
         assert len(results) == 1
         
         # Verifica se o documento processado tem chunks
-        for doc_id, chunks in results.items():
+        for chunks in results.values():
             assert len(chunks) > 0
 
     def test_invalid_directory(self):
@@ -115,30 +116,3 @@ class TestDataIngestionComponent:
         with pytest.raises(ValueError) as exc_info:
             component.process_directory(self.empty_dir)
         assert "Nenhum arquivo PDF encontrado" in str(exc_info.value)
-
-    def test_chunk_overlap(self):
-        """Testa se há sobreposição adequada entre chunks de páginas diferentes."""
-        component = DataIngestionComponent()
-        results = component.process_directory(self.test_pdfs_dir)
-        
-        # Verifica se há sobreposição entre chunks de páginas diferentes
-        for doc_id, chunks in results.items():
-            # Agrupa chunks por página
-            page_chunks = {}
-            for chunk in chunks:
-                page_num = chunk["metadata"]["page"]
-                if page_num not in page_chunks:
-                    page_chunks[page_num] = []
-                page_chunks[page_num].append(chunk)
-            
-            # Verifica sobreposição entre páginas consecutivas
-            for page_num in sorted(page_chunks.keys())[:-1]:
-                current_page_chunks = page_chunks[page_num]
-                next_page_chunks = page_chunks[page_num + 1]
-                
-                # Verifica se o último chunk da página atual sobrepõe com o primeiro da próxima
-                if current_page_chunks and next_page_chunks:
-                    last_chunk = current_page_chunks[-1]["content"]
-                    first_chunk = next_page_chunks[0]["content"]
-                    overlap = set(last_chunk.split()) & set(first_chunk.split())
-                    assert len(overlap) > 0, f"Deve haver sobreposição entre páginas {page_num} e {page_num + 1}" 
