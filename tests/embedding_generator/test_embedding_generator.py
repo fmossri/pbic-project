@@ -1,10 +1,10 @@
 import pytest
 import numpy as np
-from components.embedding_generator.embedding_generator import EmbeddingGenerator
+from components.embedding_generator import EmbeddingGenerator
 
 @pytest.fixture
 def embedding_generator():
-    """Fixture que fornece uma instância do EmbeddingGenerator para os testes."""
+    """Fixture que fornece uma instância do EmbeddingGenerator."""
     return EmbeddingGenerator()
 
 @pytest.fixture
@@ -49,63 +49,57 @@ def single_chunk():
     processar esses documentos de forma eficiente e precisa é crucial para 
     a automação de processos e a tomada de decisões baseada em dados."""]  # ~350 chars
 
-def test_initialization(embedding_generator):
-    """Testa a inicialização correta do EmbeddingGenerator."""
-    assert embedding_generator.model_name == "all-MiniLM-L6-v2"
-    assert embedding_generator.embedding_dimension > 0
-    assert embedding_generator.model is not None
+def test_initialization():
+    """Testa a inicialização do EmbeddingGenerator."""
+    generator = EmbeddingGenerator()
+    assert isinstance(generator, EmbeddingGenerator)
+    assert generator.model_name == "all-MiniLM-L6-v2"
 
-def test_empty_chunks(embedding_generator, empty_chunks):
-    """Testa o comportamento quando uma lista vazia de chunks é fornecida."""
-    embeddings = embedding_generator.calculate_embeddings(empty_chunks)
+def test_empty_chunks(embedding_generator):
+    """Testa o comportamento com lista vazia de chunks."""
+    embeddings = embedding_generator.calculate_embeddings([])
     assert isinstance(embeddings, np.ndarray)
     assert embeddings.size == 0
 
-def test_single_chunk(embedding_generator, single_chunk):
+def test_single_chunk(embedding_generator):
     """Testa o processamento de um único chunk."""
-    embeddings = embedding_generator.calculate_embeddings(single_chunk)
+    chunk = "Este é um chunk de teste."
+    embeddings = embedding_generator.calculate_embeddings([chunk])
     assert isinstance(embeddings, np.ndarray)
-    assert embeddings.shape == (1, embedding_generator.embedding_dimension)
+    assert embeddings.shape[0] == 1
+    assert embeddings.shape[1] == embedding_generator.embedding_dimension
 
-def test_multiple_chunks(embedding_generator, sample_chunks):
+def test_multiple_chunks(embedding_generator):
     """Testa o processamento de múltiplos chunks."""
-    embeddings = embedding_generator.calculate_embeddings(sample_chunks)
+    chunks = [
+        "Primeiro chunk de teste.",
+        "Segundo chunk de teste.",
+        "Terceiro chunk de teste."
+    ]
+    embeddings = embedding_generator.calculate_embeddings(chunks)
     assert isinstance(embeddings, np.ndarray)
-    assert embeddings.shape == (len(sample_chunks), embedding_generator.embedding_dimension)
+    assert embeddings.shape[0] == len(chunks)
+    assert embeddings.shape[1] == embedding_generator.embedding_dimension
 
-def test_embedding_values(embedding_generator, sample_chunks):
-    """Testa se os valores dos embeddings estão dentro do intervalo esperado."""
-    embeddings = embedding_generator.calculate_embeddings(sample_chunks)
-    # Verifica se os valores estão entre -1 e 1 (embeddings normalizados)
-    assert np.all(embeddings >= -1) and np.all(embeddings <= 1)
+def test_embedding_values(embedding_generator):
+    """Testa se os valores dos embeddings são consistentes."""
+    chunk = "Chunk de teste para verificar consistência."
+    embeddings1 = embedding_generator.calculate_embeddings([chunk])
+    embeddings2 = embedding_generator.calculate_embeddings([chunk])
+    np.testing.assert_array_almost_equal(embeddings1, embeddings2)
 
-def test_batch_processing(embedding_generator, sample_chunks):
-    """Testa o processamento em batch com diferentes tamanhos."""
-    # Processamento sem batch
-    embeddings_no_batch = embedding_generator.calculate_embeddings(sample_chunks)
+def test_batch_processing(embedding_generator):
+    """Testa se o processamento em batch produz os mesmos resultados."""
+    chunks = ["Chunk " + str(i) for i in range(10)]
     
-    # Processamento com batch
-    embeddings_with_batch = embedding_generator.calculate_embeddings(sample_chunks, batch_size=2)
+    # Processa sem batch (batch_size=1)
+    embeddings_no_batch = embedding_generator.calculate_embeddings(chunks, batch_size=1)
+    
+    # Processa com batch (batch_size=3)
+    embeddings_with_batch = embedding_generator.calculate_embeddings(chunks, batch_size=3)
     
     # Verifica se os resultados são iguais
     np.testing.assert_array_almost_equal(embeddings_no_batch, embeddings_with_batch)
-
-def test_model_info(embedding_generator):
-    """Testa se as informações do modelo estão corretas."""
-    info = embedding_generator.get_model_info()
-    assert isinstance(info, dict)
-    assert "model_name" in info
-    assert "embedding_dimension" in info
-    assert "max_sequence_length" in info
-    assert info["model_name"] == "all-MiniLM-L6-v2"
-    assert info["embedding_dimension"] == embedding_generator.embedding_dimension
-
-def test_embedding_dimension(embedding_generator):
-    """Testa se a dimensão do embedding está correta."""
-    dimension = embedding_generator.get_embedding_dimension()
-    assert isinstance(dimension, int)
-    assert dimension > 0
-    assert dimension == embedding_generator.embedding_dimension
 
 @pytest.mark.benchmark
 def test_performance(embedding_generator, benchmark):

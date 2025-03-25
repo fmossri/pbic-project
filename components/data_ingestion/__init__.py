@@ -1,3 +1,3 @@
-from .data_ingestion_component import DataIngestionComponent
+from .data_ingestion_orchestrator import DataIngestionOrchestrator
 
-__all__ = ['DataIngestionComponent'] 
+__all__ = ['DataIngestionOrchestrator'] 

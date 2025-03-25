@@ -1,113 +1,184 @@
-# Sistema de Ingestão e Processamento de PDFs
+# Pipeline de Ingestão de PDFs
 
-Este projeto implementa um sistema modular para ingestão, processamento e geração de embeddings de documentos PDF.
+Sistema para processamento de documentos PDF, geração de embeddings e busca semântica.
 
-## Arquitetura do Sistema
+## Visão Geral
 
-### Componentes Principais
+Esse sistema processa documentos PDF, extrai texto, divide em chunks semânticos e gera embeddings para busca semântica. O sistema é projetado para ser escalável, confiável e fácil de usar.
 
-#### 1. Ingestão de Dados (`components/data_ingestion/`)
-- **Componente Principal** (`data_ingestion_component.py`)
-  - Responsável pela coordenação do processo de ingestão
-  - Gerencia o fluxo de processamento dos documentos
-  - Integra todos os subcomponentes de processamento
-  - Detecta e gerencia documentos duplicados
+### Funcionalidades Principais
 
-- **Processador de Documentos** (`document_processor.py`)
-  - Responsável pela leitura e extração de texto de PDFs
-  - Implementa a lógica de processamento de documentos
-  - Gerencia a conversão de PDF para texto
-  - Calcula hashes para detecção de duplicatas
+- Processamento de documentos PDF
+- Detecção de duplicatas via hash MD5
+- Divisão de texto em chunks semânticos
+- Geração de embeddings para busca semântica
+- Normalização de texto consistente
+- Sistema de logging estruturado
+- Armazenamento vetorial com FAISS
+- Armazenamento de metadados com SQLite
 
-- **Chunking de Texto** (`text_chunker.py`)
-  - Divide o texto em chunks menores e gerenciáveis
-  - Implementa estratégias de divisão de texto
-  - Mantém a coerência semântica dos chunks
-  - Permite configuração de tamanho e sobreposição
-
-#### 2. Geração de Embeddings (`components/embedding_generator/`)
-- **Gerador de Embeddings** (`embedding_generator_component.py`)
-  - Responsável pela geração de embeddings vetoriais
-  - Utiliza o modelo sentence-transformers
-  - Processa chunks de texto em lotes
-  - Gera embeddings de dimensão configurável
-
-### Fluxo de Processamento
-
-1. **Ingestão de Documentos**
-   - Leitura dos PDFs do diretório de entrada
-   - Verificação de duplicatas via hash
-   - Extração de texto dos documentos
-   - Pré-processamento do texto extraído
-
-2. **Processamento de Texto**
-   - Divisão do texto em chunks
-   - Aplicação de regras de processamento
-   - Preparação para geração de embeddings
-
-3. **Geração de Embeddings**
-   - Conversão de chunks de texto em vetores
-   - Processamento em lotes para eficiência
-   - Armazenamento dos embeddings com metadados
-
-## Uso do Sistema
-
-Para executar o sistema:
-
-```bash
-# Ativar ambiente virtual
-source .venv/bin/activate  # Linux/Mac
-.venv\Scripts\activate     # Windows
-
-# Executar o processamento
-python main.py ../sample_docs
-```
-
-O sistema processará todos os PDFs no diretório especificado, gerando embeddings para cada chunk de texto e exibindo métricas detalhadas do processamento.
-
-## Estrutura de Diretórios
+## Estrutura do Projeto
 
 ```
-.
+/root
 ├── components/
 │   ├── data_ingestion/
-│   │   ├── data_ingestion_component.py
 │   │   ├── document_processor.py
-│   │   └── text_chunker.py
+│   │   ├── text_chunker.py
+│   │   ├── text_normalizer.py
+│   │   └── data_ingestion_component.py
 │   └── embedding_generator/
-│       └── embedding_generator.py
-
+│       ├── embedding_generator.py
+│       └── __init__.py
 ├── tests/
 │   ├── data_ingestion/
 │   │   ├── test_document_processor.py
 │   │   ├── test_data_ingestion_component.py
 │   │   ├── test_text_chunker.py
+│   │   ├── test_text_normalizer.py
 │   │   └── test_docs/
-│   │       └── test_pdf_generator.py
+│   │       └── generate_test_pdfs.py
 │   └── embedding_generator/
 │       └── test_embedding_generator.py
 ├── main.py
-└── requirements.txt
+└── README.md
 ```
 
-## Métricas e Monitoramento
+## Componentes Principais
 
-O sistema fornece métricas detalhadas sobre o processamento:
-- Total de documentos processados
-- Número de páginas e chunks gerados
-- Estatísticas de embeddings gerados
-- Tempo de processamento e performance
+### 1. DataIngestionOrchestrator
+- Coordena o fluxo de processamento
+- Gerencia deduplicação de documentos
+- Rastreia tamanhos e hashes
+- Coordena interação entre componentes
+- Principais métodos:
+  * process_directory: Pipeline principal
+  * list_pdf_files: Detecção de PDFs
+  * _check_duplicate: Detecção de duplicatas
+  * _find_original_document: Mapeamento de duplicatas
+
+### 2. DocumentProcessor
+- Processa arquivos PDF
+- Extrai texto e calcula hash MD5
+- Trata erros de PDF inválido
+- Gerencia metadados do documento
+- Principais métodos:
+  * extract_text: Extração de texto do PDF
+  * calculate_hash: Cálculo de hash MD5
+
+### 3. TextChunker
+- Divide texto em chunks semânticos
+- Mantém coerência nas divisões
+- Otimizado para ~790 caracteres por chunk
+- Usa RecursiveCharacterTextSplitter
+- Principais métodos:
+  * chunk_text: Divisão principal do texto
+
+### 4. EmbeddingGenerator
+- Gera representações vetoriais
+- Processamento em lote
+- Usa sentence-transformers
+- Otimizado para performance
+- Principais métodos:
+  * generate_embeddings: Geração de embeddings
+
+### 5. TextNormalizer
+- Normalização Unicode (NFKC)
+- Normalização de espaços
+- Conversão para minúsculas
+- Preserva estrutura do texto
+- Principais métodos:
+  * normalize: Pipeline principal de normalização
+  * _normalize_unicode: Normalização Unicode
+  * _normalize_whitespace: Normalização de espaços
+  * _normalize_case: Normalização de case
 
 ## Requisitos
 
-- Python 3.x
-- Dependências listadas em `requirements.txt`
-- Memória suficiente para processamento de embeddings
+- Python 3.10.12
+- pypdf
+- sentence-transformers
+- pytest 8.3.5
+- (Em desenvolvimento) faiss-cpu/gpu
+- (Em desenvolvimento) sqlite3
+- (Em desenvolvimento) structlog
+- (Em desenvolvimento) pyyaml
 
-## Status do Projeto
+## Instalação
 
-- ✅ Sistema de ingestão de PDFs implementado
-- ✅ Processamento de texto e chunking funcionando
-- ✅ Geração de embeddings implementada
-- 🔄 Sistema de armazenamento em desenvolvimento
-- 🔄 Sistema de busca em desenvolvimento 
+1. Clone o repositório:
+```bash
+git clone [URL_DO_REPOSITÓRIO]
+cd pypdf
+```
+
+2. Crie e ative um ambiente virtual:
+```bash
+python -m venv .venv
+source .venv/bin/activate  # Linux/Mac
+# ou
+.venv\Scripts\activate  # Windows
+```
+
+3. Instale as dependências:
+```bash
+pip install -r requirements.txt
+```
+
+## Uso
+
+### Processamento de PDFs
+
+```bash
+python main.py caminho/do/diretório
+```
+
+### Executando Testes
+
+```bash
+python -m pytest -vv
+```
+
+## Métricas de Performance
+
+- Processamento: 3.9 docs/segundo
+- Média de chunks: 14.2 por documento
+- Média de chunks por página: 2.5
+- Tamanho médio de chunk: 790 caracteres
+
+## Estado Atual
+
+✅ Implementado:
+- Sistema de ingestão de PDF
+- Processamento e chunking de texto
+- Geração de embeddings
+- Sistema básico de métricas
+- Normalização de texto
+
+🔄 Em Desenvolvimento:
+- Sistema de armazenamento
+- Sistema de busca
+- Sistema de logging
+- Sistema de configuração
+
+## Próximos Passos
+
+1. Sistema de Armazenamento
+   - FAISS para vetores
+   - SQLite para metadados
+   - Operações em lote
+
+2. Sistema de Configuração
+   - Arquivos YAML/JSON
+   - Variáveis de ambiente
+   - Valores padrão
+
+3. Sistema de Logging
+   - Logging estruturado JSON
+   - Rotação de logs
+   - Métricas de performance
+
+5. Sistema de Busca
+   - Busca por similaridade vetorial
+   - Filtragem por metadados
+   - Ordenação de resultados

@@ -33,6 +33,12 @@ htmlcov/
 # Arquivos temporários
 *.log
 *.tmp 
+temp.py
+
+# Arquivos do plantUML
+*.png
+architecture.puml
 
 # resumo do projeto para IA
 summary.txt
+update.txt
