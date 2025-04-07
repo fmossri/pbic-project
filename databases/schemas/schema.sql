@@ -1,0 +1,40 @@
+PRAGMA foreign_keys = ON;
+
+/*CREATE TABLE IF NOT EXISTS domains (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL
+)*/
+
+CREATE TABLE IF NOT EXISTS document_files (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    path TEXT NOT NULL UNIQUE,
+    hash TEXT NOT NULL UNIQUE,
+    total_pages INTEGER NOT NULL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS chunks (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    document_id INTEGER NOT NULL,
+    page_number INTEGER NOT NULL,
+    chunk_page_index INTEGER NOT NULL,
+    chunk_start_char_position INTEGER NOT NULL,
+    content TEXT NOT NULL UNIQUE,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (document_id) REFERENCES document_files(id)
+        ON DELETE CASCADE
+        ON UPDATE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS embeddings (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    chunk_id INTEGER NOT NULL UNIQUE,
+    faiss_index_path TEXT NOT NULL,
+    chunk_faiss_index INTEGER NOT NULL UNIQUE,
+    dimension INTEGER NOT NULL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (chunk_id) REFERENCES chunks(id)
+        ON DELETE CASCADE
+        ON UPDATE CASCADE
+);

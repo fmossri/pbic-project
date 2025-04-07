@@ -1,6 +1,8 @@
 from typing import List, Dict, Optional
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain.schema import Document
+from components.models import Chunk
+
 class TextChunker:
     """Gerencia a divisão de conteúdo de texto em chunks."""
     
@@ -31,7 +33,7 @@ class TextChunker:
             add_start_index=True  # Útil para debug
         )
 
-    def chunk_text(self, text: str, metadata: Optional[Dict] = None) -> List[Document]:
+    def _chunk_text(self, text: str, metadata: Optional[Dict] = None) -> List[Chunk]:
         """
         Divide o texto em chunks com metadados.
         
@@ -50,6 +52,24 @@ class TextChunker:
             texts=[text],
             metadatas=[metadata] if metadata else None
         )
-        
-        # Converte para formato mais simples
+ 
         return docs
+    
+    def create_chunks(self, text: str, metadata: Optional[Dict] = None) -> List[Chunk]:
+        """
+        Divide o texto em chunks com metadados.
+        """
+        docs =self._chunk_text(text, metadata)
+
+        chunks = []
+        for chunk_index, doc in enumerate(docs):
+            chunk = Chunk(
+                document_id = doc.metadata.get("document_id", 0),
+                page_number = doc.metadata.get("page_number", 0),
+                chunk_page_index = chunk_index,
+                chunk_start_char_position = doc.metadata["start_index"],
+                content = doc.page_content,
+            )
+            chunks.append(chunk)
+
+        return chunks

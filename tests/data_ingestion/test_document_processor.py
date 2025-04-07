@@ -40,7 +40,7 @@ class TestDocumentProcessor:
         """Testa o cálculo do hash para um texto."""
         processor = DocumentProcessor()
         text_content = "Este é um texto de teste"
-        hash_value = processor.calculate_hash(text_content)
+        hash_value = processor._calculate_hash(text_content)
         
         # Verifica o formato do hash
         assert hash_value is not None
@@ -48,7 +48,7 @@ class TestDocumentProcessor:
         assert len(hash_value) == 32  # Comprimento do hash MD5
         
         # Verifica se o mesmo texto gera o mesmo hash
-        assert processor.calculate_hash(text_content) == hash_value
+        assert processor._calculate_hash(text_content) == hash_value
         
     def test_calculate_hash_consistency(self):
         """Testa se diferentes textos geram hashes diferentes."""
@@ -56,8 +56,8 @@ class TestDocumentProcessor:
         text1 = "Este é o primeiro texto"
         text2 = "Este é o segundo texto"
         
-        hash1 = processor.calculate_hash(text1)
-        hash2 = processor.calculate_hash(text2)
+        hash1 = processor._calculate_hash(text1)
+        hash2 = processor._calculate_hash(text2)
         
         # Verifica se textos diferentes geram hashes diferentes
         assert hash1 != hash2
@@ -65,17 +65,17 @@ class TestDocumentProcessor:
     def test_calculate_hash_empty_text(self):
         """Testa o cálculo do hash para texto vazio."""
         processor = DocumentProcessor()
-        hash_value = processor.calculate_hash("")
+        hash_value = processor._calculate_hash("")
         
         # Verifica se texto vazio gera um hash válido
         assert hash_value is not None
         assert isinstance(hash_value, str)
         assert len(hash_value) == 32
         
-    def test_extract_text_from_pdf(self):
+    def test_extract_text(self):
         """Testa a extração de texto de um arquivo PDF válido."""
         processor = DocumentProcessor()
-        pages = processor.extract_text(self.sample_pdf_path)
+        pages = processor._extract_text(self.sample_pdf_path)
     
         assert len(pages) > 0
         assert isinstance(pages, list)
@@ -87,6 +87,7 @@ class TestDocumentProcessor:
             assert hasattr(page, 'metadata')
             assert 'page' in page.metadata
             assert 'source' in page.metadata
+            print(page.metadata)
         
         # Verifica o conteúdo específico
         all_text = " ".join(page.page_content for page in pages)
@@ -108,7 +109,7 @@ class TestDocumentProcessor:
         try:
             processor = DocumentProcessor()
             with pytest.raises(PdfStreamError) as exc_info:
-                processor.extract_text(self.non_pdf_path)
+                processor._extract_text(self.non_pdf_path)
             
             # Verifica se o erro está relacionado ao stream do PDF
             assert "Stream has ended unexpectedly" in str(exc_info.value)

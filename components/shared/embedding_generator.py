@@ -1,5 +1,6 @@
 from sentence_transformers import SentenceTransformer
-from typing import List, Optional
+from typing import List, Optional, Tuple
+from components.models import Embedding
 import numpy as np
 
 class EmbeddingGenerator:
@@ -21,7 +22,8 @@ class EmbeddingGenerator:
         self.model = SentenceTransformer(model_name)
         self.embedding_dimension = self.model.get_sentence_embedding_dimension()
 
-    def calculate_embeddings(self, chunks: List[str], batch_size: Optional[int] = 32) -> np.ndarray:
+    
+    def generate_embeddings(self, chunks: List[Tuple[str, int]], batch_size: Optional[int] = 32) -> List[Embedding]:
         """Calcula os embeddings para uma lista de chunks.
         
         Args:
@@ -30,10 +32,25 @@ class EmbeddingGenerator:
                                       Default: 32
         
         Returns:
-            np.ndarray: Array numpy contendo os embeddings (shape: [n_chunks, embedding_dimension])
+            List[Embedding]: Lista de objetos Embedding
         """
         if not chunks:
-            return np.array([])
-            
-        embeddings = self.model.encode(chunks, batch_size=batch_size)
+            return []
+        
+        chunks_text, chunk_ids = zip(*chunks)
+        result = self.model.encode(chunks_text, batch_size=batch_size)
+        embeddings = []
+
+        for embedding, chunk_id in zip(result, chunk_ids):
+            embedding = Embedding(
+                id = None,
+                chunk_id = chunk_id,
+                faiss_index_path = None,
+                chunk_faiss_index = None,
+                dimension = self.embedding_dimension, 
+                embedding = embedding
+            )
+
+            embeddings.append(embedding)
+
         return embeddings

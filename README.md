@@ -74,6 +74,15 @@ Esse sistema processa documentos PDF, extrai texto, divide em chunks semânticos
 - Principais métodos:
   * chunk_text: Divisão principal do texto
 
+!! Usando "RecursiveCharacterTextSplitter" - gera chunks e overlaps
+!! usando separadores. Quebra o texto baseado nesses separadores
+!! de forma hierárquica - mira um tamanho definido (1000 char, 200 char), mas
+!! tenta quebrar em um separador principal (\n\n - parágrafos); se o tamanho do chunk
+!! estiver muito distante do alvo, se chama recursivamente, tentando quebrar no próximo
+!! separador (\n - linha), até o tamanho final do chunk estiver próximo o suficiente
+!! do alvo. Dessa forma, os chunks não tem exatamente o mesmo tamanho. Considerar estratégias
+!! diferentes, como semantic chunking
+
 ### 4. EmbeddingGenerator
 - Gera representações vetoriais
 - Processamento em lote
@@ -81,6 +90,10 @@ Esse sistema processa documentos PDF, extrai texto, divide em chunks semânticos
 - Otimizado para performance
 - Principais métodos:
   * generate_embeddings: Geração de embeddings
+
+!! no momento, estamos usando o modelo "all-MiniLM-L6-v2", hardcoded.
+!! Considerar a criação de uma lógica de configuração que permita 
+!! selecionar o modelo a ser usado pelo sistema.
 
 ### 5. TextNormalizer
 - Normalização Unicode (NFKC)
@@ -92,6 +105,11 @@ Esse sistema processa documentos PDF, extrai texto, divide em chunks semânticos
   * _normalize_unicode: Normalização Unicode
   * _normalize_whitespace: Normalização de espaços
   * _normalize_case: Normalização de case
+
+### 6. VectorStore
+- Busca ou cria um diretório para armazenar os índices
+- Carrega o índice existente, ou cria um novo se não existir
+- Adiciona os embeddings dos chunks ao índice
 
 ## Requisitos
 

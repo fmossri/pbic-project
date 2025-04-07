@@ -1,6 +1,6 @@
 import pytest
 from components.data_ingestion.text_chunker import TextChunker
-from langchain.schema import Document
+from components.models import Chunk
 
 class TestTextChunker:
     """Suite de testes para a classe TextChunker."""
@@ -12,20 +12,20 @@ class TestTextChunker:
 
     def test_empty_text(self):
         """Testa o chunking de texto vazio."""
-        chunks = self.chunker.chunk_text("")
+        chunks = self.chunker._chunk_text("")
         assert len(chunks) == 0
 
     def test_small_text(self):
         """Testa o chunking de texto menor que o tamanho do chunk."""
         text = "Este é um texto pequeno."
-        chunks = self.chunker.chunk_text(text)
+        chunks = self.chunker._chunk_text(text)
         assert len(chunks) == 1
         assert chunks[0].page_content == text
 
     def test_default_chunking(self):
         """Testa o chunking padrão com texto maior que o tamanho do chunk."""
         text = "Este é um texto maior que será dividido em chunks. Precisamos garantir que o texto seja longo o suficiente para forçar múltiplos chunks com o tamanho atual. " * 10
-        chunks = self.chunker.chunk_text(text)
+        chunks = self.chunker._chunk_text(text)
         assert len(chunks) > 1
         assert all(len(chunk.page_content) <= 500 for chunk in chunks)
 
@@ -33,14 +33,14 @@ class TestTextChunker:
         """Testa o chunking com tamanho de chunk personalizado."""
         chunker = TextChunker(chunk_size=50, overlap=10)
         text = "Este é um texto que será dividido em chunks menores. " * 3
-        chunks = chunker.chunk_text(text)
+        chunks = chunker._chunk_text(text)
         assert len(chunks) > 1
         assert all(len(chunk.page_content) <= 50 for chunk in chunks)
 
     def test_overlap_content(self):
         """Testa se há sobreposição adequada entre chunks."""
         text = "Este é um texto que será dividido em chunks com sobreposição. " * 15
-        chunks = self.chunker.chunk_text(text)
+        chunks = self.chunker._chunk_text(text)
         assert len(chunks) > 1
 
         # Verifica se há sobreposição entre chunks consecutivos
@@ -61,7 +61,7 @@ O aprendizado de máquina permite que sistemas melhorem com a experiência. Atra
 
 As implicações éticas não podem ser ignoradas neste contexto. A sociedade precisa discutir ativamente os limites e as diretrizes para o uso responsável dessas tecnologias. O futuro da IA depende de um equilíbrio entre inovação e responsabilidade.\n\n"""
 
-        chunks = self.chunker.chunk_text(text)
+        chunks = self.chunker._chunk_text(text)
         
         # Verifica se parágrafos pequenos consecutivos (P1 e P2) ficam juntos quando cabem
         p1_p2_juntos = False
@@ -84,13 +84,25 @@ As implicações éticas não podem ser ignoradas neste contexto. A sociedade pr
         for chunk in chunks:
             assert len(chunk.page_content) <= 500, f"Chunk excede tamanho máximo: {len(chunk.page_content)} > 500"
 
-    def test_metadata(self):
-        """Testa se os metadados estão sendo corretamente incluídos."""
-        text = "Este é um texto para testar os metadados. " * 3
-        chunks = self.chunker.chunk_text(text)
+    def test_chunk_properties_exist(self):
+        """Testa se as propriedades do chunk estão sendo corretamente incluídas."""
+
+        text = "Este é um texto para testar os metadados. " * 40
+        metadata = {"document_id": 1, "page_number": 1}
+        chunks = self.chunker.create_chunks(text, metadata)
+        start_char_positions = [0, 418, 838, 1258]
         
-        for i, chunk in enumerate(chunks):
-            assert isinstance(chunk, Document)
-            assert hasattr(chunk, 'metadata')
-            assert 'start_index' in chunk.metadata
-            assert chunk.metadata['start_index'] == i * 500  # Verifica se o índice inicial está correto 
+        for i, chunk in enumerate(chunks, 0):
+            assert isinstance(chunk, Chunk)
+            assert hasattr(chunk, 'document_id')
+            assert hasattr(chunk, 'page_number')
+            assert hasattr(chunk, 'chunk_page_index')
+            assert hasattr(chunk, 'chunk_start_char_position')
+            assert hasattr(chunk, 'content')
+
+            assert chunk.id is None
+            assert chunk.content is not None
+            assert chunk.document_id == metadata["document_id"]
+            assert chunk.page_number == metadata["page_number"]
+            assert chunk.chunk_page_index == i
+            assert chunk.chunk_start_char_position == start_char_positions[i]

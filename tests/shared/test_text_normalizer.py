@@ -1,5 +1,5 @@
 import pytest
-from components.data_ingestion.text_normalizer import TextNormalizer
+from components.shared.text_normalizer import TextNormalizer
 import re
 
 @pytest.fixture

@@ -2,9 +2,6 @@ import sys
 import time
 from typing import Dict, List
 from components.data_ingestion import DataIngestionOrchestrator
-from components.data_ingestion.document_processor import DocumentProcessor
-from components.data_ingestion.text_chunker import TextChunker
-from components.embedding_generator import EmbeddingGenerator
 from langchain.schema import Document
 
 def print_metrics(
@@ -70,7 +67,6 @@ def print_metrics(
     print("=" * 80)
 
 def main():
-    """Função principal do programa."""
     # Verifica argumentos da linha de comando
     if len(sys.argv) != 2:
         print("Uso: python main.py caminho/para/diretorio")
@@ -81,7 +77,6 @@ def main():
     
     # Inicializa componentes
     ingestion = DataIngestionOrchestrator()
-    embedding_generator = EmbeddingGenerator()
     
     try:
         # Lista os arquivos PDF

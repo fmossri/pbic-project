@@ -1,15 +1,19 @@
 import os
-from typing import Dict, List, Optional
+import sqlite3
+from typing import Dict, List, Optional, Tuple
 from langchain.schema import Document
 
+from components.models import DocumentFile, Chunk
 from .document_processor import DocumentProcessor
 from .text_chunker import TextChunker
-from .text_normalizer import TextNormalizer
-
+from ..shared.text_normalizer import TextNormalizer
+from ..shared.embedding_generator import EmbeddingGenerator
+from ..storage.faiss_manager import FaissManager
+from ..storage.sqlite_manager import SQLiteManager
 class DataIngestionOrchestrator:
     """Componente principal para gerenciar o processamento de arquivos PDF."""
     
-    def __init__(self, chunk_size: int = 1000, overlap: int = 200):
+    def __init__(self, chunk_size: int = 800, overlap: int = 160):
         """
         Inicializa o orquestrador com os componentes necessários.
         
@@ -20,8 +24,11 @@ class DataIngestionOrchestrator:
         self.document_processor = DocumentProcessor()
         self.text_chunker = TextChunker(chunk_size, overlap)
         self.text_normalizer = TextNormalizer()
+        self.embedding_generator = EmbeddingGenerator()
+        self.sqlite_manager = SQLiteManager()
+        self.faiss_manager = FaissManager()
         self.document_hashes: Dict[str, str] = {}
-
+        
     def _find_original_document(self, duplicate_hash: str) -> Optional[str]:
         """Encontra o documento original do hash duplicado.
         
@@ -56,9 +63,13 @@ class DataIngestionOrchestrator:
                 print(f"- Original: {existing_filename}")
                 print("-" * 50)"""
                 return True
+            
         return False
+        
+        
+
     
-    def list_pdf_files(self, directory_path: str) -> List[str]:
+    def list_pdf_files(self, directory_path: str) -> List[DocumentFile]:
         """
         Lista todos os arquivos PDF em um diretório.
 
@@ -83,7 +94,8 @@ class DataIngestionOrchestrator:
         with os.scandir(directory_path) as entries:
             for entry in entries:
                 if entry.is_file() and entry.name.lower().endswith('.pdf'):
-                    pdf_files.append(entry.name)
+                    file = DocumentFile(id = None, hash = None, name=entry.name, path=entry.path, total_pages=0)
+                    pdf_files.append(file)
 
         if not pdf_files:
             raise ValueError(f"Nenhum arquivo PDF encontrado em: {directory_path}")
@@ -105,51 +117,84 @@ class DataIngestionOrchestrator:
             NotADirectoryError: Se o caminho não for um diretório
             ValueError: Se não houver arquivos PDF no diretório
         """
+        if not os.path.exists(directory_path):
+            raise FileNotFoundError(f"Directory not found: {directory_path}")
+        if not os.path.isdir(directory_path):
+            raise NotADirectoryError(f"Path is not a directory: {directory_path}")
+
         pdf_files = self.list_pdf_files(directory_path)
-        results = {}
 
-        for filename in pdf_files:
-            document_path = os.path.join(directory_path, filename)
-            
-            # Extrai o texto do PDF
-            pages = self.document_processor.extract_text(document_path)
-            text_content = "\n".join(page.page_content for page in pages)
-            
-            # Calcula o hash do documento
-            document_hash = self.document_processor.calculate_hash(text_content)
-            
-            # Check for duplicates
-            if self._is_duplicate(document_hash):
-            #TODO:
-            #adiciona a duplicata em um arquivo de texto log. O log deve conter: caminho/nome do arquivo original - seu hash:\n Lista de arquivos duplicados 
-            # soma 1 a um contador de duplicatas
-                continue
-            
-            self.document_hashes[filename] = document_hash
-            
-            #TODO:
-            # Decidir se os chunks não normalizados devem ser preservados
-            if pages:
-                all_chunks = []
-                
-                # Processa cada página e coleta seus chunks
-                for page in pages:
-                    # Normaliza o conteúdo da página
-                    normalized_page = self.text_normalizer.normalize(page.page_content)
+        if not pdf_files:
+            raise ValueError(f"No PDF files found in directory: {directory_path}")
 
-                    # Divide a página em chunks
-                    chunks = self.text_chunker.chunk_text(
-                        text=normalized_page,
-                        metadata={
-                            "page": page.metadata["page"],
-                            "filename": filename
-                        }
-                    )
-                    if chunks:
-                        all_chunks.extend(chunks)
+        with self.sqlite_manager.get_connection() as conn:
+            self.sqlite_manager.begin(conn)
+
+
+
+            for file in pdf_files:
                 
-                # Adiciona chunks aos resultados se houver algum
-                if all_chunks:
-                    results[filename] = all_chunks
-        
-        return results 
+                try:
+                    # processa o documento, adicionando as páginas, hash e total de páginas ao objeto DocumentFile
+                    self.document_processor.process_document(file)
+                    # Verifica se é duplicado
+                    if self._is_duplicate(file.hash):
+                    #TODO:
+                    #adiciona a duplicata em um arquivo de texto log. O log deve conter: caminho/nome do arquivo original - seu hash:\n Lista de arquivos duplicados 
+                    # soma 1 a um contador de duplicatas
+                        conn.rollback()
+                        continue
+
+                    self.document_hashes[file.name] = file.hash
+                    file.id = self.sqlite_manager.insert_document_file(file, conn)
+  
+                    if not file.pages:
+                        conn.rollback()
+                        continue
+
+                    document_chunks : List[Chunk] = []
+                    # Processa cada página e coleta seus chunks
+                    for page in file.pages:
+                        # Divide a página em chunks
+                            page_chunks = self.text_chunker.create_chunks(
+                                text=page.page_content,
+                                metadata={
+                                    "page_number": page.metadata["page"],
+                                    "document_id": file.id,
+                                }
+                            )
+
+                            if page_chunks:
+                                document_chunks.extend(page_chunks)
+                        
+
+                    if not document_chunks:
+                        conn.rollback()
+                        continue
+                    # Inicializa a lista de chunks normalizados
+                    normalized_chunks : List[Tuple[str, int]] = []
+                    for chunk in document_chunks:
+                        #Adiciona o chunk ao banco de dados, e obtém seu id
+                        chunk.id = self.sqlite_manager.insert_chunk(chunk, file.id, conn)
+                        #Normaliza o chunk e o adiciona à lista de chunks normalizados com o seu id
+                        normalized_chunk = [self.text_normalizer.normalize(chunk.content), chunk.id]
+                        normalized_chunks.append(normalized_chunk)
+
+                    #Gera os embeddings
+                    embeddings = self.embedding_generator.generate_embeddings(normalized_chunks)
+                    #Adiciona os embeddings ao índice FAISS, atualizando os objetos Embedding com o índice FAISS
+                    self.faiss_manager.add_embeddings(embeddings)
+                    index_path = self.faiss_manager.index_file
+                    #Adiciona os embeddings ao banco de dados
+                    for embedding in embeddings:
+                        embedding.faiss_index_path = index_path
+                        self.sqlite_manager.insert_embedding(embedding, conn)
+                    #Salva as alterações no banco de dados
+                    conn.commit()
+                
+                except Exception as e:
+                    conn.rollback()
+                    print(f"Erro ao processar o arquivo {file.name}: {e}")
+                    continue
+
+ 

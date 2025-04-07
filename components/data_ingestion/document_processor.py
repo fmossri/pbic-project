@@ -1,15 +1,17 @@
 import hashlib
 import os
-from typing import List, Tuple
-from pypdf import PdfReader
+
+from typing import List
 from langchain_community.document_loaders import PyPDFLoader
 from pypdf.errors import PdfStreamError
 from langchain.schema import Document
 
+from components.models import DocumentFile
+
 class DocumentProcessor:
     """Processa documentos PDF para extração de texto."""
     
-    def calculate_hash(self, text_content: str) -> str:
+    def _calculate_hash(self, text_content: str) -> str:
         """
         Calcula o hash MD5 do conteúdo textual de um arquivo PDF.
         
@@ -29,7 +31,7 @@ class DocumentProcessor:
         hash_md5.update(text_content.encode('utf-8'))
         return hash_md5.hexdigest()
     
-    def extract_text(self, file_path: str) -> List[Document]:
+    def _extract_text(self, file_path: str) -> List[Document]:
         """
         Extrai texto de um documento PDF, página por página.
         
@@ -49,5 +51,32 @@ class DocumentProcessor:
         try:
             loader = PyPDFLoader(file_path)
             return loader.load_and_split()
+        
         except Exception as e:
             raise PdfStreamError(f"Erro ao processar PDF: {str(e)}") 
+        
+
+    def process_document(self, file: DocumentFile) -> None:
+        """
+        Processa um documento PDF, extraindo texto página por página, calculando o hash do documento e atualizando o objeto DocumentFile.
+        
+        Args:
+            file (DocumentFile): Objeto DocumentFile representando o documento PDF"""
+        
+
+        # Extrai o texto do PDF
+        try:
+            pages = self._extract_text(file.path)
+            file.pages = pages
+            file.total_pages = len(pages)
+
+            text_content = "\n".join(page.page_content for page in pages)
+            # Calcula o hash do documento
+            file.hash = self._calculate_hash(text_content)
+
+        except Exception as e:
+            raise e
+
+
+            
+        
