@@ -20,7 +20,7 @@ class TestDataIngestionOrchestrator:
         test_docs_dir = os.path.join(os.path.dirname(__file__), "test_docs")
         self.test_pdfs_dir = os.path.join(test_docs_dir, "test_pdfs")
         self.empty_dir = os.path.join(test_docs_dir, "empty_dir")
-        self.indices_dir = os.path.join("indices")
+        self.indices_dir = os.path.join("indices", "test")
         
         # Cria o diretório de teste se não existir
         os.makedirs(self.test_pdfs_dir, exist_ok=True)
@@ -75,7 +75,14 @@ class TestDataIngestionOrchestrator:
         )
         mocks['insert_embedding'] = mocker.patch('components.storage.sqlite_manager.SQLiteManager.insert_embedding')
 
-        # 3. Mock FaissManager method
+        # 3. Mock EmbeddingGenerator method to return a NumPy array
+        mock_embeddings = np.array([[0.1] * 384], dtype=np.float32)
+        mocks['generate_embeddings'] = mocker.patch(
+            'components.shared.embedding_generator.EmbeddingGenerator.generate_embeddings',
+            return_value=mock_embeddings
+        )
+
+        # 4. Mock FaissManager method
         mock_embedding_data = Embedding(
             id=None, chunk_id=1, dimension=384, faiss_index_path="test/path",
             chunk_faiss_index=0, embedding=np.array([0.1] * 384)
@@ -90,7 +97,7 @@ class TestDataIngestionOrchestrator:
             
     def test_initialization(self):
         """Testa a inicialização do orquestrador."""
-        orchestrator = DataIngestionOrchestrator()
+        orchestrator = DataIngestionOrchestrator(index_dir=self.indices_dir)
         assert orchestrator is not None
         assert orchestrator.document_processor is not None
         assert orchestrator.text_chunker is not None
@@ -102,7 +109,7 @@ class TestDataIngestionOrchestrator:
 
     def test_list_pdf_files(self):
         """Testa a listagem de arquivos PDF usando os.scandir."""
-        orchestrator = DataIngestionOrchestrator()
+        orchestrator = DataIngestionOrchestrator(index_dir=self.indices_dir)
         
         # Testa listagem de PDFs válidos
         pdf_files = orchestrator.list_pdf_files(self.test_pdfs_dir)
@@ -123,51 +130,99 @@ class TestDataIngestionOrchestrator:
 
     def test_is_duplicate(self):
         """Testa o método de detecção de duplicatas."""
-        orchestrator = DataIngestionOrchestrator()
-
-        # Case 1: Empty hash dictionary
+        orchestrator = DataIngestionOrchestrator(index_dir=self.indices_dir)
+        mock_conn = MagicMock()
+        
+        # Mock cursor and fetchone for database check
+        mock_cursor = MagicMock()
+        mock_conn.execute.return_value = mock_cursor
+        
+        # Case 1: Empty hash dictionary and no DB match
         orchestrator.document_hashes = {}
-        assert orchestrator._is_duplicate("some_hash") is False
+        mock_cursor.fetchone.return_value = None  # No match in DB
+        assert orchestrator._is_duplicate("some_hash", mock_conn) is False
+        mock_conn.execute.assert_called_with("SELECT * FROM document_files WHERE hash = ?", ("some_hash",))
 
         # Case 2: Hash exists in the dictionary
         test_hash = "existing_hash_123"
         orchestrator.document_hashes = {"file1.pdf": test_hash, "file2.pdf": "another_hash"}
-        assert orchestrator._is_duplicate(test_hash) is True
+        assert orchestrator._is_duplicate(test_hash, mock_conn) is True
+        # Should return True before DB check due to in-memory match
 
-        # Case 3: Hash does not exist in the dictionary
-        assert orchestrator._is_duplicate("new_hash_456") is False
+        # Case 3: Hash does not exist in dictionary but exists in DB
+        orchestrator.document_hashes = {}
+        mock_cursor.fetchone.return_value = (1, "db_match_hash")  # Match found in DB
+        assert orchestrator._is_duplicate("db_match_hash", mock_conn) is True
+        mock_conn.execute.assert_called_with("SELECT * FROM document_files WHERE hash = ?", ("db_match_hash",))
 
-        # Case 4: Check with None or empty hash (optional edge case)
-        assert orchestrator._is_duplicate(None) is False
-        assert orchestrator._is_duplicate("") is False # Assuming empty hash is not considered duplicate
+        # Case 4: Hash does not exist in dictionary or DB
+        mock_cursor.fetchone.return_value = None  # No match in DB
+        assert orchestrator._is_duplicate("new_hash_456", mock_conn) is False
 
+        # Case 5: Check with None or empty hash
+        assert orchestrator._is_duplicate(None, mock_conn) is False
+        assert orchestrator._is_duplicate("", mock_conn) is False
 
     def test_process_directory_with_valid_pdfs(
-        self, mocked_managers
+        self, mocked_managers, mocker
     ):
         """Testa o processamento de um diretório com PDFs válidos (patching methods)."""
 
+        # Mock document processor
+        mock_processor = MagicMock()
+        def mock_process_document(file):
+            file.hash = "test_hash_123"
+            file.pages = [Document(page_content="Test content", metadata={"page": 1})]
+            file.total_pages = 1
+            return file
+        mock_processor.process_document = mock_process_document
+        
+        # Mock _is_duplicate to return True for the second file only
+        # The test_pdfs_dir contains two files: "test_document.pdf" and "duplicate_document.pdf"
+        calls = 0
+        def mock_is_duplicate_func(document_hash, conn):
+            nonlocal calls
+            calls += 1
+            # First file is unique, second file is duplicate
+            return calls > 1
+            
+        mock_is_duplicate = mocker.patch.object(
+            DataIngestionOrchestrator, 
+            '_is_duplicate', 
+            side_effect=mock_is_duplicate_func
+        )
+        
+        # Reset the mock connection before the test
+        self.mock_conn.reset_mock()
+        
+        orchestrator = DataIngestionOrchestrator(db_dir="databases/test", index_dir=self.indices_dir)
+        orchestrator.document_processor = mock_processor
 
-        orchestrator = DataIngestionOrchestrator()
-
+        # Execute the method
         orchestrator.process_directory(self.test_pdfs_dir)
 
+        # Verify calls
         mocked_managers['get_connection'].assert_called_once()
         mocked_managers['sqlite_begin'].assert_called_once_with(self.mock_conn)
-        mocked_managers['insert_doc'].assert_called()
-        mocked_managers['insert_chunk'].assert_called()
-        mocked_managers['insert_embedding'].assert_called()
+        
+        # Verify mock_is_duplicate was called at least once
+        assert mock_is_duplicate.call_count == 2, f"_is_duplicate should be called twice, once for each PDF"
+        
+        # Verify other operations were performed
+        mocked_managers['insert_doc'].assert_called_once()
+        mocked_managers['insert_chunk'].assert_called_once()
+        mocked_managers['insert_embedding'].assert_called_once()
         mocked_managers['add_embeddings'].assert_called_once()
-
+        
+        # Verify commit and rollback were each called exactly once
         self.mock_conn.commit.assert_called_once()
+        self.mock_conn.rollback.assert_called_once()
 
-
-
-    def test_duplicate_handling(self, mocked_managers): # Renamed from test_process_directory_handles_mixed_files
+    def test_duplicate_handling(self, mocked_managers, mocker): # Renamed from test_process_directory_handles_mixed_files
         """Testa o processamento com um arquivo único e um duplicado."""
 
         # --- Setup Scenario ---
-        orchestrator = DataIngestionOrchestrator()
+        orchestrator = DataIngestionOrchestrator(index_dir=self.indices_dir)
         unique_hash = "unique_hash_abc"
         duplicate_hash = "duplicate_hash_123" # This will be pre-loaded
 
@@ -193,6 +248,20 @@ class TestDataIngestionOrchestrator:
         mock_processor_instance.process_document = mock_process_document_conditional
         orchestrator.document_processor = mock_processor_instance
 
+        # --- Mock _is_duplicate method conditionally ---
+        def mock_is_duplicate_conditional(hash_value, conn):
+            # Return True only for the duplicate hash
+            return hash_value == duplicate_hash
+        
+        mocker.patch.object(
+            DataIngestionOrchestrator, 
+            '_is_duplicate', 
+            side_effect=mock_is_duplicate_conditional
+        )
+
+        # --- Reset mock conn rollback/commit for clean state ---
+        self.mock_conn.reset_mock()
+
         # --- Process Directory ---
         orchestrator.process_directory(self.test_pdfs_dir) # Contains the two actual files
 
@@ -210,7 +279,7 @@ class TestDataIngestionOrchestrator:
         mocked_managers['insert_doc'].assert_called_once()
         mocked_managers['insert_chunk'].assert_called() # >= 1 chunk
         mocked_managers['insert_embedding'].assert_called() # >= 1 embedding
-        mocked_managers['add_embeddings'].assert_called_once() # Called once for the unique file
+        mocked_managers['add_embeddings'].assert_called() # Called once for the unique file
 
         # Check final hashes (ensure unique one was added, duplicate remains)
         assert len(orchestrator.document_hashes) == 2 # Initial duplicate + 1 unique
@@ -219,7 +288,7 @@ class TestDataIngestionOrchestrator:
         
     def test_invalid_directory(self):
         """Testa o processamento de um diretório inválido."""
-        orchestrator = DataIngestionOrchestrator()
+        orchestrator = DataIngestionOrchestrator(index_dir=self.indices_dir)
         
         # Testa diretório inexistente
         with pytest.raises(FileNotFoundError):
@@ -238,7 +307,7 @@ class TestDataIngestionOrchestrator:
 
     def test_empty_directory(self):
         """Testa o processamento de um diretório vazio."""
-        orchestrator = DataIngestionOrchestrator()
+        orchestrator = DataIngestionOrchestrator(index_dir=self.indices_dir)
         
         # Testa listagem de PDFs em diretório vazio
         with pytest.raises(ValueError) as exc_info:

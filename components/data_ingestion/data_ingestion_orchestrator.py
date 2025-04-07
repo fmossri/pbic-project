@@ -1,9 +1,8 @@
 import os
 import sqlite3
-from typing import Dict, List, Optional, Tuple
-from langchain.schema import Document
+from typing import Dict, List, Optional
 
-from components.models import DocumentFile, Chunk
+from components.models import DocumentFile, Chunk, Embedding
 from .document_processor import DocumentProcessor
 from .text_chunker import TextChunker
 from ..shared.text_normalizer import TextNormalizer
@@ -13,7 +12,7 @@ from ..storage.sqlite_manager import SQLiteManager
 class DataIngestionOrchestrator:
     """Componente principal para gerenciar o processamento de arquivos PDF."""
     
-    def __init__(self, chunk_size: int = 800, overlap: int = 160):
+    def __init__(self, db_dir: str = "databases/public", index_dir: str = "indices/public", chunk_size: int = 800, overlap: int = 160):
         """
         Inicializa o orquestrador com os componentes necessários.
         
@@ -25,8 +24,8 @@ class DataIngestionOrchestrator:
         self.text_chunker = TextChunker(chunk_size, overlap)
         self.text_normalizer = TextNormalizer()
         self.embedding_generator = EmbeddingGenerator()
-        self.sqlite_manager = SQLiteManager()
-        self.faiss_manager = FaissManager()
+        self.sqlite_manager = SQLiteManager(db_path=db_dir)
+        self.faiss_manager = FaissManager(index_path=index_dir)
         self.document_hashes: Dict[str, str] = {}
         
     def _find_original_document(self, duplicate_hash: str) -> Optional[str]:
@@ -43,7 +42,7 @@ class DataIngestionOrchestrator:
                 return filename
         return None
 
-    def _is_duplicate(self, document_hash: str) -> bool:
+    def _is_duplicate(self, document_hash: str, conn: sqlite3.Connection) -> bool:
         """
         Verifica se um documento é duplicado.
         
@@ -64,6 +63,11 @@ class DataIngestionOrchestrator:
                 print("-" * 50)"""
                 return True
             
+        cursor = conn.execute("SELECT * FROM document_files WHERE hash = ?", (document_hash,))
+        result = cursor.fetchone()
+        if result:
+            return True
+        
         return False
         
         
@@ -138,7 +142,7 @@ class DataIngestionOrchestrator:
                     # processa o documento, adicionando as páginas, hash e total de páginas ao objeto DocumentFile
                     self.document_processor.process_document(file)
                     # Verifica se é duplicado
-                    if self._is_duplicate(file.hash):
+                    if self._is_duplicate(file.hash, conn):
                     #TODO:
                     #adiciona a duplicata em um arquivo de texto log. O log deve conter: caminho/nome do arquivo original - seu hash:\n Lista de arquivos duplicados 
                     # soma 1 a um contador de duplicatas
@@ -172,16 +176,34 @@ class DataIngestionOrchestrator:
                         conn.rollback()
                         continue
                     # Inicializa a lista de chunks normalizados
-                    normalized_chunks : List[Tuple[str, int]] = []
+                    normalized_chunks : List[str] = []
+                    chunk_ids : List[int] = []
                     for chunk in document_chunks:
                         #Adiciona o chunk ao banco de dados, e obtém seu id
                         chunk.id = self.sqlite_manager.insert_chunk(chunk, file.id, conn)
-                        #Normaliza o chunk e o adiciona à lista de chunks normalizados com o seu id
-                        normalized_chunk = [self.text_normalizer.normalize(chunk.content), chunk.id]
+                        chunk_ids.append(chunk.id)
+                        #Normaliza o chunk e o adiciona à lista de chunks normalizados
+                        normalized_chunk = self.text_normalizer.normalize(chunk.content)
                         normalized_chunks.append(normalized_chunk)
 
                     #Gera os embeddings
-                    embeddings = self.embedding_generator.generate_embeddings(normalized_chunks)
+                    embedding_vectors = self.embedding_generator.generate_embeddings(normalized_chunks)                    
+                    if embedding_vectors.size == 0:
+                        conn.rollback()
+                        continue
+
+                    embeddings : List[Embedding] = []
+                    for embedding_vector, chunk_id in zip(embedding_vectors, chunk_ids):
+                        embedding = Embedding(
+                            id = None,
+                            chunk_id = chunk_id,
+                            faiss_index_path = None,
+                            chunk_faiss_index = None,
+                            dimension = self.embedding_generator.embedding_dimension, 
+                            embedding = embedding_vector
+                        )
+
+                        embeddings.append(embedding)
                     #Adiciona os embeddings ao índice FAISS, atualizando os objetos Embedding com o índice FAISS
                     self.faiss_manager.add_embeddings(embeddings)
                     index_path = self.faiss_manager.index_file
