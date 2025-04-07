@@ -1,15 +1,30 @@
 import sqlite3
+import os
 from typing import List
 from components.models import DocumentFile, Chunk, Embedding
 
 class SQLiteManager:
 
     def __init__(self, 
-                 db_path: str = "../databases/public/public.db",
-                 schema_path: str = "../databases/schemas/schema.sql"
+                 db_path: str = None,
+                 schema_path: str = None
     ):
-        self.db_path = db_path
-        self.schema_path = schema_path
+        # Get the project root directory
+        project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        
+        # Set default paths relative to the project root
+        if db_path is None:
+            self.db_path = os.path.join(project_root, "databases", "public", "public.db")
+        else:
+            self.db_path = db_path
+            
+        if schema_path is None:
+            self.schema_path = os.path.join(project_root, "databases", "schemas", "schema.sql")
+        else:
+            self.schema_path = schema_path
+        
+        # Ensure the directory exists
+        os.makedirs(os.path.dirname(self.db_path), exist_ok=True)
         
 
     def initialize_database(self) -> None:
@@ -21,7 +36,7 @@ class SQLiteManager:
                 conn.executescript(schema)
                 conn.commit()
 
-            print("Database initialized successfully")
+            print(f"Database initialized successfully at {self.db_path}")
 
         except FileNotFoundError:
             print(f"Error: Schema file not found at {self.schema_path}")
@@ -31,6 +46,11 @@ class SQLiteManager:
             raise e
                 
     def get_connection(self) -> sqlite3.Connection:
+        # Check if database exists, if not initialize it
+        if not os.path.exists(self.db_path):
+            print(f"Database not found at {self.db_path}. Initializing...")
+            self.initialize_database()
+            
         return sqlite3.connect(self.db_path)
     
     def begin(self, conn: sqlite3.Connection) -> None:

@@ -85,29 +85,11 @@ def main():
         
         # Processa os documentos e mede o tempo
         start_time = time.time()
-        results = ingestion.process_directory(directory_path)
-        
-        # Gera embeddings para todos os chunks
-        print("\nGerando embeddings para os chunks...")
-        embedding_start = time.time()
-        
-        # Processa cada documento
-        for filename, chunks in results.items():
-            # Gera embeddings para todos os chunks do documento
-            texts = [chunk.page_content for chunk in chunks]
-            embeddings = embedding_generator.calculate_embeddings(texts)
-            
-            # Adiciona cada embedding ao metadata do chunk correspondente
-            for chunk, embedding in zip(chunks, embeddings):
-                chunk.metadata["embedding"] = embedding
-        
-        embedding_time = time.time() - embedding_start
+        ingestion.process_directory(directory_path)
         total_time = time.time() - start_time
-        #TODO:
-        # Criar componentes de armazenamento: VectorStore com FAISS para os embeddings, e SQLite para os chunks e metadados.
+        print(f"Tempo total de processamento: {total_time:.1f} segundos")
+        
 
-        # Imprime as métricas
-        print_metrics(directory_path, pdf_files, results, total_time, embedding_time)
         
     except (FileNotFoundError, NotADirectoryError, ValueError) as e:
         print(f"\nErro: {str(e)}")
@@ -116,7 +98,7 @@ def main():
         print("\nProcessamento interrompido pelo usuário.")
         sys.exit(1)
     except Exception as e:
-        print(f"\nErro inesperado: {str(e)}")
+        print(f"\nErro inesperado: {e}")
         sys.exit(1)
 
 if __name__ == "__main__":

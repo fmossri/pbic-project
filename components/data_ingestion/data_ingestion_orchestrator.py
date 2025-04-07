@@ -102,7 +102,7 @@ class DataIngestionOrchestrator:
 
         return pdf_files
     
-    def process_directory(self, directory_path: str) -> Dict[str, List[Document]]:
+    def process_directory(self, directory_path: str) -> None:
         """
         Processa todos os arquivos PDF em um diretório.
         
