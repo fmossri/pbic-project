@@ -4,10 +4,8 @@ import sqlite3
 import tempfile
 import numpy as np
 
-from components.storage.sqlite_manager import SQLiteManager
-from components.models.document_file import DocumentFile
-from components.models.chunk import Chunk
-from components.models.embedding import Embedding
+from components.models import DocumentFile, Chunk, Embedding
+from components.shared import SQLiteManager
 
 class TestSQLiteManager:
     """Test suite for SQLiteManager class."""

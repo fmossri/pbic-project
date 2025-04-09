@@ -6,8 +6,8 @@ import numpy as np
 import faiss
 from pathlib import Path
 
-from components.storage.faiss_manager import FaissManager
-from components.models.embedding import Embedding
+from components.shared import FaissManager
+from components.models import Embedding
 
 class TestFaissManager:
     """Test suite for FaissManager class."""

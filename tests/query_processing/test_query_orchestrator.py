@@ -1,6 +1,5 @@
 import pytest
 import numpy as np
-import sqlite3
 from unittest.mock import patch, MagicMock
 from components.query_processing.query_orchestrator import QueryOrchestrator
 

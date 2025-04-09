@@ -4,7 +4,7 @@ import shutil
 import numpy as np
 from unittest.mock import patch, MagicMock
 from components.data_ingestion import DataIngestionOrchestrator
-from components.models import DocumentFile, Chunk, Embedding
+from components.models import DocumentFile, Embedding
 from langchain.schema import Document
 from .test_docs.generate_test_pdfs import create_test_pdf
 

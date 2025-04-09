@@ -1,9 +1,8 @@
-from components.shared import TextNormalizer
-from components.shared import EmbeddingGenerator
-from components.storage import FaissManager, SQLiteManager
-from .hugging_face_manager import HuggingFaceManager
-from typing import List
 import numpy as np
+from typing import List
+
+from components.shared import TextNormalizer, EmbeddingGenerator, FaissManager, SQLiteManager
+from .hugging_face_manager import HuggingFaceManager
 
 class QueryOrchestrator:
     def __init__(self):

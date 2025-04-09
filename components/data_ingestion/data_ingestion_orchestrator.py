@@ -3,12 +3,10 @@ import sqlite3
 from typing import Dict, List, Optional
 
 from components.models import DocumentFile, Chunk, Embedding
+from components.shared import TextNormalizer, EmbeddingGenerator, FaissManager, SQLiteManager
 from .document_processor import DocumentProcessor
 from .text_chunker import TextChunker
-from ..shared.text_normalizer import TextNormalizer
-from ..shared.embedding_generator import EmbeddingGenerator
-from ..storage.faiss_manager import FaissManager
-from ..storage.sqlite_manager import SQLiteManager
+
 class DataIngestionOrchestrator:
     """Componente principal para gerenciar o processamento de arquivos PDF."""
     
