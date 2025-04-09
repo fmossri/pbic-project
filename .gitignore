@@ -41,7 +41,7 @@ htmlcov/
 
 # Arquivos do plantUML
 *.png
-architecture.puml
+components-diagram.puml
 
 # resumos
 summary.txt

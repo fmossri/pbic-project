@@ -177,8 +177,8 @@ Este sistema processa documentos PDF, extrai texto, divide em chunks, gera embed
 
 1. Clone o repositório:
 ```bash
-git clone https://github.com/seu-usuario/rag-project.git
-cd rag-project
+git clone https://github.com/fmossri/pbic-project.git
+cd pbic-project
 ```
 
 2. Crie e ative um ambiente virtual:
