@@ -40,45 +40,34 @@ class HuggingFaceManager:
         print(f"\n\nPergunta: {question}")
         if not context_prompt:
             return "prompt vazio ou inválido"
-        
-        last_error = None
-        
-        for attempt in range(self.max_retries):
-            try:
-                response = self.client.text_generation(
-                    details=False,
-                    return_full_text=False,
-                    prompt=context_prompt,
-                    max_new_tokens=1000,
-                    temperature=0.7,
-                    top_p=0.9,
-                    top_k=50,
-                    repetition_penalty=1.0
+
+        try:
+            response = self.client.text_generation(
+                details=False,
+                return_full_text=False,
+                prompt=context_prompt,
+                max_new_tokens=1000,
+                temperature=0.7,
+                top_p=0.9,
+                top_k=50,
+                repetition_penalty=1.0
                 )
-                return response
             
-            except HfHubHTTPError as e:
-                last_error = str(e)
+            return response
+            
+        except HfHubHTTPError as e:
                 
-                if hasattr(e, 'response') and e.response.status_code == 429:
-                    # Rate limit error
-                    wait_time = (attempt + 1) * self.retry_delay
-                    print(f"Erro de limite de taxa. Tentativa {attempt+1}/{self.max_retries}. Aguardando {wait_time}s.")
-                    time.sleep(wait_time)
-                elif hasattr(e, 'response') and e.response.status_code in (503, 502, 504):
-                    # Service unavailability
-                    wait_time = (attempt + 1) * self.retry_delay
-                    print(f"Erro de serviço Hugging Face ({e.response.status_code}). Tentativa {attempt+1}/{self.max_retries}. Aguardando {wait_time}s.")
-                    time.sleep(wait_time)
-                else:
-                    # Other HTTP errors
-                    print(f"Erro na API Hugging Face: {str(e)}")
-                    return f"Erro na API Hugging Face: {str(e)}"
+            if hasattr(e, 'response') and e.response.status_code == 429:
+                # Rate limit error
+                print(f"Erro de limite de taxa.")
+                raise e
+
+            elif hasattr(e, 'response') and e.response.status_code in (503, 502, 504):
+                # Service unavailability
+                print(f"Erro de serviço Hugging Face ({e.response.status_code}).")
+                raise e
+            else:
+                # Other HTTP errors
+                print(f"Erro na API Hugging Face: {str(e)}")
+                raise e
                     
-            except Exception as e:
-                last_error = str(e)
-                print(f"Erro ao gerar resposta: {str(e)}")
-                return f"Erro ao gerar resposta: {str(e)}"
-        
-        # If we've exhausted all retries, return the last error
-        return f"{last_error}"

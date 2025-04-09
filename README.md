@@ -1,21 +1,22 @@
-# Pipeline de Ingestão de PDFs
+# Pipeline RAG de Ingestão de PDFs
 
-Sistema para processamento de documentos PDF, geração de embeddings e busca semântica.
+Sistema para processamento de documentos PDF, geração de embeddings, busca semântica e obtenção de respostas contextuais através de modelos de linguagem.
 
 ## Visão Geral
 
-Esse sistema processa documentos PDF, extrai texto, divide em chunks semânticos e gera embeddings para busca semântica. O sistema é projetado para ser escalável, confiável e fácil de usar.
+Este sistema processa documentos PDF, extrai texto, divide em chunks, gera embeddings e responde perguntas utilizando busca por similaridade e recuperação de documentos. O sistema é projetado para ser escalável, confiável e fácil de usar, constituindo uma solução sequencial simples "naive RAG"
 
 ### Funcionalidades Principais
 
 - Processamento de documentos PDF
 - Detecção de duplicatas via hash MD5
-- Divisão de texto em chunks semânticos
-- Geração de embeddings para busca semântica
-- Normalização de texto consistente
-- Sistema de logging estruturado
-- Armazenamento vetorial com FAISS
-- Armazenamento de metadados com SQLite
+- Divisão de texto em chunks
+- Geração de embeddings
+- Normalização de texto
+- Armazenamento de embeddings com FAISS
+- Armazenamento de chunks e metadados com SQLite
+- Busca por similaridade e recuperação de chunks relevantes
+- Integração com modelos de linguagem via API da Hugging Face
 
 ## Estrutura do Projeto
 
@@ -25,109 +26,160 @@ Esse sistema processa documentos PDF, extrai texto, divide em chunks semânticos
 │   ├── data_ingestion/
 │   │   ├── document_processor.py
 │   │   ├── text_chunker.py
+│   │   └── data_ingestion_orchestrator.py
+│   ├── query_processing/
+│   │   ├── query_orchestrator.py
+│   │   └── hugging_face_manager.py
+│   ├── shared/
+│   │   ├── embedding_generator.py
 │   │   ├── text_normalizer.py
-│   │   └── data_ingestion_component.py
-│   └── embedding_generator/
-│       ├── embedding_generator.py
-│       └── __init__.py
+│   │   ├── sqlite_manager.py
+│   │   └── faiss_manager.py
+│   └── models/
+│       ├── document_file.py
+│       ├── chunk.py
+│       └── embedding.py
+├── databases/
+│   ├── public/**Diretório padrão dos arquivos .db
+│   └── schemas/
+│       └── schema.sql
+├── indices/
+│   └──public/**Diretório padrão dos arquivos .faiss
 ├── tests/
 │   ├── data_ingestion/
 │   │   ├── test_document_processor.py
-│   │   ├── test_data_ingestion_component.py
+│   │   ├── test_data_ingestion_orchestrator.py
 │   │   ├── test_text_chunker.py
-│   │   ├── test_text_normalizer.py
 │   │   └── test_docs/
 │   │       └── generate_test_pdfs.py
-│   └── embedding_generator/
-│       └── test_embedding_generator.py
+│   ├── query_processing/
+│   │   ├── test_query_orchestrator.py
+│   │   └── test_hugging_face_manager.py
+│   └── shared/
+│       ├── test_embedding_generator.py
+│       ├── test_text_normalizer.py
+│       ├── test_sqlite_manager.py
+│       └── test_faiss_manager.py
 ├── main.py
 └── README.md
 ```
 
 ## Componentes Principais
 
-### 1. DataIngestionOrchestrator
-- Coordena o fluxo de processamento
-- Gerencia deduplicação de documentos
-- Rastreia tamanhos e hashes
-- Coordena interação entre componentes
+### Pipeline de Ingestão de Dados
+
+#### 1. DataIngestionOrchestrator
+- Coordena todo o fluxo de processamento de ingestão
+- Efetua controle de duplicatas via hash MD5
+- Controla transações para garantir a integridade dos dados
+- Processa diretórios inteiros de PDFs
 - Principais métodos:
-  * process_directory: Pipeline principal
-  * list_pdf_files: Detecção de PDFs
-  * _check_duplicate: Detecção de duplicatas
-  * _find_original_document: Mapeamento de duplicatas
+  * `process_directory`: Executa a pipeline de ingestão
+  * `list_pdf_files`: Lista os pdfs de um diretório
 
-### 2. DocumentProcessor
-- Processa arquivos PDF
-- Extrai texto e calcula hash MD5
-- Trata erros de PDF inválido
-- Gerencia metadados do documento
+#### 2. DocumentProcessor
+- Processa arquivos PDF e extrai texto
+- Calcula hash MD5 para detecção de duplicatas
+- Trata erros de PDF inválido com propagação adequada
 - Principais métodos:
-  * extract_text: Extração de texto do PDF
-  * calculate_hash: Cálculo de hash MD5
+  * `extract_text`: Extração de texto do PDF
+  * `calculate_hash`: Cálculo de hash MD5
 
-### 3. TextChunker
-- Divide texto em chunks semânticos
-- Mantém coerência nas divisões
-- Otimizado para ~790 caracteres por chunk
-- Usa RecursiveCharacterTextSplitter
+#### 3. TextChunker
+- Divide texto em chunks recursivos mantendo coerência
+- Utiliza RecursiveCharacterTextSplitter para divisão por marcadores de quebra natural.
+- Preserva estrutura do documento original nos chunks
 - Principais métodos:
-  * chunk_text: Divisão principal do texto
+  * `chunk_text`: Divisão principal do texto
 
-!! Usando "RecursiveCharacterTextSplitter" - gera chunks e overlaps
-!! usando separadores. Quebra o texto baseado nesses separadores
-!! de forma hierárquica - mira um tamanho definido (1000 char, 200 char), mas
-!! tenta quebrar em um separador principal (\n\n - parágrafos); se o tamanho do chunk
-!! estiver muito distante do alvo, se chama recursivamente, tentando quebrar no próximo
-!! separador (\n - linha), até o tamanho final do chunk estiver próximo o suficiente
-!! do alvo. Dessa forma, os chunks não tem exatamente o mesmo tamanho. Considerar estratégias
-!! diferentes, como semantic chunking
+### Pipeline de Consulta
 
-### 4. EmbeddingGenerator
-- Gera representações vetoriais
-- Processamento em lote
-- Usa sentence-transformers
-- Otimizado para performance
+#### 1. QueryOrchestrator
+- Coordena todo o processo de consulta
+- Converte consultas em embeddings
+- Recupera chunks relevantes via busca vetorial
+- Prepara contexto para modelos de linguagem
 - Principais métodos:
-  * generate_embeddings: Geração de embeddings
+  * `query_llm`: Executa a pipeline de recuperação e consulta
 
-!! no momento, estamos usando o modelo "all-MiniLM-L6-v2", hardcoded.
-!! Considerar a criação de uma lógica de configuração que permita 
-!! selecionar o modelo a ser usado pelo sistema.
-
-### 5. TextNormalizer
-- Normalização Unicode (NFKC)
-- Normalização de espaços
-- Conversão para minúsculas
-- Preserva estrutura do texto
+#### 2. HuggingFaceManager
+- Interface com a API de Inferência do Hugging Face
+- Suporta diferentes modelos de linguagem (no momento zephyr-7b-beta)
+- Parâmetros de geração configuráveis (temperatura, top_p, etc.)
 - Principais métodos:
-  * normalize: Pipeline principal de normalização
-  * _normalize_unicode: Normalização Unicode
-  * _normalize_whitespace: Normalização de espaços
-  * _normalize_case: Normalização de case
+  * `generate_answer`: Consulta o LLM e retorna a resposta
 
-### 6. VectorStore
-- Busca ou cria um diretório para armazenar os índices
-- Carrega o índice existente, ou cria um novo se não existir
-- Adiciona os embeddings dos chunks ao índice
+### Componentes Compartilhados
+
+#### 1. TextNormalizer
+- Realiza normalização Unicode (NFKC)
+- Normaliza espaços preservando estrutura
+- Normaliza case para minúsculas
+- Principais métodos:
+  * `normalize`: Pipeline completo de normalização
+
+#### 2. EmbeddingGenerator
+- Gera representações vetoriais para texto
+- Realiza processamento em lote para melhor performance
+- Integração com sentence-transformers
+- Principais métodos:
+  * `generate_embeddings`: Gera embeddings a partir do texto fornecido
+
+#### 3. SQLiteManager
+- Gerencia todas as operações de banco de dados
+- Inicialização de schema e controle de versão
+- Controle de transações (commit/rollback)
+- Armazenamento de documentos, chunks e metadados de embeddings
+- Principais métodos:
+  * `insert_document_file`: Insere os metadados dos documentos no banco de dados
+  * `insert_chunks`: Insere os chunks de texto no banco de dados
+  * `insert_embeddings`: Insere os metadados dos embeddings
+  * `get_embeddings_chunks`: Recupera os chunks pelos índices FAISS de seus embeddings
+
+#### 4. FaissManager
+- Gerencia índices FAISS para busca por similaridade
+- Cria, carrega e consulta índices
+- Adiciona os embeddings ao índice FAISS.
+- Realiza busca por similaridade
+- Principais métodos:
+  * `add_embeddings`: Adiciona embeddings ao índice
+  * `search_faiss_index`: Realiza busca por similaridade
+
+### Modelos de Dados
+
+#### 1. DocumentFile
+- Representa um documento PDF com metadados
+- Rastreia caminho, hash e contagem de páginas
+
+#### 2. Chunk
+- Representa um chunk de texto com informações de posição
+- Referência para o documento pai
+
+#### 3. Embedding
+- Representa um embedding vetorial
+- Metadados para rastreamento no índice FAISS
+- Referência para o chunk pai
 
 ## Requisitos
 
-- Python 3.10.12
-- pypdf
-- sentence-transformers
-- pytest 8.3.5
-- (Em desenvolvimento) faiss-cpu/gpu
-- (Em desenvolvimento) sqlite3
-- (Em desenvolvimento) structlog
-- (Em desenvolvimento) pyyaml
+- Python 3.10+
+- Dependências principais:
+  * pypdf 5.4.0
+  * sentence-transformers 3.4.1
+  * faiss-cpu 1.10.0
+  * huggingface-hub 0.29.3
+  * langchain 0.3.21
+  * langchain-text-splitters 0.3.7
+  * SQLAlchemy 2.0.39
+  * pytest 8.3.5
+  * python-dotenv 1.0.1
 
 ## Instalação
 
 1. Clone o repositório:
 ```bash
-git clone [URL_DO_REPOSITÓRIO]
-cd pypdf
+git clone https://github.com/seu-usuario/rag-project.git
+cd rag-project
 ```
 
 2. Crie e ative um ambiente virtual:
@@ -145,10 +197,16 @@ pip install -r requirements.txt
 
 ## Uso
 
-### Processamento de PDFs
+### Processando PDFs e Gerando Embeddings
 
 ```bash
-python main.py caminho/do/diretório
+python main.py -i caminho/do/diretório
+```
+
+### Realizando Consultas
+
+```bash
+python main.py -q "Sua pergunta aqui"
 ```
 
 ### Executando Testes
@@ -157,46 +215,53 @@ python main.py caminho/do/diretório
 python -m pytest -vv
 ```
 
-## Métricas de Performance
+## Estado Atual do Desenvolvimento
 
-- Processamento: 3.9 docs/segundo
-- Média de chunks: 14.2 por documento
-- Média de chunks por página: 2.5
-- Tamanho médio de chunk: 790 caracteres
+### Componentes Concluídos ✅
 
-## Estado Atual
+- Pipeline completo de ingestão de PDF
+- Processamento de texto e chunking semântico
+- Geração de embeddings e normalização de texto
+- Armazenamento SQLite com gerenciamento de transações
+- Armazenamento FAISS para vetores
+- Sistema de consulta e recuperação
+- Integração com Hugging Face para geração de respostas
+- Testes unitários e de integração
 
-✅ Implementado:
-- Sistema de ingestão de PDF
-- Processamento e chunking de texto
-- Geração de embeddings
-- Sistema básico de métricas
-- Normalização de texto
+### Em Desenvolvimento 🔄
 
-🔄 Em Desenvolvimento:
-- Sistema de armazenamento
-- Sistema de busca
-- Sistema de logging
+- Sistema de logging estruturado
 - Sistema de configuração
+- Interface de usuário
+- **API RESTful
+- **Funcionalidades avançadas de busca
 
-## Próximos Passos
+## Próximos Passos Possíveis
 
-1. Sistema de Armazenamento
-   - FAISS para vetores
-   - SQLite para metadados
-   - Operações em lote
+1. **Aprimoramento do Sistema de Consulta**
+   - Otimização de prompts
+   - Expansão de consultas usando sinônimos
+   - Re-ranqueamento dos chunks recuperados
+   - Atribuição de fontes para fundamentar as respostas
 
-2. Sistema de Configuração
-   - Arquivos YAML/JSON
-   - Variáveis de ambiente
-   - Valores padrão
+2. **Desenvolvimento de API**
+   - API RESTful com FastAPI
+   - Processamento assíncrono
+   - Validação de entrada com pydantic
+   - Documentação com OpenAPI/Swagger
 
-3. Sistema de Logging
-   - Logging estruturado JSON
-   - Rotação de logs
+3. **Funcionalidades Avançadas**
+   - Busca híbrida com grafos de conhecimento
+   - Processamento multi-modal (imagens, tabelas)
+
+4. **Monitoramento e Logging**
+   - Logging estruturado
    - Métricas de performance
+   - Verificações de saúde da aplicação
 
-5. Sistema de Busca
-   - Busca por similaridade vetorial
-   - Filtragem por metadados
-   - Ordenação de resultados
+5. **Interface Web**
+  - Criação de página da web para interagir com o sistema
+  - Funcionalidade de ingestão, com inserção de domínio, palavras-chave e diretório alvo
+  - Sistema de configuração personalizada
+  - Funcionalidade de consulta
+
