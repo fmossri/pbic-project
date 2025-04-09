@@ -76,9 +76,20 @@ class TestSQLiteManager:
     
     def test_initialization(self, temp_db_path, schema_path):
         """Test SQLiteManager initialization."""
+        # Test with explicit paths
         manager = SQLiteManager(db_path=temp_db_path, schema_path=schema_path)
         assert manager.db_path == temp_db_path
         assert manager.schema_path == schema_path
+        
+        # Test with None values (should use defaults)
+        manager_with_defaults = SQLiteManager(db_path=None, schema_path=None)
+        assert manager_with_defaults.db_path == SQLiteManager.DEFAULT_DB_PATH
+        assert manager_with_defaults.schema_path == SQLiteManager.DEFAULT_SCHEMA_PATH
+        
+        # Test default initialization
+        default_manager = SQLiteManager()
+        assert default_manager.db_path == SQLiteManager.DEFAULT_DB_PATH
+        assert default_manager.schema_path == SQLiteManager.DEFAULT_SCHEMA_PATH
     
     def test_initialize_database(self, sqlite_manager):
         """Test database initialization."""
@@ -163,8 +174,9 @@ class TestSQLiteManager:
             # Set the document_id on the chunk
             sample_chunk.document_id = document_id
             
-            # Insert the chunk
-            chunk_id = sqlite_manager.insert_chunk(sample_chunk, document_id, conn)
+            # Insert the chunk (using insert_chunks method which takes a list)
+            chunk_ids = sqlite_manager.insert_chunks([sample_chunk], document_id, conn)
+            chunk_id = chunk_ids[0]  # Get the first ID from the returned list
             
             # Verify the chunk was inserted
             cursor = conn.cursor()
@@ -193,28 +205,30 @@ class TestSQLiteManager:
             # Set the document_id on the chunk
             sample_chunk.document_id = document_id
             
-            # Insert the chunk
-            chunk_id = sqlite_manager.insert_chunk(sample_chunk, document_id, conn)
+            # Insert the chunk (using insert_chunks method which takes a list)
+            chunk_ids = sqlite_manager.insert_chunks([sample_chunk], document_id, conn)
+            chunk_id = chunk_ids[0]  # Get the first ID from the returned list
             
             # Set the chunk_id on the embedding
             sample_embedding.chunk_id = chunk_id
             
-            # Insert the embedding
-            embedding_id = sqlite_manager.insert_embedding(sample_embedding, conn)
+            # Insert the embedding using insert_embeddings (plural)
+            sqlite_manager.insert_embeddings([sample_embedding], conn)
             
             # Verify the embedding was inserted
             cursor = conn.cursor()
-            cursor.execute("SELECT id, chunk_id, faiss_index_path, chunk_faiss_index, dimension FROM embeddings WHERE id = ?", (embedding_id,))
+            cursor.execute("SELECT id, chunk_id, faiss_index_path, chunk_faiss_index, dimension FROM embeddings WHERE chunk_id = ?", (chunk_id,))
             result = cursor.fetchone()
             
             assert result is not None
-            assert result[0] == embedding_id
+            embedding_id = result[0]  # Get the ID from the query result
             assert result[1] == chunk_id
             assert result[2] == sample_embedding.faiss_index_path
             assert result[3] == sample_embedding.chunk_faiss_index
             assert result[4] == sample_embedding.dimension
             
-            # Verify the ID was set on the model
+            # Verify the ID was set on the model by the insert_embeddings method
+            assert sample_embedding.id is not None
             assert sample_embedding.id == embedding_id
     
     def test_transaction_rollback(self, sqlite_manager, sample_document_file):

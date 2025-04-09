@@ -30,11 +30,11 @@ class TestFaissManager:
     @pytest.fixture
     def faiss_manager(self, test_indices_dir):
         """Create a FaissManager instance configured to use the test directory."""
-        # Initialize FaissManager with the test directory and a unique index name
-        test_index_name = f"test_index_{os.getpid()}.faiss"
+        # Initialize FaissManager with the test directory
+        # Use a different name to avoid conflicts with other tests
+        test_index_path = os.path.join(test_indices_dir, f"test_index_{os.getpid()}.faiss")
         manager = FaissManager(
-            index_path=test_indices_dir,
-            index_file=test_index_name,
+            index_path=test_index_path,
             dimension=384  # Standard dimension for test
         )
         
@@ -67,22 +67,19 @@ class TestFaissManager:
     def test_initialization(self, test_indices_dir):
         """Test FaissManager initialization."""
         # Create a new FaissManager instance
-        test_index_name = "init_test.faiss"
-        test_index_path = os.path.join(test_indices_dir, test_index_name)
+        test_index_path = os.path.join(test_indices_dir, "init_test.faiss")
         
         # Make sure there's no index file before the test
         if os.path.exists(test_index_path):
             os.unlink(test_index_path)
         
         manager = FaissManager(
-            index_path=test_indices_dir,
-            index_file=test_index_name,
+            index_path=test_index_path,
             dimension=512  # Different dimension for this test
         )
         
         # Verify the manager was initialized correctly
-        assert manager.index_path == test_indices_dir
-        assert manager.index_file == test_index_path
+        assert manager.index_path == test_index_path
         assert manager.dimension == 512
         assert manager.index is not None
         assert isinstance(manager.index, faiss.Index)
@@ -108,14 +105,12 @@ class TestFaissManager:
     
     def test_index_persistence(self, test_indices_dir):
         """Test that the index is persisted to disk."""
-        # Create a unique index name
-        test_index_name = f"persistence_test_{os.getpid()}.faiss"
-        test_index_path = os.path.join(test_indices_dir, test_index_name)
+        # Create a unique index path
+        test_index_path = os.path.join(test_indices_dir, f"persistence_test_{os.getpid()}.faiss")
         
         # Create a manager and add some vectors
         manager1 = FaissManager(
-            index_path=test_indices_dir,
-            index_file=test_index_name,
+            index_path=test_index_path,
             dimension=384
         )
         
@@ -136,8 +131,7 @@ class TestFaissManager:
         
         # Create a new manager that should load the existing index
         manager2 = FaissManager(
-            index_path=test_indices_dir,
-            index_file=test_index_name,
+            index_path=test_index_path,
             dimension=384
         )
         
@@ -170,12 +164,11 @@ class TestFaissManager:
         
         # Verify that all vectors were added
         assert faiss_manager.index.ntotal == len(batch1) + len(batch2)
-        
+    
     def test_index_reuse(self, test_indices_dir):
         """Test creating a new manager with the same index file."""
         # Create a unique index name
-        test_index_name = "reuse_test.faiss"
-        test_index_path = os.path.join(test_indices_dir, test_index_name)
+        test_index_path = os.path.join(test_indices_dir, "reuse_test.faiss")
         
         # Make sure the file doesn't exist initially
         if os.path.exists(test_index_path):
@@ -183,8 +176,7 @@ class TestFaissManager:
         
         # Create the first manager and add vectors
         manager1 = FaissManager(
-            index_path=test_indices_dir,
-            index_file=test_index_name,
+            index_path=test_index_path,
             dimension=384
         )
         
@@ -212,8 +204,7 @@ class TestFaissManager:
         
         # Create a second manager that should load the index
         manager2 = FaissManager(
-            index_path=test_indices_dir,
-            index_file=test_index_name,
+            index_path=test_index_path,
             dimension=384
         )
         
