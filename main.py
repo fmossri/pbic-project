@@ -1,7 +1,9 @@
 import sys
 import time
+import os
 from typing import Dict, List
 from components.data_ingestion import DataIngestionOrchestrator
+from components.query_processing import QueryOrchestrator
 from langchain.schema import Document
 
 def print_metrics(
@@ -66,16 +68,20 @@ def print_metrics(
     print(f"Velocidade de processamento: {processed_files/processing_time:.1f} docs/segundo")
     print("=" * 80)
 
-def main():
-    # Verifica argumentos da linha de comando
-    if len(sys.argv) != 2:
-        print("Uso: python main.py caminho/para/diretorio")
-        print("Exemplo: python main.py ./documentos")
-        sys.exit(1)
-        
-    directory_path = sys.argv[1]
+def ingest_data(directory_path: str) -> None:
+    """
+    Chama o processo de ingestão de dados a partir de um diretório de arquivos PDF.
+
+    Args:
+        directory_path (str): Caminho para o diretório contendo os arquivos PDF.
+
+    """
     
-    # Inicializa componentes
+    if not os.path.exists(directory_path):
+        raise FileNotFoundError(f"O diretório {directory_path} não existe.")
+    
+    print("Iniciando o processo de ingestão de dados...")
+    
     ingestion = DataIngestionOrchestrator()
     
     try:
@@ -93,13 +99,54 @@ def main():
         
     except (FileNotFoundError, NotADirectoryError, ValueError) as e:
         print(f"\nErro: {str(e)}")
-        sys.exit(1)
-    except KeyboardInterrupt:
+        raise e
+    except KeyboardInterrupt as e:
         print("\nProcessamento interrompido pelo usuário.")
-        sys.exit(1)
+        raise e
     except Exception as e:
         print(f"\nErro inesperado: {e}")
-        sys.exit(1)
+        raise e
+
+def answer_question(question: str) -> None:
+    """
+    Chama o processo de geração de resposta a partir de uma pergunta do usuário.
+
+    Args:
+        question (str): A pergunta a ser respondida.
+    """
+    print("Iniciando o processo de geração de resposta...")
+    query_orchestrator = QueryOrchestrator()
+    try:
+        answer = query_orchestrator.query_llm(question)
+        print(f"\nResposta: {answer}")
+
+    except Exception as e:
+        print(f"\nErro inesperado: {e}")
+        raise e
+
+def main():
+    if len(sys.argv) == 2 and sys.argv[1] == "--help":
+        print("""   Para ingestão de dados, use o comando:
+              python main.py -i caminho/para/diretorio
+    Para fazer uma pergunta ao modelo, use o comando:
+              python main.py -q "sua pergunta"
+        """)
+        return
+    if len(sys.argv) != 3:
+        print("Uso incorreto. Use --help para ver a lista de comandos disponíveis.")
+        return
+    
+    if sys.argv[1] == "-i":
+        # Ingestão de dados
+        directory_path = sys.argv[2]
+        ingest_data(directory_path)
+    elif sys.argv[1] == "-q":
+        # Processamento de query
+        question = sys.argv[2]
+        answer_question(question)
+    else:
+        print("Uso incorreto. Use --help para ver a lista de comandos disponíveis.")
+        return
 
 if __name__ == "__main__":
     main() 
