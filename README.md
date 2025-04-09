@@ -73,7 +73,7 @@ Este sistema processa documentos PDF, extrai texto, divide em chunks, gera embed
 - Efetua controle de duplicatas via hash MD5
 - Controla transações para garantir a integridade dos dados
 - Processa diretórios inteiros de PDFs
-- Principais métodos:
+- Interfaces:
   * `process_directory`: Executa a pipeline de ingestão
   * `list_pdf_files`: Lista os pdfs de um diretório
 
@@ -81,15 +81,14 @@ Este sistema processa documentos PDF, extrai texto, divide em chunks, gera embed
 - Processa arquivos PDF e extrai texto
 - Calcula hash MD5 para detecção de duplicatas
 - Trata erros de PDF inválido com propagação adequada
-- Principais métodos:
-  * `extract_text`: Extração de texto do PDF
-  * `calculate_hash`: Cálculo de hash MD5
+- Interfaces:
+  * `process_document`: Extrai o texto e calcula o hash de um documento PDF
 
 #### 3. TextChunker
 - Divide texto em chunks recursivos mantendo coerência
-- Utiliza RecursiveCharacterTextSplitter para divisão por marcadores de quebra natural.
+- Utiliza RecursiveCharacterTextSplitter para divisão por marcadores de quebra natural
 - Preserva estrutura do documento original nos chunks
-- Principais métodos:
+- Interfaces:
   * `chunk_text`: Divisão principal do texto
 
 ### Pipeline de Consulta
@@ -99,14 +98,14 @@ Este sistema processa documentos PDF, extrai texto, divide em chunks, gera embed
 - Converte consultas em embeddings
 - Recupera chunks relevantes via busca vetorial
 - Prepara contexto para modelos de linguagem
-- Principais métodos:
+- Interfaces:
   * `query_llm`: Executa a pipeline de recuperação e consulta
 
 #### 2. HuggingFaceManager
 - Interface com a API de Inferência do Hugging Face
 - Suporta diferentes modelos de linguagem (no momento zephyr-7b-beta)
 - Parâmetros de geração configuráveis (temperatura, top_p, etc.)
-- Principais métodos:
+- Interfaces:
   * `generate_answer`: Consulta o LLM e retorna a resposta
 
 ### Componentes Compartilhados
@@ -115,14 +114,14 @@ Este sistema processa documentos PDF, extrai texto, divide em chunks, gera embed
 - Realiza normalização Unicode (NFKC)
 - Normaliza espaços preservando estrutura
 - Normaliza case para minúsculas
-- Principais métodos:
+- Interfaces:
   * `normalize`: Pipeline completo de normalização
 
 #### 2. EmbeddingGenerator
 - Gera representações vetoriais para texto
 - Realiza processamento em lote para melhor performance
 - Integração com sentence-transformers
-- Principais métodos:
+- Interfaces:
   * `generate_embeddings`: Gera embeddings a partir do texto fornecido
 
 #### 3. SQLiteManager
@@ -130,7 +129,7 @@ Este sistema processa documentos PDF, extrai texto, divide em chunks, gera embed
 - Inicialização de schema e controle de versão
 - Controle de transações (commit/rollback)
 - Armazenamento de documentos, chunks e metadados de embeddings
-- Principais métodos:
+- Interfaces:
   * `insert_document_file`: Insere os metadados dos documentos no banco de dados
   * `insert_chunks`: Insere os chunks de texto no banco de dados
   * `insert_embeddings`: Insere os metadados dos embeddings
@@ -141,7 +140,7 @@ Este sistema processa documentos PDF, extrai texto, divide em chunks, gera embed
 - Cria, carrega e consulta índices
 - Adiciona os embeddings ao índice FAISS.
 - Realiza busca por similaridade
-- Principais métodos:
+- Interfaces:
   * `add_embeddings`: Adiciona embeddings ao índice
   * `search_faiss_index`: Realiza busca por similaridade
 
