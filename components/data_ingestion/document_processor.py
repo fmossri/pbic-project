@@ -10,6 +10,9 @@ from components.models import DocumentFile
 
 class DocumentProcessor:
     """Processa documentos PDF para extração de texto."""
+
+    def __init__(self):
+        print("Inicializando o processador de documentos...")
     
     def _calculate_hash(self, text_content: str) -> str:
         """
@@ -24,12 +27,11 @@ class DocumentProcessor:
         Raises:
             FileNotFoundError: Se o arquivo não existir
             PdfStreamError: Se o arquivo não for um PDF válido
-        """
-
+        """     
         # Calcula o hash do texto
-        hash_md5 = hashlib.md5()
-        hash_md5.update(text_content.encode('utf-8'))
-        return hash_md5.hexdigest()
+        hash_function = hashlib.md5()
+        hash_function.update(text_content.encode('utf-8'))
+        return hash_function.hexdigest()
     
     def _extract_text(self, file_path: str) -> List[Document]:
         """

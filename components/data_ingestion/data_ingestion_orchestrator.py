@@ -12,20 +12,23 @@ from ..storage.sqlite_manager import SQLiteManager
 class DataIngestionOrchestrator:
     """Componente principal para gerenciar o processamento de arquivos PDF."""
     
-    def __init__(self, db_dir: str = "databases/public", index_dir: str = "indices/public", chunk_size: int = 800, overlap: int = 160):
+    def __init__(self, db_path: str = None, index_path: str = None, chunk_size: int = 800, overlap: int = 160):
         """
         Inicializa o orquestrador com os componentes necessários.
         
         Args:
-            chunk_size (int): Tamanho de cada chunk de texto
-            overlap (int): Sobreposição entre chunks
+            db_path (str, optional): Caminho para o arquivo de banco de dados SQLite.
+            index_path (str, optional): Caminho para o diretório de índices FAISS.
+            chunk_size (int): Tamanho de cada chunk de texto.
+            overlap (int): Sobreposição entre chunks.
         """
+        print("Inicializando o orquestrador...")
         self.document_processor = DocumentProcessor()
         self.text_chunker = TextChunker(chunk_size, overlap)
         self.text_normalizer = TextNormalizer()
         self.embedding_generator = EmbeddingGenerator()
-        self.sqlite_manager = SQLiteManager(db_path=db_dir)
-        self.faiss_manager = FaissManager(index_path=index_dir)
+        self.sqlite_manager = SQLiteManager(db_path=db_path)
+        self.faiss_manager = FaissManager(index_path=index_path)
         self.document_hashes: Dict[str, str] = {}
         
     def _find_original_document(self, duplicate_hash: str) -> Optional[str]:
@@ -177,11 +180,8 @@ class DataIngestionOrchestrator:
                         continue
                     # Inicializa a lista de chunks normalizados
                     normalized_chunks : List[str] = []
-                    chunk_ids : List[int] = []
+                    chunk_ids : List[int] = self.sqlite_manager.insert_chunks(document_chunks, file.id, conn)
                     for chunk in document_chunks:
-                        #Adiciona o chunk ao banco de dados, e obtém seu id
-                        chunk.id = self.sqlite_manager.insert_chunk(chunk, file.id, conn)
-                        chunk_ids.append(chunk.id)
                         #Normaliza o chunk e o adiciona à lista de chunks normalizados
                         normalized_chunk = self.text_normalizer.normalize(chunk.content)
                         normalized_chunks.append(normalized_chunk)
@@ -204,13 +204,10 @@ class DataIngestionOrchestrator:
                         )
 
                         embeddings.append(embedding)
-                    #Adiciona os embeddings ao índice FAISS, atualizando os objetos Embedding com o índice FAISS
+                    #Adiciona os embeddings ao índice FAISS, atualizando os objetos Embedding com o seu índice FAISS
                     self.faiss_manager.add_embeddings(embeddings)
-                    index_path = self.faiss_manager.index_file
                     #Adiciona os embeddings ao banco de dados
-                    for embedding in embeddings:
-                        embedding.faiss_index_path = index_path
-                        self.sqlite_manager.insert_embedding(embedding, conn)
+                    self.sqlite_manager.insert_embeddings(embeddings, conn)
                     #Salva as alterações no banco de dados
                     conn.commit()
                 

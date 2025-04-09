@@ -71,9 +71,9 @@ class TestDataIngestionOrchestrator:
             'components.storage.sqlite_manager.SQLiteManager.insert_document_file', return_value=1
         )
         mocks['insert_chunk'] = mocker.patch(
-            'components.storage.sqlite_manager.SQLiteManager.insert_chunk', return_value=1
+            'components.storage.sqlite_manager.SQLiteManager.insert_chunks', return_value=[1]
         )
-        mocks['insert_embedding'] = mocker.patch('components.storage.sqlite_manager.SQLiteManager.insert_embedding')
+        mocks['insert_embedding'] = mocker.patch('components.storage.sqlite_manager.SQLiteManager.insert_embeddings')
 
         # 3. Mock EmbeddingGenerator method to return a NumPy array
         mock_embeddings = np.array([[0.1] * 384], dtype=np.float32)
@@ -97,7 +97,11 @@ class TestDataIngestionOrchestrator:
             
     def test_initialization(self):
         """Testa a inicialização do orquestrador."""
-        orchestrator = DataIngestionOrchestrator(index_dir=self.indices_dir)
+        # Create test-specific paths
+        test_db_path = os.path.join("databases", "test", f"test_init_{os.getpid()}.db")
+        test_index_path = os.path.join(self.indices_dir, f"test_init_{os.getpid()}.faiss")
+        
+        orchestrator = DataIngestionOrchestrator(db_path=test_db_path, index_path=test_index_path)
         assert orchestrator is not None
         assert orchestrator.document_processor is not None
         assert orchestrator.text_chunker is not None
@@ -106,10 +110,14 @@ class TestDataIngestionOrchestrator:
         assert orchestrator.sqlite_manager is not None
         assert orchestrator.faiss_manager is not None
         assert isinstance(orchestrator.document_hashes, dict)
-
+        
     def test_list_pdf_files(self):
         """Testa a listagem de arquivos PDF usando os.scandir."""
-        orchestrator = DataIngestionOrchestrator(index_dir=self.indices_dir)
+        # Create test-specific paths
+        test_db_path = os.path.join("databases", "test", f"test_list_{os.getpid()}.db")
+        test_index_path = os.path.join(self.indices_dir, f"test_list_{os.getpid()}.faiss")
+        
+        orchestrator = DataIngestionOrchestrator(db_path=test_db_path, index_path=test_index_path)
         
         # Testa listagem de PDFs válidos
         pdf_files = orchestrator.list_pdf_files(self.test_pdfs_dir)
@@ -127,10 +135,14 @@ class TestDataIngestionOrchestrator:
             
         filenames = [file.name for file in pdf_files]
         assert set(filenames) == actual_pdfs
-
+        
     def test_is_duplicate(self):
         """Testa o método de detecção de duplicatas."""
-        orchestrator = DataIngestionOrchestrator(index_dir=self.indices_dir)
+        # Create test-specific paths
+        test_db_path = os.path.join("databases", "test", f"test_is_dup_{os.getpid()}.db")
+        test_index_path = os.path.join(self.indices_dir, f"test_is_dup_{os.getpid()}.faiss")
+        
+        orchestrator = DataIngestionOrchestrator(db_path=test_db_path, index_path=test_index_path)
         mock_conn = MagicMock()
         
         # Mock cursor and fetchone for database check
@@ -195,7 +207,11 @@ class TestDataIngestionOrchestrator:
         # Reset the mock connection before the test
         self.mock_conn.reset_mock()
         
-        orchestrator = DataIngestionOrchestrator(db_dir="databases/test", index_dir=self.indices_dir)
+        # Create a proper test db_path and index_path
+        test_db_path = os.path.join("databases", "test", "test.db")
+        test_index_path = os.path.join(self.indices_dir, f"test_index_{os.getpid()}.faiss")
+        
+        orchestrator = DataIngestionOrchestrator(db_path=test_db_path, index_path=test_index_path)
         orchestrator.document_processor = mock_processor
 
         # Execute the method
@@ -218,21 +234,25 @@ class TestDataIngestionOrchestrator:
         self.mock_conn.commit.assert_called_once()
         self.mock_conn.rollback.assert_called_once()
 
-    def test_duplicate_handling(self, mocked_managers, mocker): # Renamed from test_process_directory_handles_mixed_files
-        """Testa o processamento com um arquivo único e um duplicado."""
-
+    def test_duplicate_handling(self, mocked_managers, mocker):
+        """Testa o tratamento de arquivos duplicados."""
+        # Create test-specific paths
+        test_db_path = os.path.join("databases", "test", f"test_dup_{os.getpid()}.db")
+        test_index_path = os.path.join(self.indices_dir, f"test_dup_{os.getpid()}.faiss")
+        
+        orchestrator = DataIngestionOrchestrator(db_path=test_db_path, index_path=test_index_path)
+        
         # --- Setup Scenario ---
-        orchestrator = DataIngestionOrchestrator(index_dir=self.indices_dir)
         unique_hash = "unique_hash_abc"
         duplicate_hash = "duplicate_hash_123" # This will be pre-loaded
-
+ 
         # Actual filenames created by generate_test_pdfs.py
         unique_filename = "test_document.pdf"
         duplicate_filename = "duplicate_document.pdf"
-
+ 
         # Pre-load the hash for the file we want to be treated as duplicate
         orchestrator.document_hashes = {duplicate_filename: duplicate_hash}
-
+ 
         # --- Mock Document Processor Conditionally ---
         mock_processor_instance = MagicMock()
         original_files = { # Use actual filenames
@@ -247,7 +267,7 @@ class TestDataIngestionOrchestrator:
             return file
         mock_processor_instance.process_document = mock_process_document_conditional
         orchestrator.document_processor = mock_processor_instance
-
+ 
         # --- Mock _is_duplicate method conditionally ---
         def mock_is_duplicate_conditional(hash_value, conn):
             # Return True only for the duplicate hash
@@ -258,63 +278,64 @@ class TestDataIngestionOrchestrator:
             '_is_duplicate', 
             side_effect=mock_is_duplicate_conditional
         )
-
+ 
         # --- Reset mock conn rollback/commit for clean state ---
         self.mock_conn.reset_mock()
-
+ 
         # --- Process Directory ---
         orchestrator.process_directory(self.test_pdfs_dir) # Contains the two actual files
-
+ 
         # --- Assertions ---
         mocked_managers['get_connection'].assert_called_once()
-
+ 
         # Rollback should happen exactly once (for duplicate_document.pdf)
         self.mock_conn.rollback.assert_called_once()
-
+ 
         # Commit should happen exactly once (for test_document.pdf)
         self.mock_conn.commit.assert_called_once() # Expecting 1 commit now
-
+ 
         # Check inserts happened for the unique file
         # We can be more specific about calls with the unique file's expected ID if needed
         mocked_managers['insert_doc'].assert_called_once()
         mocked_managers['insert_chunk'].assert_called() # >= 1 chunk
         mocked_managers['insert_embedding'].assert_called() # >= 1 embedding
         mocked_managers['add_embeddings'].assert_called() # Called once for the unique file
-
+ 
         # Check final hashes (ensure unique one was added, duplicate remains)
         assert len(orchestrator.document_hashes) == 2 # Initial duplicate + 1 unique
         assert orchestrator.document_hashes[unique_filename] == unique_hash
         assert orchestrator.document_hashes[duplicate_filename] == duplicate_hash # Original duplicate entry remains
-        
-    def test_invalid_directory(self):
-        """Testa o processamento de um diretório inválido."""
-        orchestrator = DataIngestionOrchestrator(index_dir=self.indices_dir)
-        
-        # Testa diretório inexistente
-        with pytest.raises(FileNotFoundError):
-            orchestrator.process_directory("nonexistent_directory")
-            
-        # Testa caminho que não é um diretório
-        test_file = os.path.join(self.test_pdfs_dir, "test.txt")
-        with open(test_file, "w") as f:
-            f.write("test")
-            
-        with pytest.raises(NotADirectoryError):
-            orchestrator.process_directory(test_file)
-            
-        # Limpa o arquivo de teste
-        os.remove(test_file)
 
+    def test_invalid_directory(self):
+        """Testa o comportamento com diretórios inválidos."""
+        # Create test-specific paths
+        test_db_path = os.path.join("databases", "test", f"test_invalid_{os.getpid()}.db")
+        test_index_path = os.path.join(self.indices_dir, f"test_invalid_{os.getpid()}.faiss")
+        
+        orchestrator = DataIngestionOrchestrator(db_path=test_db_path, index_path=test_index_path)
+        
+        # Testa com um diretório inexistente
+        with pytest.raises(FileNotFoundError):
+            orchestrator.process_directory("./nonexistent_dir")
+        
+        # Testa com um caminho que não é um diretório (este arquivo de teste)
+        with pytest.raises(NotADirectoryError):
+            orchestrator.process_directory(__file__)
+    
     def test_empty_directory(self):
-        """Testa o processamento de um diretório vazio."""
-        orchestrator = DataIngestionOrchestrator(index_dir=self.indices_dir)
+        """Testa o comportamento com um diretório vazio."""
+        # Create test-specific paths
+        test_db_path = os.path.join("databases", "test", f"test_empty_{os.getpid()}.db")
+        test_index_path = os.path.join(self.indices_dir, f"test_empty_{os.getpid()}.faiss")
+        
+        orchestrator = DataIngestionOrchestrator(db_path=test_db_path, index_path=test_index_path)
         
         # Testa listagem de PDFs em diretório vazio
-        with pytest.raises(ValueError) as exc_info:
+        with pytest.raises(ValueError) as excinfo:
             orchestrator.list_pdf_files(self.empty_dir)
-        assert "Nenhum arquivo PDF encontrado" in str(exc_info.value)
+        assert "Nenhum arquivo PDF encontrado" in str(excinfo.value)
         
         # Testa processamento de diretório vazio
-        with pytest.raises(ValueError) as exc_info:
+        with pytest.raises(ValueError) as excinfo:
             orchestrator.process_directory(self.empty_dir)
-        assert "Nenhum arquivo PDF encontrado" in str(exc_info.value) 
+        assert "Nenhum arquivo PDF encontrado" in str(excinfo.value) 

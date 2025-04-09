@@ -4,6 +4,9 @@ import re
 class TextNormalizer:
     """Text normalization for RAG system."""
     
+    def __init__(self):
+        print("Inicializando o normalizador de texto...")
+
     def normalize(self, text: str) -> str:
         """Apply all normalization steps."""
         text = self._normalize_unicode(text)

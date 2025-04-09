@@ -14,6 +14,7 @@ class TextChunker:
             chunk_size (int): Tamanho de cada chunk em caracteres
             overlap (int): Número de caracteres para sobreposição entre chunks
         """
+        print(f"Inicializando o TextChunker: chunk_size {chunk_size}; overlap {overlap}")
         self.splitter = RecursiveCharacterTextSplitter(
             chunk_size=chunk_size,
             chunk_overlap=overlap,
