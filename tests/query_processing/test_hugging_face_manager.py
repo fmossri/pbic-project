@@ -1,7 +1,7 @@
 import pytest
 import os
 from unittest.mock import patch, MagicMock
-from components.query_processing.hugging_face_manager import HuggingFaceManager
+from src.query_processing.hugging_face_manager import HuggingFaceManager
 
 class TestHuggingFaceManager:
     """Suite de testes para a classe HuggingFaceManager."""
@@ -25,12 +25,12 @@ class TestHuggingFaceManager:
         # This test doesn't need mocking as it doesn't make API calls for empty prompts
         manager = HuggingFaceManager()
         
-        # Test with empty string
-        result = manager.generate_answer("")
+        # Test with empty context prompt
+        result = manager.generate_answer("question", "")
         assert result == "prompt vazio ou inválido"
         
-        # Test with None
-        result = manager.generate_answer(None)
+        # Test with None context prompt
+        result = manager.generate_answer("question", None)
         assert result == "prompt vazio ou inválido"
     
     def test_generate_answer_success(self):
@@ -45,8 +45,9 @@ class TestHuggingFaceManager:
         manager.client = mock_client
         
         # Test
-        prompt = "Qual é a capital do Brasil?"
-        result = manager.generate_answer(prompt)
+        question = "Qual é a capital do Brasil?"
+        context_prompt = "Contexto: Brasil é um país na América do Sul."
+        result = manager.generate_answer(question, context_prompt)
         
         # Verify results
         assert result == mock_response
@@ -54,8 +55,8 @@ class TestHuggingFaceManager:
         
         # Verify parameters
         args, kwargs = mock_client.text_generation.call_args
-        assert kwargs.get('prompt') == prompt
-        assert kwargs.get('details') is True
+        assert kwargs.get('prompt') == context_prompt
+        assert kwargs.get('details') is False
         assert kwargs.get('max_new_tokens') == 1000
         assert kwargs.get('temperature') == 0.7
         assert kwargs.get('top_p') == 0.9
@@ -74,9 +75,10 @@ class TestHuggingFaceManager:
         manager.client = mock_client
         
         # Test exception handling
-        prompt = "Qual é a capital do Brasil?"
+        question = "Qual é a capital do Brasil?"
+        context_prompt = "Contexto: Brasil é um país na América do Sul."
         with pytest.raises(Exception) as exc_info:
-            manager.generate_answer(prompt)
+            manager.generate_answer(question, context_prompt)
         
         # Verify the right exception was raised
         assert error_message in str(exc_info.value)
@@ -84,4 +86,4 @@ class TestHuggingFaceManager:
         
         # Verify parameters
         args, kwargs = mock_client.text_generation.call_args
-        assert kwargs.get('prompt') == prompt 
+        assert kwargs.get('prompt') == context_prompt 

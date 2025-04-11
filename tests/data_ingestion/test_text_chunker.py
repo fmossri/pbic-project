@@ -1,6 +1,6 @@
 import pytest
-from components.data_ingestion.text_chunker import TextChunker
-from components.models import Chunk
+from src.data_ingestion.text_chunker import TextChunker
+from src.models import Chunk
 
 class TestTextChunker:
     """Suite de testes para a classe TextChunker."""

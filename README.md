@@ -22,7 +22,7 @@ Este sistema processa documentos PDF, extrai texto, divide em chunks, gera embed
 
 ```
 /root
-├── components/
+├── src/
 │   ├── data_ingestion/
 │   │   ├── document_processor.py
 │   │   ├── text_chunker.py
@@ -30,7 +30,7 @@ Este sistema processa documentos PDF, extrai texto, divide em chunks, gera embed
 │   ├── query_processing/
 │   │   ├── query_orchestrator.py
 │   │   └── hugging_face_manager.py
-│   ├── shared/
+│   ├── utils/
 │   │   ├── embedding_generator.py
 │   │   ├── text_normalizer.py
 │   │   ├── sqlite_manager.py
@@ -39,12 +39,16 @@ Este sistema processa documentos PDF, extrai texto, divide em chunks, gera embed
 │       ├── document_file.py
 │       ├── chunk.py
 │       └── embedding.py
-├── databases/
-│   ├── public/**Diretório padrão dos arquivos .db
-│   └── schemas/
-│       └── schema.sql
-├── indices/
-│   └──public/**Diretório padrão dos arquivos .faiss
+├── storage/
+│   └── domains/
+│       ├── public/
+│       │   ├── public.db
+│       │   └── vector_store/
+│       │       └── index.faiss
+│       └── test_domain/
+│           ├── test.db
+│           └── vector_store/
+│               └── test.faiss
 ├── tests/
 │   ├── data_ingestion/
 │   │   ├── test_document_processor.py
@@ -55,7 +59,7 @@ Este sistema processa documentos PDF, extrai texto, divide em chunks, gera embed
 │   ├── query_processing/
 │   │   ├── test_query_orchestrator.py
 │   │   └── test_hugging_face_manager.py
-│   └── shared/
+│   └── utils/
 │       ├── test_embedding_generator.py
 │       ├── test_text_normalizer.py
 │       ├── test_sqlite_manager.py
@@ -129,6 +133,7 @@ Este sistema processa documentos PDF, extrai texto, divide em chunks, gera embed
 - Inicialização de schema e controle de versão
 - Controle de transações (commit/rollback)
 - Armazenamento de documentos, chunks e metadados de embeddings
+- Armazena os arquivos .db em `storage/domains/{domain_name}/`
 - Interfaces:
   * `insert_document_file`: Insere os metadados dos documentos no banco de dados
   * `insert_chunks`: Insere os chunks de texto no banco de dados
@@ -138,7 +143,8 @@ Este sistema processa documentos PDF, extrai texto, divide em chunks, gera embed
 #### 4. FaissManager
 - Gerencia índices FAISS para busca por similaridade
 - Cria, carrega e consulta índices
-- Adiciona os embeddings ao índice FAISS.
+- Adiciona os embeddings ao índice FAISS
+- Armazena os arquivos .faiss em `storage/domains/{domain_name}/vector_store/`
 - Realiza busca por similaridade
 - Interfaces:
   * `add_embeddings`: Adiciona embeddings ao índice

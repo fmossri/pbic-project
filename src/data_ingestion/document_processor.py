@@ -6,7 +6,7 @@ from langchain_community.document_loaders import PyPDFLoader
 from pypdf.errors import PdfStreamError
 from langchain.schema import Document
 
-from components.models import DocumentFile
+from src.models import DocumentFile
 
 class DocumentProcessor:
     """Processa documentos PDF para extração de texto."""

@@ -1,13 +1,13 @@
 import sqlite3
 import os
 from typing import List, Optional
-from components.models import DocumentFile, Chunk, Embedding
+from src.models import DocumentFile, Chunk, Embedding
 
 class SQLiteManager:
     """Gerenciador de banco de dados SQLite."""
 
-    DEFAULT_DB_PATH: str = os.path.join("databases", "public", "public.db")
-    DEFAULT_SCHEMA_PATH: str = os.path.join("databases", "schemas", "schema.sql")
+    DEFAULT_DB_PATH: str = os.path.join("storage", "domains", "test_domain", "test.db")
+    DEFAULT_SCHEMA_PATH: str = os.path.join("storage", "schemas", "schema.sql")
 
     def __init__(self, 
                  db_path: Optional[str] = DEFAULT_DB_PATH,

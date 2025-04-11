@@ -3,8 +3,8 @@ import pytest
 import shutil
 import numpy as np
 from unittest.mock import patch, MagicMock
-from components.data_ingestion import DataIngestionOrchestrator
-from components.models import DocumentFile, Embedding
+from src.data_ingestion import DataIngestionOrchestrator
+from src.models import DocumentFile, Embedding
 from langchain.schema import Document
 from .test_docs.generate_test_pdfs import create_test_pdf
 
@@ -20,7 +20,7 @@ class TestDataIngestionOrchestrator:
         test_docs_dir = os.path.join(os.path.dirname(__file__), "test_docs")
         self.test_pdfs_dir = os.path.join(test_docs_dir, "test_pdfs")
         self.empty_dir = os.path.join(test_docs_dir, "empty_dir")
-        self.indices_dir = os.path.join("indices", "test")
+        self.indices_dir = os.path.join("storage", "domains", "test_domain", "vector_store")
         
         # Cria o diretório de teste se não existir
         os.makedirs(self.test_pdfs_dir, exist_ok=True)
@@ -61,34 +61,31 @@ class TestDataIngestionOrchestrator:
         mock_context_manager.__enter__.return_value = self.mock_conn
         mock_context_manager.__exit__.return_value = None
         mocks['get_connection'] = mocker.patch(
-            'components.storage.sqlite_manager.SQLiteManager.get_connection',
+            'src.utils.sqlite_manager.SQLiteManager.get_connection',
             return_value=mock_context_manager
         )
 
         # 2. Mock other SQLiteManager methods
-        mocks['sqlite_begin'] = mocker.patch('components.storage.sqlite_manager.SQLiteManager.begin')
+        mocks['sqlite_begin'] = mocker.patch('src.utils.sqlite_manager.SQLiteManager.begin')
         mocks['insert_doc'] = mocker.patch(
-            'components.storage.sqlite_manager.SQLiteManager.insert_document_file', return_value=1
+            'src.utils.sqlite_manager.SQLiteManager.insert_document_file', return_value=1
         )
         mocks['insert_chunk'] = mocker.patch(
-            'components.storage.sqlite_manager.SQLiteManager.insert_chunks', return_value=[1]
+            'src.utils.sqlite_manager.SQLiteManager.insert_chunks', return_value=[1]
         )
-        mocks['insert_embedding'] = mocker.patch('components.storage.sqlite_manager.SQLiteManager.insert_embeddings')
+        mocks['insert_embedding'] = mocker.patch('src.utils.sqlite_manager.SQLiteManager.insert_embeddings')
 
         # 3. Mock EmbeddingGenerator method to return a NumPy array
         mock_embeddings = np.array([[0.1] * 384], dtype=np.float32)
         mocks['generate_embeddings'] = mocker.patch(
-            'components.shared.embedding_generator.EmbeddingGenerator.generate_embeddings',
+            'src.utils.embedding_generator.EmbeddingGenerator.generate_embeddings',
             return_value=mock_embeddings
         )
 
         # 4. Mock FaissManager method
-        mock_embedding_data = Embedding(
-            id=None, chunk_id=1, dimension=384, faiss_index_path="test/path",
-            chunk_faiss_index=0, embedding=np.array([0.1] * 384)
-        )
+        mock_embedding_data = {'id': 1, 'embedding': mock_embeddings}
         mocks['add_embeddings'] = mocker.patch(
-            'components.storage.faiss_manager.FaissManager.add_embeddings',
+            'src.utils.faiss_manager.FaissManager.add_embeddings',
             return_value=[mock_embedding_data]
         )
 
@@ -98,8 +95,8 @@ class TestDataIngestionOrchestrator:
     def test_initialization(self):
         """Testa a inicialização do orquestrador."""
         # Create test-specific paths
-        test_db_path = os.path.join("databases", "test", f"test_init_{os.getpid()}.db")
-        test_index_path = os.path.join(self.indices_dir, f"test_init_{os.getpid()}.faiss")
+        test_db_path = os.path.join("storage", "domains", "test_domain", "test_init.db")
+        test_index_path = os.path.join(self.indices_dir, "test_init.faiss")
         
         orchestrator = DataIngestionOrchestrator(db_path=test_db_path, index_path=test_index_path)
         assert orchestrator is not None
@@ -114,8 +111,8 @@ class TestDataIngestionOrchestrator:
     def test_list_pdf_files(self):
         """Testa a listagem de arquivos PDF usando os.scandir."""
         # Create test-specific paths
-        test_db_path = os.path.join("databases", "test", f"test_list_{os.getpid()}.db")
-        test_index_path = os.path.join(self.indices_dir, f"test_list_{os.getpid()}.faiss")
+        test_db_path = os.path.join("storage", "domains", "test_domain", "test_list.db")
+        test_index_path = os.path.join(self.indices_dir, "test_list.faiss")
         
         orchestrator = DataIngestionOrchestrator(db_path=test_db_path, index_path=test_index_path)
         
@@ -139,8 +136,8 @@ class TestDataIngestionOrchestrator:
     def test_is_duplicate(self):
         """Testa o método de detecção de duplicatas."""
         # Create test-specific paths
-        test_db_path = os.path.join("databases", "test", f"test_is_dup_{os.getpid()}.db")
-        test_index_path = os.path.join(self.indices_dir, f"test_is_dup_{os.getpid()}.faiss")
+        test_db_path = os.path.join("storage", "domains", "test_domain", "test_is_dup.db")
+        test_index_path = os.path.join(self.indices_dir, "test_is_dup.faiss")
         
         orchestrator = DataIngestionOrchestrator(db_path=test_db_path, index_path=test_index_path)
         mock_conn = MagicMock()
@@ -208,8 +205,8 @@ class TestDataIngestionOrchestrator:
         self.mock_conn.reset_mock()
         
         # Create a proper test db_path and index_path
-        test_db_path = os.path.join("databases", "test", "test.db")
-        test_index_path = os.path.join(self.indices_dir, f"test_index_{os.getpid()}.faiss")
+        test_db_path = os.path.join("storage", "domains", "test_domain", "test.db")
+        test_index_path = os.path.join(self.indices_dir, "test_index.faiss")
         
         orchestrator = DataIngestionOrchestrator(db_path=test_db_path, index_path=test_index_path)
         orchestrator.document_processor = mock_processor
@@ -237,8 +234,8 @@ class TestDataIngestionOrchestrator:
     def test_duplicate_handling(self, mocked_managers, mocker):
         """Testa o tratamento de arquivos duplicados."""
         # Create test-specific paths
-        test_db_path = os.path.join("databases", "test", f"test_dup_{os.getpid()}.db")
-        test_index_path = os.path.join(self.indices_dir, f"test_dup_{os.getpid()}.faiss")
+        test_db_path = os.path.join("storage", "domains", "test_domain", "test_dup.db")
+        test_index_path = os.path.join(self.indices_dir, "test_dup.faiss")
         
         orchestrator = DataIngestionOrchestrator(db_path=test_db_path, index_path=test_index_path)
         
@@ -309,8 +306,8 @@ class TestDataIngestionOrchestrator:
     def test_invalid_directory(self):
         """Testa o comportamento com diretórios inválidos."""
         # Create test-specific paths
-        test_db_path = os.path.join("databases", "test", f"test_invalid_{os.getpid()}.db")
-        test_index_path = os.path.join(self.indices_dir, f"test_invalid_{os.getpid()}.faiss")
+        test_db_path = os.path.join("storage", "domains", "test_domain", "test_invalid.db")
+        test_index_path = os.path.join(self.indices_dir, "test_invalid.faiss")
         
         orchestrator = DataIngestionOrchestrator(db_path=test_db_path, index_path=test_index_path)
         
@@ -325,8 +322,8 @@ class TestDataIngestionOrchestrator:
     def test_empty_directory(self):
         """Testa o comportamento com um diretório vazio."""
         # Create test-specific paths
-        test_db_path = os.path.join("databases", "test", f"test_empty_{os.getpid()}.db")
-        test_index_path = os.path.join(self.indices_dir, f"test_empty_{os.getpid()}.faiss")
+        test_db_path = os.path.join("storage", "domains", "test_domain", "test_empty.db")
+        test_index_path = os.path.join(self.indices_dir, "test_empty.faiss")
         
         orchestrator = DataIngestionOrchestrator(db_path=test_db_path, index_path=test_index_path)
         

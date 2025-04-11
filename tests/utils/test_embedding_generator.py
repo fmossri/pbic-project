@@ -1,6 +1,6 @@
 import pytest
 import numpy as np
-from components.shared.embedding_generator import EmbeddingGenerator
+from src.utils.embedding_generator import EmbeddingGenerator
 
 @pytest.fixture
 def embedding_generator():

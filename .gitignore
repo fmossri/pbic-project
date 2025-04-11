@@ -46,3 +46,7 @@ components-diagram.puml
 # resumos
 summary.txt
 update.txt
+
+# Database and index files
+storage/domains/*/test.db
+storage/domains/*/vector_store/*.faiss

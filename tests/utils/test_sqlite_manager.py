@@ -4,20 +4,24 @@ import sqlite3
 import tempfile
 import numpy as np
 
-from components.models import DocumentFile, Chunk, Embedding
-from components.shared import SQLiteManager
+from src.models import DocumentFile, Chunk, Embedding
+from src.utils import SQLiteManager
 
 class TestSQLiteManager:
     """Test suite for SQLiteManager class."""
 
-    REAL_SCHEMA_PATH = os.path.join("databases", "schemas", "schema.sql")
+    REAL_SCHEMA_PATH = os.path.join("storage", "schemas", "schema.sql")
     
     @pytest.fixture
     def temp_db_path(self):
         """Create a temporary database file for testing."""
-        with tempfile.NamedTemporaryFile(suffix='.db', delete=False) as temp_file:
-            temp_db_path = temp_file.name
-            
+        # Create the test storage directory if it doesn't exist
+        test_dir = os.path.join("tests", "storage", "domains", "test_domain")
+        os.makedirs(test_dir, exist_ok=True)
+        
+        # Create a unique test database file
+        temp_db_path = os.path.join(test_dir, f"test_{os.getpid()}.db")
+        
         yield temp_db_path
         
         # Cleanup after tests

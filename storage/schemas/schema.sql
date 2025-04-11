@@ -3,6 +3,8 @@ PRAGMA foreign_keys = ON;
 /*CREATE TABLE IF NOT EXISTS domains (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL
+    description TEXT NOT NULL
+    keywords TEXT NOT NULL
 )*/
 
 CREATE TABLE IF NOT EXISTS document_files (

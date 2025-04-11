@@ -1,7 +1,7 @@
 from typing import List, Dict, Optional
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain.schema import Document
-from components.models import Chunk
+from src.models import Chunk
 
 class TextChunker:
     """Gerencia a divisão de conteúdo de texto em chunks."""

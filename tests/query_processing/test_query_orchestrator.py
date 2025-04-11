@@ -1,7 +1,7 @@
 import pytest
 import numpy as np
 from unittest.mock import patch, MagicMock
-from components.query_processing.query_orchestrator import QueryOrchestrator
+from src.query_processing.query_orchestrator import QueryOrchestrator
 
 class TestQueryOrchestrator:
     """Suite de testes para a classe QueryOrchestrator."""
@@ -31,14 +31,14 @@ class TestQueryOrchestrator:
         """Testa o processamento de uma query válida."""
         # Mock do TextNormalizer
         mock_normalize = mocker.patch(
-            'components.shared.text_normalizer.TextNormalizer.normalize',
+            'src.utils.text_normalizer.TextNormalizer.normalize',
             return_value="query normalizada"
         )
         
         # Mock do EmbeddingGenerator
         mock_embeddings = np.array([[0.1] * 384], dtype=np.float32)
         mock_generate_embeddings = mocker.patch(
-            'components.shared.embedding_generator.EmbeddingGenerator.generate_embeddings',
+            'src.utils.embedding_generator.EmbeddingGenerator.generate_embeddings',
             return_value=mock_embeddings
         )
         
@@ -55,13 +55,13 @@ class TestQueryOrchestrator:
         """Testa o comportamento quando o embedding não pode ser gerado."""
         # Mock do TextNormalizer
         mocker.patch(
-            'components.shared.text_normalizer.TextNormalizer.normalize',
+            'src.utils.text_normalizer.TextNormalizer.normalize',
             return_value="query normalizada"
         )
         
         # Mock do EmbeddingGenerator para retornar um array vazio
         mock_generate_embeddings = mocker.patch(
-            'components.shared.embedding_generator.EmbeddingGenerator.generate_embeddings',
+            'src.utils.embedding_generator.EmbeddingGenerator.generate_embeddings',
             return_value=np.array([])
         )
         
@@ -77,21 +77,21 @@ class TestQueryOrchestrator:
         
         # Mock FaissManager.search_faiss_index
         mock_search = mocker.patch(
-            'components.storage.faiss_manager.FaissManager.search_faiss_index',
+            'src.utils.faiss_manager.FaissManager.search_faiss_index',
             return_value=(np.array([[0.8, 0.7, 0.6]]), np.array([[1, 2, 3]]))
         )
         
         # Mock SQLiteManager.get_connection
         mock_conn = MagicMock()
         mock_get_connection = mocker.patch(
-            'components.storage.sqlite_manager.SQLiteManager.get_connection'
+            'src.utils.sqlite_manager.SQLiteManager.get_connection'
         )
         mock_get_connection.return_value.__enter__.return_value = mock_conn
         
         # Mock SQLiteManager.get_embeddings_chunks
         mock_chunks = ["Chunk 1", "Chunk 2", "Chunk 3"]
         mock_get_chunks = mocker.patch(
-            'components.storage.sqlite_manager.SQLiteManager.get_embeddings_chunks',
+            'src.utils.sqlite_manager.SQLiteManager.get_embeddings_chunks',
             return_value=mock_chunks
         )
         
@@ -152,18 +152,19 @@ class TestQueryOrchestrator:
         # Mock para HuggingFaceManager.generate_answer
         mock_answer = "Esta é a resposta gerada pelo modelo."
         mock_generate_answer = mocker.patch(
-            'components.query_processing.hugging_face_manager.HuggingFaceManager.generate_answer',
+            'src.query_processing.hugging_face_manager.HuggingFaceManager.generate_answer',
             return_value=mock_answer
         )
         
         # Call the method
-        result = query_orchestrator.query_llm("Teste de query")
+        test_query = "Teste de query"
+        result = query_orchestrator.query_llm(test_query)
         
         # Verify calls
-        mock_process_query.assert_called_once_with("Teste de query")
+        mock_process_query.assert_called_once_with(test_query)
         mock_retrieve_docs.assert_called_once_with(mock_embedding)
-        mock_prepare_prompt.assert_called_once_with("Teste de query", mock_chunks)
-        mock_generate_answer.assert_called_once_with(mock_prompt)
+        mock_prepare_prompt.assert_called_once_with(test_query, mock_chunks)
+        mock_generate_answer.assert_called_once_with(test_query, mock_prompt)
         
         # Verify result
         assert result == mock_answer

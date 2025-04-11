@@ -1,14 +1,14 @@
-# components/storage/vector_store.py
+# src/utils/faiss_manager.py
 
 import faiss
 import numpy as np
 from typing import List
 import os
-from components.models import Embedding
+from src.models import Embedding
 class FaissManager:
     """Componente para armazenamento e indexação de vetores usando FAISS."""
 
-    DEFAULT_INDEX_PATH: str = os.path.join("indices", "public", "index.faiss")
+    DEFAULT_INDEX_PATH: str = os.path.join("storage", "domains", "test_domain", "vector_store", "test.faiss")
     
     def __init__(self, index_path: str = DEFAULT_INDEX_PATH, dimension: int = 384):
         """

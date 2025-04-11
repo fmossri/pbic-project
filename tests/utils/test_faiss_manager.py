@@ -6,8 +6,8 @@ import numpy as np
 import faiss
 from pathlib import Path
 
-from components.shared import FaissManager
-from components.models import Embedding
+from src.utils import FaissManager
+from src.models import Embedding
 
 class TestFaissManager:
     """Test suite for FaissManager class."""
@@ -15,8 +15,8 @@ class TestFaissManager:
     @pytest.fixture
     def test_indices_dir(self):
         """Create a temporary directory for test indices."""
-        # Create a subdirectory within indices/ called 'test'
-        test_dir = os.path.join("indices", "test")
+        # Create a subdirectory within tests/storage/domains/test_domain/vector_store
+        test_dir = os.path.join("tests", "storage", "domains", "test_domain", "vector_store")
         os.makedirs(test_dir, exist_ok=True)
         
         yield test_dir

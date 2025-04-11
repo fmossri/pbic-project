@@ -1,7 +1,7 @@
 import numpy as np
 from typing import List
 
-from components.shared import TextNormalizer, EmbeddingGenerator, FaissManager, SQLiteManager
+from src.utils import TextNormalizer, EmbeddingGenerator, FaissManager, SQLiteManager
 from .hugging_face_manager import HuggingFaceManager
 
 class QueryOrchestrator:

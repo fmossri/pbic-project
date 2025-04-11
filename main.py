@@ -2,8 +2,8 @@ import sys
 import time
 import os
 from typing import Dict, List
-from components.data_ingestion import DataIngestionOrchestrator
-from components.query_processing import QueryOrchestrator
+from src.data_ingestion import DataIngestionOrchestrator
+from src.query_processing import QueryOrchestrator
 from langchain.schema import Document
 
 def print_metrics(

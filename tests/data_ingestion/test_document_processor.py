@@ -3,7 +3,7 @@ import pytest
 import shutil
 from pypdf.errors import PdfStreamError
 from .test_docs.generate_test_pdfs import create_test_pdf
-from components.data_ingestion.document_processor import DocumentProcessor
+from src.data_ingestion.document_processor import DocumentProcessor
 from langchain.schema import Document
 
 class TestDocumentProcessor:

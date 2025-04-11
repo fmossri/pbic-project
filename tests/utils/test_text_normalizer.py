@@ -1,6 +1,6 @@
 import pytest
-from components.shared.text_normalizer import TextNormalizer
 import re
+from src.utils.text_normalizer import TextNormalizer
 
 @pytest.fixture
 def normalizer():

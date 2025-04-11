@@ -2,8 +2,8 @@ import os
 import sqlite3
 from typing import Dict, List, Optional
 
-from components.models import DocumentFile, Chunk, Embedding
-from components.shared import TextNormalizer, EmbeddingGenerator, FaissManager, SQLiteManager
+from src.models import DocumentFile, Chunk, Embedding
+from src.utils import TextNormalizer, EmbeddingGenerator, FaissManager, SQLiteManager
 from .document_processor import DocumentProcessor
 from .text_chunker import TextChunker
 
