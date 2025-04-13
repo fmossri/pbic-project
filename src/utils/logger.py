@@ -70,7 +70,7 @@ class Logger:
 
 def setup_logging(
     log_dir: str = "logs",
-    show_logs: bool = True,
+    show_logs: bool = False,
     max_file_size: int = 10 * 1024 * 1024,  # 10MB
     backup_count: int = 5  # Keep 5 backup files by default
 ) -> None:
@@ -101,7 +101,7 @@ def setup_logging(
     
     # Configure the root logger
     root_logger = logging.getLogger()
-    root_logger.setLevel(logging.DEBUG if show_logs else logging.ERROR)  # Set to DEBUG level
+    root_logger.setLevel(logging.INFO if show_logs else logging.ERROR)
     
     # Create formatters
     json_formatter = logging.Formatter('%(message)s')  # For file output
@@ -113,15 +113,15 @@ def setup_logging(
     file_handler = RotatingFileHandler(
         base_log_file,
         maxBytes=max_file_size,
-        backupCount=backup_count,  # Keep specified number of backup files
+        backupCount=backup_count,
         encoding='utf-8'
     )
     file_handler.setFormatter(json_formatter)
-    file_handler.setLevel(logging.DEBUG if show_logs else logging.ERROR)  # Set to DEBUG level
+    file_handler.setLevel(logging.DEBUG if show_logs else logging.INFO)
     
     console_handler = logging.StreamHandler(sys.stdout)
     console_handler.setFormatter(console_formatter)
-    console_handler.setLevel(logging.DEBUG if show_logs else logging.ERROR)  # Set to DEBUG level
+    console_handler.setLevel(logging.INFO if show_logs else logging.ERROR) 
     
     # Add handlers to root logger
     root_logger.addHandler(file_handler)
@@ -139,15 +139,15 @@ def setup_logging(
         "backup_count": backup_count
     }))
 
-def get_logger(name: str, domain: str = "default") -> Logger:
+def get_logger(name: str, log_domain: str = "default") -> Logger:
     """
     Get a logger instance.
     
     Args:
         name: The name of the logger (typically the module name)
-        domain: The domain context for the logger
+        log_domain: The domain context for the logger
         
     Returns:
         A Logger instance
     """
-    return Logger(name, domain) 
+    return Logger(name, log_domain) 

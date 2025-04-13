@@ -2,11 +2,12 @@ from typing import List, Dict, Optional
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain.schema import Document
 from src.models import Chunk
+from src.utils.logger import get_logger
 
 class TextChunker:
     """Gerencia a divisão de conteúdo de texto em chunks."""
     
-    def __init__(self, chunk_size: int = 1000, overlap: int = 200):
+    def __init__(self, chunk_size: int = 1000, overlap: int = 200, log_domain: str = "Ingestão de dados"):
         """
         Inicializa o TextChunker.
         
@@ -14,7 +15,9 @@ class TextChunker:
             chunk_size (int): Tamanho de cada chunk em caracteres
             overlap (int): Número de caracteres para sobreposição entre chunks
         """
-        print(f"Inicializando o TextChunker: chunk_size {chunk_size}; overlap {overlap}")
+        self.logger = get_logger(__name__, log_domain=log_domain)
+        self.logger.info("Inicializando o TextChunker.", chunk_size=chunk_size, overlap=overlap)
+
         self.splitter = RecursiveCharacterTextSplitter(
             chunk_size=chunk_size,
             chunk_overlap=overlap,
@@ -45,16 +48,21 @@ class TextChunker:
         Returns:
             List[Document]: Lista de chunks com seus metadados
         """
+        self.logger.debug("Dividindo a página em chunks")
         if not text:
+            self.logger.error("Texto não encontrado")
             return []
-            
-        # Cria documentos com metadados
-        docs = self.splitter.create_documents(
-            texts=[text],
-            metadatas=[metadata] if metadata else None
-        )
- 
-        return docs
+        try:
+            # Cria documentos com metadados
+            docs = self.splitter.create_documents(
+                texts=[text],
+                metadatas=[metadata] if metadata else None
+            )
+            self.logger.debug(f"Página dividida em {len(docs)} chunks com sucesso")
+            return docs
+        except Exception as e:
+            self.logger.error(f"Erro ao dividir a página em chunks: {e}")
+            raise e
     
     def create_chunks(self, text: str, metadata: Optional[Dict] = None) -> List[Chunk]:
         """
@@ -63,14 +71,18 @@ class TextChunker:
         docs =self._chunk_text(text, metadata)
 
         chunks = []
-        for chunk_index, doc in enumerate(docs):
-            chunk = Chunk(
-                document_id = doc.metadata.get("document_id", 0),
-                page_number = doc.metadata.get("page_number", 0),
-                chunk_page_index = chunk_index,
-                chunk_start_char_position = doc.metadata["start_index"],
-                content = doc.page_content,
-            )
-            chunks.append(chunk)
+        try:
+            for chunk_index, doc in enumerate(docs):
+                chunk = Chunk(
+                    document_id = doc.metadata.get("document_id", 0),
+                    page_number = doc.metadata.get("page_number", 0),
+                    chunk_page_index = chunk_index,
+                    chunk_start_char_position = doc.metadata["start_index"],
+                    content = doc.page_content,
+                )
+                chunks.append(chunk)
 
-        return chunks
+            return chunks
+        except Exception as e:
+            self.logger.error(f"Erro ao criar objetos Chunk: {e}")
+            raise e

@@ -2,6 +2,7 @@ import sqlite3
 import os
 from typing import List, Optional
 from src.models import DocumentFile, Chunk, Embedding
+from src.utils.logger import get_logger
 
 class SQLiteManager:
     """Gerenciador de banco de dados SQLite."""
@@ -11,16 +12,19 @@ class SQLiteManager:
 
     def __init__(self, 
                  db_path: Optional[str] = DEFAULT_DB_PATH,
-                 schema_path: Optional[str] = DEFAULT_SCHEMA_PATH
+                 schema_path: Optional[str] = DEFAULT_SCHEMA_PATH,
+                 log_domain: str = "utils"
     ):
-        print(f"Inicializando o gerenciador de banco de dados...")
+        self.logger = get_logger(__name__, log_domain=log_domain)
+        self.logger.info("Inicializando o SQLiteManager", db_path=db_path, schema_path=schema_path)
+        
         self.db_path = db_path if db_path is not None else self.DEFAULT_DB_PATH
         self.schema_path = schema_path if schema_path is not None else self.DEFAULT_SCHEMA_PATH
         
         os.makedirs(os.path.dirname(self.db_path), exist_ok=True)
 
     def initialize_database(self) -> None:
-        print(f"Criando novo banco de dados em {self.db_path}")
+        self.logger.info(f"Criando novo banco de dados em {self.db_path}")
         try:
             with open(self.schema_path, "r") as f:
                 schema = f.read()
@@ -29,13 +33,13 @@ class SQLiteManager:
                 conn.executescript(schema)
                 conn.commit()
 
-            print(f"Banco de dados inicializado com sucesso em {self.db_path}")
+            self.logger.info(f"Banco de dados inicializado com sucesso em {self.db_path}")
 
-        except FileNotFoundError:
-            print(f"Erro: Schema não encontrado em {self.schema_path}")
-            raise FileNotFoundError(f"Schema file not found at {self.schema_path}")
+        except FileNotFoundError as e:
+            self.logger.error(f"Erro: Schema não encontrado em {self.schema_path}: {e}")
+            raise FileNotFoundError(f"Schema file not found at {self.schema_path}: {e}")
         except sqlite3.Error as e:
-            print(f"Erro ao inicializar o banco de dados: {e}")
+            self.logger.error(f"Erro ao inicializar o banco de dados: {e}")
             raise e
                 
     def get_connection(self) -> sqlite3.Connection:
@@ -44,16 +48,17 @@ class SQLiteManager:
         """
 
         if not os.path.exists(self.db_path):
-            print(f"Banco de dados não encontrado em {self.db_path}. Inicializando o banco de dados...")
+            self.logger.info(f"Banco de dados não encontrado em {self.db_path}. Inicializando o banco de dados...")
             self.initialize_database()
         
-        print(f"Conectando ao banco de dados...")
+        self.logger.info(f"Conectando ao banco de dados: {self.db_path}")
         return sqlite3.connect(self.db_path)
     
     def begin(self, conn: sqlite3.Connection) -> None:
         """
         Inicia uma transação no banco de dados.
         """
+        self.logger.info(f"Iniciando uma transação no banco de dados: {self.db_path}")
         conn.execute("PRAGMA foreign_keys = ON")
         conn.execute("BEGIN TRANSACTION")
     
@@ -65,6 +70,7 @@ class SQLiteManager:
             file: objeto DocumentFile a ser inserido.
             conn: Conexão com o banco de dados SQLite.
         """
+        self.logger.info(f"Inserindo objeto DocumentFile: {file.name} no banco de dados: {self.db_path}")
         try:
                 cursor = conn.cursor()
                 cursor.execute(
@@ -73,11 +79,11 @@ class SQLiteManager:
                 )
                 file.id = cursor.lastrowid
 
-                print(f"Document file {file.name} inserted successfully")
+                self.logger.info(f"Arquivo de documento inserido com sucesso: {file.name}")
                 return cursor.lastrowid
         
         except sqlite3.Error as e:
-            print(f"Error inserting document file: {e}")
+            self.logger.error(f"Erro ao inserir o arquivo de documento: {e}")
             raise e
         
     def insert_chunks(self, chunks: List[Chunk], file_id: int, conn: sqlite3.Connection) -> List[int]:
@@ -88,7 +94,7 @@ class SQLiteManager:
             file_id: ID do documento associado ao chunk.
             conn: Conexão com o banco de dados SQLite.
         """
-
+        self.logger.info(f"Inserindo objetos Chunk no banco de dados: {self.db_path}")
         chunk_ids : List[int] = []
         for chunk in chunks:
 
@@ -103,9 +109,10 @@ class SQLiteManager:
                     chunk_ids.append(chunk.id)
             
             except sqlite3.Error as e:
-                print(f"Error inserting chunks: {e}")
+                self.logger.error(f"Erro ao inserir chunks: {e}")
                 raise e
         
+        self.logger.info(f"Chunks inseridos com sucesso: {chunk_ids}")
         return chunk_ids
         
     def insert_embeddings(self, embeddings: List[Embedding], conn: sqlite3.Connection) -> None:
@@ -115,6 +122,7 @@ class SQLiteManager:
             embedding: objetoEmbedding a ser inserido.
             conn: Conexão com o banco de dados SQLite.
         """
+        self.logger.info(f"Inserindo objetos Embedding no banco de dados: {self.db_path}")
         for embedding in embeddings:
             try:
                 cursor = conn.cursor()
@@ -125,7 +133,7 @@ class SQLiteManager:
                 embedding.id = cursor.lastrowid
             
             except sqlite3.Error as e:
-                print(f"Error inserting embedding: {e}")
+                self.logger.error(f"Erro ao inserir embeddings: {e}")
                 raise e
     
     def get_embeddings_chunks(self, conn: sqlite3.Connection, faiss_indices: List[int]) -> List[str]:
@@ -139,6 +147,8 @@ class SQLiteManager:
         Returns:
             chunks_content: List[str], onde cada string contém o conteúdo de um chunk, na ordem dos índices faiss.
         """
+
+        self.logger.info(f"Recuperando chunks associados aos índices faiss: {faiss_indices}")
         try:
             cursor = conn.cursor()
 
@@ -157,10 +167,11 @@ class SQLiteManager:
             cursor.execute(query, faiss_indices)
             chunks_content : List[str] = [row[0] for row in cursor.fetchall()]
 
+            self.logger.info(f"Chunks recuperados com sucesso: {chunks_content}")
             return chunks_content
         
         except sqlite3.Error as e:
-            print(f"Erro ao recuperar os chunks: {e}")
+            self.logger.error(f"Erro ao recuperar os chunks: {e}")
             raise e
             
     

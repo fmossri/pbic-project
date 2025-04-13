@@ -1,7 +1,7 @@
 from sentence_transformers import SentenceTransformer
 from typing import List, Optional
 import numpy as np
-
+from src.utils.logger import get_logger
 class EmbeddingGenerator:
     """Gerador de embeddings para chunks de texto.
     
@@ -10,21 +10,23 @@ class EmbeddingGenerator:
     utilizados para busca semântica e outras operações de similaridade.
     """
     
-    def __init__(self, model_name: str = "all-MiniLM-L6-v2"):
+    def __init__(self, model_name: str = "all-MiniLM-L6-v2", log_domain: str = "utils"):
         """Inicializa o gerador de embeddings.
         
         Args:
             model_name (str): Nome do modelo sentence-transformers a ser utilizado.
                             Default: "all-MiniLM-L6-v2"
         """
+        self.logger = get_logger(__name__, log_domain=log_domain)
+        self.logger.info(f"Inicializando o gerador de embeddings")
         self.model_name = model_name
         self.model = SentenceTransformer(model_name)
         self.embedding_dimension = self.model.get_sentence_embedding_dimension()
         
-        print(f"Inicializando o gerador de embeddings: modelo {model_name}; dimensão {self.embedding_dimension}")
+        self.logger.info(f"Gerador de embeddings inicializado: modelo: {self.model_name}; dimensão {self.embedding_dimension}; model_card_data: {self.model.model_card_data}")
 
     
-    def generate_embeddings(self, chunks: List[str] | str, batch_size: Optional[int] = 32) -> np.ndarray:
+    def generate_embeddings(self, chunks: List[str], batch_size: Optional[int] = 32) -> np.ndarray:
         """Calcula os embeddings para uma lista de chunks.
         
         Args:
@@ -37,9 +39,13 @@ class EmbeddingGenerator:
                         onde n_chunks é o número de chunks de entrada
                         e embedding_dimension é a dimensão do embedding (384 para all-MiniLM-L6-v2)
         """
+        self.logger.info(f"Gerando embeddings para {len(chunks)} chunks")
         if not chunks:
             return np.array([])
-        
-        embeddings = self.model.encode(chunks, batch_size=batch_size)
-
-        return embeddings
+        try:
+            embeddings = self.model.encode(chunks, batch_size=batch_size, normalize_embeddings=True)
+            self.logger.info(f"Embeddings gerados com sucesso: {len(embeddings)} vetores, dimensão: {embeddings.shape}")
+            return embeddings
+        except Exception as e:
+            self.logger.error(f"Erro ao gerar embeddings: {e}")
+            raise e
