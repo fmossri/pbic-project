@@ -54,7 +54,7 @@ class TestQueryOrchestrator:
     def test_embedding_error(self, query_orchestrator, mocker):
         """Testa o comportamento quando o embedding não pode ser gerado."""
         # Mock do TextNormalizer
-        mocker.patch(
+        mock_normalize = mocker.patch(
             'src.utils.text_normalizer.TextNormalizer.normalize',
             return_value="query normalizada"
         )
@@ -68,6 +68,9 @@ class TestQueryOrchestrator:
         with pytest.raises(ValueError) as exc_info:
             query_orchestrator._process_query("teste de query")
         
+        # Verify mocks were called
+        mock_normalize.assert_called_once_with("teste de query")
+        mock_generate_embeddings.assert_called_once_with("query normalizada")
         assert "Não foi possível gerar um embedding para a query" in str(exc_info.value)
     
     def test_retrieve_documents(self, query_orchestrator, mocker):

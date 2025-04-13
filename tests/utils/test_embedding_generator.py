@@ -5,7 +5,7 @@ from src.utils.embedding_generator import EmbeddingGenerator
 @pytest.fixture
 def embedding_generator():
     """Fixture que fornece uma instância do EmbeddingGenerator."""
-    return EmbeddingGenerator()
+    return EmbeddingGenerator(log_domain="test_domain")
 
 @pytest.fixture
 def sample_texts():
@@ -29,7 +29,7 @@ def single_text():
 
 def test_initialization():
     """Testa a inicialização do EmbeddingGenerator."""
-    generator = EmbeddingGenerator()
+    generator = EmbeddingGenerator(log_domain="test_domain")
     assert isinstance(generator, EmbeddingGenerator)
     assert generator.model_name == "all-MiniLM-L6-v2"
     assert generator.embedding_dimension > 0

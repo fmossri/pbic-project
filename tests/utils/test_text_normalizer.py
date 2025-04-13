@@ -4,11 +4,11 @@ from src.utils.text_normalizer import TextNormalizer
 
 @pytest.fixture
 def normalizer():
-    return TextNormalizer()
+    return TextNormalizer(log_domain="test_domain")
 
 def test_normalize_unicode():
     """Testa normalização básica de Unicode."""
-    normalizer = TextNormalizer()
+    normalizer = TextNormalizer(log_domain="test_domain")
     
     test_cases = [
         # Pontuação de largura total
@@ -31,7 +31,7 @@ def test_normalize_unicode():
 
 def test_normalize_whitespace():
     """Testa normalização de espaços em branco - múltiplos caracteres de espaço devem se tornar um único espaço."""
-    normalizer = TextNormalizer()
+    normalizer = TextNormalizer(log_domain="test_domain")
     
     test_cases = [
         # Normalização básica de espaços
@@ -60,7 +60,7 @@ def test_normalize_whitespace():
 
 def test_normalize_case():
     """Testa normalização de maiúsculas/minúsculas - verifica se o texto é convertido para minúsculas."""
-    normalizer = TextNormalizer()
+    normalizer = TextNormalizer(log_domain="test_domain")
     
     test_cases = [
         # Conversão básica para minúsculas
@@ -88,7 +88,7 @@ def test_normalize_case():
 
 def test_normalize():
     """Testa o pipeline completo de normalização - Unicode, espaços em branco e maiúsculas/minúsculas."""
-    normalizer = TextNormalizer()
+    normalizer = TextNormalizer(log_domain="test_domain")
     
     test_cases = [
         # Normalização básica
@@ -120,6 +120,6 @@ def test_normalize():
     ]
     
     for input_text, expected in test_cases:
-        result = normalizer.normalize(input_text)
+        result = normalizer.normalize(input_text)[0]
         assert result == expected, f"Failed for input: '{input_text}'\nExpected: '{expected}'\nGot: '{result}'"
 

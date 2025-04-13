@@ -8,7 +8,7 @@ import logging
 from datetime import datetime
 from pathlib import Path
 import pytest
-from src.utils.logger import setup_logging, get_logger, Logger
+from src.utils.logger import setup_logging, get_logger
 import time
 
 class TestLogger:
@@ -42,7 +42,7 @@ class TestLogger:
         setup_logging(log_dir=self.test_log_dir, show_logs=True)
         
         # Get a logger instance and set level to DEBUG
-        logger = get_logger(__name__, domain="test")
+        logger = get_logger(__name__, log_domain="test")
         logger.logger.setLevel(logging.DEBUG)  # Set the logger level to DEBUG
         
         # Test logging different levels
@@ -73,7 +73,7 @@ class TestLogger:
         """Test the context functionality of the logger."""
         print("\nRunning context test...")
         setup_logging(log_dir=self.test_log_dir, show_logs=True)
-        logger = get_logger(__name__, domain="test")
+        logger = get_logger(__name__, log_domain="test")
         
         # Set context and log
         logger.set_context(user_id="123", action="test")
@@ -107,7 +107,7 @@ class TestLogger:
         message = "test"
 
         # Log first message and check file size
-        logger = get_logger("test_rotation", domain="test")
+        logger = get_logger("test_rotation", log_domain="test")
         logger.info(message)
         
         # Force flush and check size
@@ -149,7 +149,7 @@ class TestLogger:
         # Test different domains
         test_domains = ["public", "test_domain", "another_domain"]
         for domain in test_domains:
-            logger = get_logger(__name__, domain=domain)
+            logger = get_logger(__name__, log_domain=domain)
             logger.info("Domain test")
         
         # Verify domain in log entries

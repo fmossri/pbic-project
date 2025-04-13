@@ -35,7 +35,8 @@ class TestFaissManager:
         test_index_path = os.path.join(test_indices_dir, f"test_index_{os.getpid()}.faiss")
         manager = FaissManager(
             index_path=test_index_path,
-            dimension=384  # Standard dimension for test
+            dimension=384,  # Standard dimension for test
+            log_domain="test_domain"
         )
         
         return manager
@@ -75,7 +76,8 @@ class TestFaissManager:
         
         manager = FaissManager(
             index_path=test_index_path,
-            dimension=512  # Different dimension for this test
+            dimension=512,  # Different dimension for this test
+            log_domain="test_domain"
         )
         
         # Verify the manager was initialized correctly
@@ -111,7 +113,8 @@ class TestFaissManager:
         # Create a manager and add some vectors
         manager1 = FaissManager(
             index_path=test_index_path,
-            dimension=384
+            dimension=384,
+            log_domain="test_domain"
         )
         
         # Create and add a test embedding

@@ -8,7 +8,7 @@ class TestTextChunker:
     @pytest.fixture(autouse=True)
     def setup(self):
         """Configura o ambiente de teste."""
-        self.chunker = TextChunker(chunk_size=500, overlap=50)
+        self.chunker = TextChunker(chunk_size=500, overlap=50, log_domain="test_domain")
 
     def test_empty_text(self):
         """Testa o chunking de texto vazio."""
@@ -31,7 +31,7 @@ class TestTextChunker:
 
     def test_custom_chunk_size(self):
         """Testa o chunking com tamanho de chunk personalizado."""
-        chunker = TextChunker(chunk_size=50, overlap=10)
+        chunker = TextChunker(chunk_size=50, overlap=10, log_domain="test_domain")
         text = "Este é um texto que será dividido em chunks menores. " * 3
         chunks = chunker._chunk_text(text)
         assert len(chunks) > 1

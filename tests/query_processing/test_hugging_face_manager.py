@@ -9,7 +9,7 @@ class TestHuggingFaceManager:
     def test_initialization(self):
         """Testa a inicialização do HuggingFaceManager."""
         # Simply verify that a manager can be created and has a client
-        manager = HuggingFaceManager()
+        manager = HuggingFaceManager(log_domain="test_domain")
         assert manager.client is not None
         
         # Verify the client has the expected model
@@ -17,13 +17,13 @@ class TestHuggingFaceManager:
         
         # Check token is obtained from environment
         with patch('os.getenv', return_value='test_token') as mock_getenv:
-            another_manager = HuggingFaceManager()
+            another_manager = HuggingFaceManager(log_domain="test_domain")
             mock_getenv.assert_called_with("HUGGINGFACE_API_TOKEN")
     
     def test_empty_prompt(self):
         """Testa o comportamento do HuggingFaceManager com um prompt vazio."""
         # This test doesn't need mocking as it doesn't make API calls for empty prompts
-        manager = HuggingFaceManager()
+        manager = HuggingFaceManager(log_domain="test_domain")
         
         # Test with empty context prompt
         result = manager.generate_answer("question", "")
@@ -36,7 +36,7 @@ class TestHuggingFaceManager:
     def test_generate_answer_success(self):
         """Testa a geração de resposta com sucesso."""
         # Create manager first
-        manager = HuggingFaceManager()
+        manager = HuggingFaceManager(log_domain="test_domain")
         
         # Replace the client with a mock
         mock_client = MagicMock()
@@ -66,7 +66,7 @@ class TestHuggingFaceManager:
     def test_generate_answer_error(self):
         """Testa o comportamento quando ocorre um erro na geração da resposta."""
         # Create manager
-        manager = HuggingFaceManager()
+        manager = HuggingFaceManager(log_domain="test_domain")
         
         # Replace client with mock that raises an exception
         mock_client = MagicMock()

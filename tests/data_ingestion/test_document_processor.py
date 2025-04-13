@@ -38,7 +38,7 @@ class TestDocumentProcessor:
 
     def test_calculate_hash_with_text(self):
         """Testa o cálculo do hash para um texto."""
-        processor = DocumentProcessor()
+        processor = DocumentProcessor(log_domain="test_domain")
         text_content = "Este é um texto de teste"
         hash_value = processor._calculate_hash(text_content)
         
@@ -52,7 +52,7 @@ class TestDocumentProcessor:
         
     def test_calculate_hash_consistency(self):
         """Testa se diferentes textos geram hashes diferentes."""
-        processor = DocumentProcessor()
+        processor = DocumentProcessor(log_domain="test_domain")
         text1 = "Este é o primeiro texto"
         text2 = "Este é o segundo texto"
         
@@ -64,7 +64,7 @@ class TestDocumentProcessor:
 
     def test_calculate_hash_empty_text(self):
         """Testa o cálculo do hash para texto vazio."""
-        processor = DocumentProcessor()
+        processor = DocumentProcessor(log_domain="test_domain")
         hash_value = processor._calculate_hash("")
         
         # Verifica se texto vazio gera um hash válido
@@ -74,7 +74,7 @@ class TestDocumentProcessor:
         
     def test_extract_text(self):
         """Testa a extração de texto de um arquivo PDF válido."""
-        processor = DocumentProcessor()
+        processor = DocumentProcessor(log_domain="test_domain")
         pages = processor._extract_text(self.sample_pdf_path)
     
         assert len(pages) > 0
@@ -107,7 +107,7 @@ class TestDocumentProcessor:
             text_file.write("Este não é um arquivo PDF")
 
         try:
-            processor = DocumentProcessor()
+            processor = DocumentProcessor(log_domain="test_domain")
             with pytest.raises(PdfStreamError) as exc_info:
                 processor._extract_text(self.non_pdf_path)
             
