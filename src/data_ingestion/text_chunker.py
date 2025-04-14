@@ -48,9 +48,9 @@ class TextChunker:
         Returns:
             List[Document]: Lista de chunks com seus metadados
         """
-        self.logger.debug("Dividindo a página em chunks")
+        self.logger.debug("Dividindo a pagina em chunks")
         if not text:
-            self.logger.error("Texto não encontrado")
+            self.logger.error("Texto nao encontrado")
             return []
         try:
             # Cria documentos com metadados
@@ -58,10 +58,10 @@ class TextChunker:
                 texts=[text],
                 metadatas=[metadata] if metadata else None
             )
-            self.logger.debug(f"Página dividida em {len(docs)} chunks com sucesso")
+            self.logger.debug(f"Pagina dividida em {len(docs)} chunks com sucesso")
             return docs
         except Exception as e:
-            self.logger.error(f"Erro ao dividir a página em chunks: {e}")
+            self.logger.error(f"Erro ao dividir a pagina em chunks: {e}")
             raise e
     
     def create_chunks(self, text: str, metadata: Optional[Dict] = None) -> List[Chunk]:

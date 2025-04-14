@@ -7,11 +7,11 @@ class TextNormalizer:
     
     def __init__(self, log_domain: str = "utils"):
         self.logger = get_logger(__name__, log_domain=log_domain)
-        self.logger.info("Inicializando o normalizador de texto...")
+        self.logger.info("Inicializando o TextNormalizer")
 
     def normalize(self, texts: list[str]) -> list[str]:
         """Aplica todas as etapas de normalização."""
-        self.logger.info("Iniciando a normalização do texto")
+        self.logger.debug("Iniciando a normalização do texto")
 
         texts = [texts] if isinstance(texts, str) else texts
         try:
@@ -21,7 +21,7 @@ class TextNormalizer:
                 normalized_text = self._normalize_whitespace(normalized_text)
                 normalized_text = self._normalize_case(normalized_text)
                 normalized_texts.append(normalized_text)
-            self.logger.info("Texto normalizado com sucesso")
+            self.logger.debug("Texto normalizado com sucesso")
             return normalized_texts
         except Exception as e:
             self.logger.error(f"Erro ao normalizar o texto: {e}")

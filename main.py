@@ -4,7 +4,11 @@ import os
 from typing import Dict, List
 from src.data_ingestion import DataIngestionOrchestrator
 from src.query_processing import QueryOrchestrator
+from src.utils.logger import setup_logging, get_logger
 from langchain.schema import Document
+
+print("Iniciando a aplicação")
+logger = None
 
 def print_metrics(
     directory_path: str, 
@@ -46,6 +50,20 @@ def print_metrics(
     first_chunk = next(iter(iter(results.values())))
     embedding_dimension = len(first_chunk[0].metadata["embedding"])
     
+    # Log metrics
+    logger.info("Métricas do processamento", 
+                directory_path=directory_path,
+                total_files=total_files,
+                processed_files=processed_files,
+                total_pages=total_pages,
+                total_chunks=total_chunks,
+                avg_chunks_per_doc=avg_chunks_per_doc,
+                avg_chunks_per_page=avg_chunks_per_page,
+                avg_chunk_size=avg_chunk_size,
+                embedding_dimension=embedding_dimension,
+                embedding_time=embedding_time,
+                processing_time=processing_time)
+    
     print("\n" + "=" * 80)
     print("MÉTRICAS DO PROCESSAMENTO")
     print("=" * 80)
@@ -74,37 +92,30 @@ def ingest_data(directory_path: str) -> None:
 
     Args:
         directory_path (str): Caminho para o diretório contendo os arquivos PDF.
-
     """
+    logger.info("Iniciando o processo de ingestao de dados")
     
     if not os.path.exists(directory_path):
-        raise FileNotFoundError(f"O diretório {directory_path} não existe.")
-    
-    print("Iniciando o processo de ingestão de dados...")
+        logger.error(f"O diretório {directory_path} não existe")
+        raise FileNotFoundError(f"O diretório {directory_path} não existe")
     
     ingestion = DataIngestionOrchestrator()
     
-    try:
-        # Lista os arquivos PDF
-        pdf_files = ingestion.list_pdf_files(directory_path)
-        print(f"\nIniciando processamento de {len(pdf_files):,} arquivos PDF...")
-        
+    try:      
         # Processa os documentos e mede o tempo
         start_time = time.time()
         ingestion.process_directory(directory_path)
         total_time = time.time() - start_time
-        print(f"Tempo total de processamento: {total_time:.1f} segundos")
-        
-
+        logger.info("Ingestao de dados concluida", processing_time=total_time)
         
     except (FileNotFoundError, NotADirectoryError, ValueError) as e:
-        print(f"\nErro: {str(e)}")
+        logger.error("Erro durante a ingestao de dados", error=str(e))
         raise e
     except KeyboardInterrupt as e:
-        print("\nProcessamento interrompido pelo usuário.")
+        logger.warning("Ingestao de dados interrompida pelo usuario")
         raise e
     except Exception as e:
-        print(f"\nErro inesperado: {e}")
+        logger.error("Erro inesperado durante a ingestao de dados", error=str(e))
         raise e
 
 def answer_question(question: str) -> None:
@@ -114,39 +125,67 @@ def answer_question(question: str) -> None:
     Args:
         question (str): A pergunta a ser respondida.
     """
-    print("Iniciando o processo de geração de resposta...")
+    logger.info("Iniciando o processo de geracao de resposta", question=question)
     query_orchestrator = QueryOrchestrator()
     try:
         answer = query_orchestrator.query_llm(question)
-        print(f"\nResposta: {answer}")
-
+        print(f"\nPergunta: {question}\n")
+        print(f"{answer}\n")
+        logger.info("Pergunta respondida com sucesso", question=question, answer=answer)
+        logger.info("Encerrando a aplicacao")
+        sys.exit(0)
     except Exception as e:
-        print(f"\nErro inesperado: {e}")
+        logger.error("Erro durante a geracao de resposta", question=question, error=str(e))
         raise e
 
 def main():
-    if len(sys.argv) == 2 and sys.argv[1] == "--help":
-        print("""   Para ingestão de dados, use o comando:
+    global logger
+    
+
+    invalid_use_message = "Uso incorreto. Use main.py --help para ver a lista de comandos disponíveis." 
+    help_message = """
+    Para ingestão de dados, use o comando:
               python main.py -i caminho/para/diretorio
     Para fazer uma pergunta ao modelo, use o comando:
               python main.py -q "sua pergunta"
-        """)
-        return
-    if len(sys.argv) != 3:
-        print("Uso incorreto. Use --help para ver a lista de comandos disponíveis.")
-        return
-    
-    if sys.argv[1] == "-i":
-        # Ingestão de dados
-        directory_path = sys.argv[2]
-        ingest_data(directory_path)
-    elif sys.argv[1] == "-q":
-        # Processamento de query
-        question = sys.argv[2]
-        answer_question(question)
-    else:
-        print("Uso incorreto. Use --help para ver a lista de comandos disponíveis.")
-        return
+    """
+
+    debug = False
+    if "--debug" in sys.argv:
+        debug = True
+
+    setup_logging(log_dir="logs", debug=debug)
+    logger = get_logger("main")
+
+
+    match (len(sys.argv)):
+        case 2 if sys.argv[1] == "--help":
+            logger.debug("Exibindo a mensagem de ajuda")
+            print(help_message)
+            return
+        case 3:
+            if sys.argv[1] == "-i":
+                directory_path = sys.argv[2]
+                logger.info("Iniciando a aplicacao - Ingestao de dados", args=sys.argv[1:])
+                ingest_data(directory_path)
+            elif sys.argv[1] == "-q":
+                question = sys.argv[2]
+                logger.info("Iniciando a aplicacao - Geracao de resposta", args=sys.argv[1:])
+                answer_question(question)
+        case 4:
+            if sys.argv[1] == "-i" and sys.argv[3] == "--debug":
+                directory_path = sys.argv[2]
+                logger.info("Iniciando a aplicacao em modo debug - Ingestao de dados", args=sys.argv[1:])
+                ingest_data(directory_path, debug=True)
+            elif sys.argv[1] == "-q" and sys.argv[3] == "--debug":
+                question = sys.argv[2]
+                logger.info("Iniciando a aplicacao em modo debug - Geracao de resposta", args=sys.argv[1:])
+                answer_question(question, debug=True)
+
+        case _:
+            logger.error("Argumentos de linha de comando invalidos", args=sys.argv[1:])
+            print(invalid_use_message)
+            return
 
 if __name__ == "__main__":
     main() 

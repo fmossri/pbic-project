@@ -9,17 +9,17 @@ load_dotenv()
 class HuggingFaceManager:
     def __init__(self, model_name: str = "HuggingFaceH4/zephyr-7b-beta", max_retries: int = 3, retry_delay: int = 2, log_domain: str = "Processamento de queries"):
         self.logger = get_logger(__name__, log_domain=log_domain)
-        self.logger.info("Inicializando o Hugging Face Manager")
+        self.logger.info(f"Inicializando o HuggingFaceManager. Modelo: {model_name}")
         self.model_name = model_name
         self.max_retries = max_retries
         self.retry_delay = retry_delay
         self.client = self._initialize_client()
-        self.logger.info(f"Modelo Hugging Face inicializado: {self.model_name}")
+        self.logger.debug(f"Modelo Hugging Face inicializado")
         
     def _initialize_client(self) -> InferenceClient:
         """Initialize the Hugging Face Inference client."""
 
-        self.logger.info("Inicializando o cliente Hugging Face")
+        self.logger.debug("Inicializando o cliente Hugging Face")
         
         token = os.getenv("HUGGINGFACE_API_TOKEN")
         if not token:
@@ -40,11 +40,10 @@ class HuggingFaceManager:
         Returns:
             str: A resposta gerada pelo modelo ou uma mensagem de erro.
         """
-        self.logger.info("Iniciando a geração da resposta")
-        self.logger.info(f"Pergunta: {question}")
+        self.logger.info("Gerando a resposta")
         if not context_prompt:
-            self.logger.error("Prompt vazio ou inválido")
-            return "prompt vazio ou inválido"
+            self.logger.error("Erro ao gerar a resposta: Prompt vazio ou invalido")
+            raise ValueError("Prompt vazio ou inválido")
 
         try:
             response = self.client.text_generation(
@@ -57,7 +56,7 @@ class HuggingFaceManager:
                 top_k=50,
                 repetition_penalty=1.0
                 )
-            self.logger.info("Resposta gerada com sucesso")
+            self.logger.debug("Resposta gerada com sucesso")
             return response
             
         except HfHubHTTPError as e:

@@ -29,7 +29,7 @@ class DocumentProcessor:
             FileNotFoundError: Se o arquivo não existir
             PdfStreamError: Se o arquivo não for um PDF válido
         """     
-        self.logger.info("Calculando o hash do documento com hashlib.md5()")
+        self.logger.info("Calculando o hash do documento", hash_function="md5")
         try:
             # Calcula o hash do texto
             hash_function = hashlib.md5()
@@ -53,17 +53,17 @@ class DocumentProcessor:
             FileNotFoundError: Se o arquivo não existir
             PdfStreamError: Se o arquivo não for um PDF válido
         """
-        self.logger.info(f"Iniciando a extração do texto em {file_path}")
+        self.logger.info(f"Extraindo o texto", file_path=file_path)
         if not os.path.exists(file_path):
-            self.logger.error("Arquivo não encontrado", file_path=file_path)
+            self.logger.error("Arquivo nao encontrado", file_path=file_path)
             raise FileNotFoundError(f"Arquivo não encontrado: {file_path}")
             
         try:
-            self.logger.info("Carregando o documento com PyPDFLoader", file_path=file_path)
+            self.logger.debug("Carregando o documento com PyPDFLoader")
             loader = PyPDFLoader(file_path)
 
             pages = loader.load_and_split()
-            self.logger.info(f"Texto extraído com sucesso. {len(pages)} páginas encontradas", file_path=file_path)
+            self.logger.debug(f"Texto extraido com sucesso. {len(pages)} paginas processadas")
             return pages
         
         except Exception as e:
@@ -89,8 +89,8 @@ class DocumentProcessor:
             text_content = "\n".join(page.page_content for page in pages)
             # Calcula o hash do documento
             file.hash = self._calculate_hash(text_content)
-            self.logger.info(f"Hash para o documento {file.name} calculado com sucesso. {file.hash}")
-            self.logger.info(f"Documento processado com sucesso. {file.name}", file_path=file.path)
+            self.logger.debug(f"Hash do documento calculado com sucesso", file_hash=file.hash)
+            self.logger.info(f"Documento processado com sucesso")
 
         except Exception as e:
             self.logger.error(f"Erro ao processar o documento {file.name}", error=str(e))

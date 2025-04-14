@@ -20,14 +20,14 @@ class FaissManager:
             dimension (int): Dimensão dos vetores de embedding
         """
         self.logger = get_logger(__name__, log_domain=log_domain)
-        self.logger.info(f"Inicializando o index FAISS em {index_path}")
+        self.logger.info(f"Inicializando o FaissManager")
 
         self.index_path = index_path if index_path is not None else self.DEFAULT_INDEX_PATH
         self.dimension = dimension
         self.index = None
         self._initialize_index()
 
-        self.logger.info(f"Index FAISS inicializado. dimensão: {self.dimension}; index_path: {self.index_path}")
+        self.logger.debug(f"Index FAISS inicializado. dimensão: {self.dimension}; index_path: {self.index_path}")
     
     def _initialize_index(self) -> None:
         """Inicializa ou carrega o índice FAISS existente."""
@@ -38,14 +38,14 @@ class FaissManager:
             if os.path.exists(self.index_path):
                 # Carrega o índice existente
                 self.index = faiss.read_index(self.index_path)
-                self.logger.info(f"Índice FAISS carregado com sucesso: {self.index_path}")
+                self.logger.debug(f"Índice FAISS carregado com sucesso: {self.index_path}")
             else:
                 # Cria um novo índice
-                self.logger.info(f"Índice FAISS não encontrado. Criando um novo índice")
+                self.logger.warning(f"Índice FAISS não encontrado. Criando um novo índice")
                 self.index = faiss.IndexFlatL2(self.dimension)
                 # Salva o índice vazio
                 faiss.write_index(self.index, self.index_path)
-                self.logger.info(f"Índice FAISS salvo com sucesso: {self.index_path}")
+                self.logger.warning(f"Índice FAISS salvo com sucesso: {self.index_path}")
         except Exception as e:
             self.logger.error(f"Erro ao inicializar o índice FAISS: {e}")
             raise e
@@ -57,7 +57,7 @@ class FaissManager:
         Args:
             embeddings (List[Embedding]): Lista de embeddings
         """
-        self.logger.info(f"Adicionando {len(embeddings)} embeddings ao índice FAISS")
+        self.logger.debug(f"Adicionando {len(embeddings)} embeddings ao índice FAISS")
         # Obtém o número de embeddings já existentes no índice
 
         try:
@@ -75,7 +75,7 @@ class FaissManager:
                 # Salva o estado
                 self._save_state()
 
-            self.logger.info(f"Embeddings adicionados ao índice FAISS com sucesso")
+            self.logger.debug(f"Embeddings adicionados ao índice FAISS com sucesso")
 
         except Exception as e:
             self.logger.error(f"Erro ao adicionar embeddings ao índice FAISS: {e}")
@@ -88,7 +88,7 @@ class FaissManager:
         Args:
             query_embedding (np.ndarray): Vetor de embedding da query
         """
-        self.logger.info(f"Realizando busca no índice FAISS para encontrar os {k} embeddings mais similares à query_embedding")
+        self.logger.info(f"Realizando busca por similaridade no índice FAISS", top_k=k)
         # Verifica se o vetor de embedding é um array unidimensional
         try:
             if len(query_embedding.shape) == 1:
@@ -97,7 +97,7 @@ class FaissManager:
 
             # Realiza a busca no índice FAISS
             distances, indices = self.index.search(query_embedding, k)
-            self.logger.info(f"Busca no índice FAISS realizada com sucesso")
+            self.logger.debug(f"Busca no índice FAISS realizada com sucesso")
             return distances, indices
         except Exception as e:
             self.logger.error(f"Erro ao realizar busca no índice FAISS: {e}")
@@ -105,7 +105,7 @@ class FaissManager:
         
     def _save_state(self) -> None:
         """Salva o estado do índice."""
-        self.logger.info(f"Salvando o estado do índice FAISS em {self.index_path}")
+        self.logger.info(f"Salvando o estado do índice FAISS em: {self.index_path}")
         try:
             faiss.write_index(self.index, self.index_path)
             self.logger.info(f"Estado do índice FAISS salvo com sucesso: {self.index_path}")

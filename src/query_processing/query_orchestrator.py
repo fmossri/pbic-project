@@ -29,7 +29,7 @@ class QueryOrchestrator:
         """
         self.logger.info("Iniciando o tratamento da query")
         if not query:
-            self.logger.error("Query vazia ou inválida")
+            self.logger.error("Query vazia ou invalida")
             raise ValueError("Query vazia ou inválida")
 
         try:
@@ -39,8 +39,8 @@ class QueryOrchestrator:
             query_embedding = self.embedding_generator.generate_embeddings(normalized_query)
             
             if query_embedding.size == 0:
-                self.logger.error("Não foi possível gerar um embedding para a query")
-                raise ValueError("Não foi possível gerar um embedding para a query")
+                self.logger.error("Erro ao gerar o embedding da query")
+                raise ValueError("Erro ao gerar o embedding da query")
             
             return query_embedding
         
@@ -58,10 +58,10 @@ class QueryOrchestrator:
         Returns:
             List[str]: Uma lista de chunks de conteúdo relevantes.
         """
-        self.logger.info("Recuperando os chunks de conteúdo relevantes")
+        self.logger.info("Recuperando os chunks de conteudo relevantes")
         if query_embedding is None or query_embedding.size == 0:
-            self.logger.error("Embedding vazio ou inválido")
-            raise ValueError("Embedding vazio ou inválido")
+            self.logger.error("Vetor de embedding vazio ou invalido")
+            raise ValueError("Vetor de embedding vazio ou inválido")
         
         try:
             _, indices = self.faiss_manager.search_faiss_index(query_embedding)
@@ -69,11 +69,11 @@ class QueryOrchestrator:
 
             with self.sqlite_manager.get_connection() as conn:
                 chunks_content = self.sqlite_manager.get_embeddings_chunks(conn, flat_indices)
-            self.logger.info("Chunks de conteúdo recuperados com sucesso")
+            self.logger.info("Chunks de conteudo recuperados com sucesso")
             return chunks_content
         
         except Exception as e:
-            self.logger.error(f"Erro ao recuperar chunks de conteúdo: {str(e)}")
+            self.logger.error(f"Erro ao recuperar chunks de conteudo: {str(e)}")
             raise e
     
     def _prepare_context_prompt(self, query: str, chunks_content: List[str]) -> str:
@@ -87,13 +87,13 @@ class QueryOrchestrator:
         Returns:
             str: O prompt preparado para a geração de resposta.
         """
-        self.logger.info("Preparando o prompt para a geração de resposta")
+        self.logger.info("Preparando o prompt de contexto")
         if not query:
-            self.logger.error("Query vazia ou inválida")
+            self.logger.error("Erro ao preparar o prompt de contexto: Query vazia ou invalida")
             raise ValueError("Query vazia ou inválida")
         
         if not chunks_content:
-            self.logger.error("Lista de chunks vazia ou inválida")
+            self.logger.error("Erro ao preparar o prompt de contexto: Lista de chunks vazia ou invalida")
             raise ValueError("Lista de chunks vazia ou inválida")
         
         context_prompt = f"""
@@ -103,7 +103,7 @@ class QueryOrchestrator:
         Question:
         {query}
         """
-        self.logger.info("Prompt preparado com sucesso")
+        self.logger.debug("Prompt de contexto preparado com sucesso")
         return context_prompt
 
     def query_llm(self, query: str) -> str:
@@ -116,9 +116,9 @@ class QueryOrchestrator:
         Returns:
             str: A resposta gerada pelo modelo LLM.
         """
-        self.logger.info("Iniciando o pipeline de processamento de queries")
+        self.logger.info("Iniciando o processamento da pergunta")
         if not query:
-            self.logger.error("Query vazia ou inválida")
+            self.logger.error("Erro ao processar a query: Query vazia ou invalida")
             raise ValueError("Query vazia ou inválida")
 
         try:

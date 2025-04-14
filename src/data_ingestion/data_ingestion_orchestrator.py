@@ -52,7 +52,7 @@ class DataIngestionOrchestrator:
         Raises:
             ValueError: Se o documento original não for encontrado
         """
-        self.logger.info(f"Procurando o documento original para o hash: {duplicate_hash}")
+        self.logger.info(f"Procurando o documento original com o hash: {duplicate_hash}")
         # Primeiro procura no dicionário de hashes
         try:
             for filename, hash_value in self.document_hashes.items():
@@ -91,25 +91,23 @@ class DataIngestionOrchestrator:
         Returns:
             bool: True se o documento for duplicado, False caso contrário
         """
-        self.logger.info(f"Verificando se o documento é duplicado: {document_hash}")    
+        self.logger.debug(f"Verificando se o documento é duplicado: {document_hash}")    
         try:
             # Verifica se já existe um documento com o mesmo hash
             for existing_hash in self.document_hashes.values():
                 if existing_hash == document_hash:
-                
-                    """print(f"\nDocumento duplicado encontrado:")
-                    print(f"- Arquivo: {filename}")
-                    print(f"- Hash: {document_hash}")
-                    print(f"- Original: {existing_filename}")
-                    print("-" * 50)"""
+                    self.logger.warning(f"Documento duplicado encontrado")
                     return True
             
             cursor = conn.execute("SELECT * FROM document_files WHERE hash = ?", (document_hash,))
             result = cursor.fetchone()
-            return result is not None
+            if result:
+                self.logger.warning(f"Documento duplicado encontrado")
+                return True
+            return False
         
         except Exception as e:
-            self.logger.error(f"Erro ao verificar se o documento é duplicado: {e}")
+            self.logger.error(f"Erro ao verificar se o documento e duplicado: {e}")
             raise e
         
         
@@ -130,14 +128,14 @@ class DataIngestionOrchestrator:
             NotADirectoryError: Se o caminho não for um diretório
             ValueError: Se nenhum arquivo PDF for encontrado
         """
-        self.logger.info("Listando arquivos PDF no diretório", directory_path=directory_path)
+        self.logger.info("Listando arquivos PDF no diretorio", directory_path=directory_path)
 
         if not os.path.exists(directory_path):
-            self.logger.error("Diretório não encontrado", directory_path=directory_path)
+            self.logger.error("Diretorio nao encontrado", directory_path=directory_path)
             raise FileNotFoundError(f"Diretório não encontrado: {directory_path}")
 
         if not os.path.isdir(directory_path):
-            self.logger.error("Caminho não é um diretório", directory_path=directory_path)
+            self.logger.error("Caminho nao e um diretorio", directory_path=directory_path)
             raise NotADirectoryError(f"Caminho não é um diretório: {directory_path}")
 
         pdf_files = []
@@ -152,10 +150,10 @@ class DataIngestionOrchestrator:
             raise e
 
         if not pdf_files:
-            self.logger.error("Nenhum arquivo PDF encontrado no diretório", directory_path=directory_path)
+            self.logger.error("Nenhum arquivo PDF encontrado no diretorio", directory_path=directory_path)
             raise ValueError(f"Nenhum arquivo PDF encontrado em: {directory_path}")
         
-        self.logger.info(f"{len(pdf_files)} arquivos PDF encontrados no diretório", directory_path=directory_path)
+        self.logger.info(f"{len(pdf_files)} arquivos PDF encontrados no diretorio", directory_path=directory_path)
         return pdf_files
     
     def process_directory(self, directory_path: str) -> None:
@@ -174,13 +172,13 @@ class DataIngestionOrchestrator:
             ValueError: Se não houver arquivos PDF no diretório
         """
         if not os.path.exists(directory_path):
-            self.logger.error("Diretório não encontrado", directory_path=directory_path)
+            self.logger.error("Diretorio nao encontrado", directory_path=directory_path)
             raise FileNotFoundError(f"Diretório não encontrado: {directory_path}")
         if not os.path.isdir(directory_path):
-            self.logger.error("Caminho não é um diretório", directory_path=directory_path)
+            self.logger.error("Caminho nao e um diretorio", directory_path=directory_path)
             raise NotADirectoryError(f"Caminho não é um diretório: {directory_path}")
         
-        self.logger.info("Iniciando o processamento do diretório", directory_path=directory_path)
+        self.logger.info("Iniciando o processamento do diretorio", directory_path=directory_path)
 
         pdf_files = self.list_pdf_files(directory_path)
 
@@ -203,10 +201,10 @@ class DataIngestionOrchestrator:
                         duplicate_counter += 1
                         original_file = self._find_original_document(file.hash, conn)
                         if original_file:
-                            self.logger.info(f"{file.name} - Arquivo duplicado. hash: {file.hash}", file_path=file.path)
-                            self.logger.info(f"{file.name} - Arquivo original: {original_file.name} hash: {original_file.hash}", file_path=original_file.path)
+                            self.logger.warning(f"Arquivo duplicado: {file.name} hash: {file.hash}", file_path=file.path)
+                            self.logger.warning(f"Arquivo original: {original_file.name} hash: {original_file.hash}", file_path=original_file.path)
 
-                        self.logger.info(f"Descartando alterações da transação", file_path=file.path)
+                        self.logger.info(f"Descartando alteracoes da transacao", file_path=file.path)
                         conn.rollback()
                         continue
 
@@ -216,20 +214,20 @@ class DataIngestionOrchestrator:
                     file.id = self.sqlite_manager.insert_document_file(file, conn)
   
                     if not file.pages:
-                        self.logger.error(f"{file.name} - Nenhuma página encontrada", file_path=file.path)
-                        self.logger.error(f"Descartando alterações da transação", file_path=file.path)
+                        self.logger.error(f"{file.name} - Nenhuma pagina encontrada", file_path=file.path)
+                        self.logger.error(f"Descartando alteracoes da transacao", file_path=file.path)
                         conn.rollback()
                         continue
 
                     # Processa cada página e coleta seus chunks
-                    self.logger.info(f"{file.name} - Total de páginas: {len(file.pages)}", file_path=file.path)
-                    self.logger.info(f"{file.name} - Iniciando a criação de chunks", file_path=file.path)
+                    self.logger.info(f"{file.name} - Total de paginas: {len(file.pages)}", file_path=file.path)
+                    self.logger.info(f"{file.name} - Iniciando a criacao de chunks", file_path=file.path)
                     document_chunks : List[Chunk] = []
                     page_counter = 0
                     for page in file.pages:
                         # Divide a página em chunks
                         page_counter += 1
-                        self.logger.debug(f"{file.name} - Processando página: {page_counter}/{len(file.pages)}", file_path=file.path)
+                        self.logger.debug(f"{file.name} - Processando pagina: {page_counter}/{len(file.pages)}", file_path=file.path)
 
                         page_chunks = self.text_chunker.create_chunks(
                             text=page.page_content,
@@ -240,14 +238,14 @@ class DataIngestionOrchestrator:
                             )
 
                         if not page_chunks:
-                            self.logger.error(f"{file.name} - Página vazia encontrada: {page.metadata['page']}", file_path=file.path)
+                            self.logger.error(f"{file.name} - Pagina vazia encontrada: {page.metadata['page']}", file_path=file.path)
                             continue
                         
                         document_chunks.extend(page_chunks)
                     
                     if not document_chunks:
                         self.logger.error(f"{file.name} - Nenhum chunk gerado", file_path=file.path)
-                        self.logger.error(f"Descartando alterações da transação", file_path=file.path)
+                        self.logger.error(f"Descartando alteracoes da transacao", file_path=file.path)
                         conn.rollback()
                         continue
 
@@ -264,7 +262,7 @@ class DataIngestionOrchestrator:
                     embedding_vectors = self.embedding_generator.generate_embeddings(normalized_chunks)                    
                     if embedding_vectors.size == 0:
                         self.logger.error(f"{file.name} - Nenhum embedding gerado", file_path=file.path)
-                        self.logger.error(f"Descartando alterações da transação", file_path=file.path)
+                        self.logger.error(f"Descartando alteracoes da transacao", file_path=file.path)
                         conn.rollback()
                         continue
 
@@ -286,12 +284,12 @@ class DataIngestionOrchestrator:
                     #Adiciona os embeddings ao banco de dados
                     self.sqlite_manager.insert_embeddings(embeddings, conn)
                     #Salva as alterações no banco de dados
-                    self.logger.info(f"{file.name} - Salvando alterações no banco de dados", file_path=file.path)
+                    self.logger.info(f"{file.name} - Salvando alteracoes no banco de dados", file_path=file.path)
                     conn.commit()
-                    self.logger.info(f"{file.name} - Processamento concluído com sucesso", file_path=file.path)
+                    self.logger.info(f"{file.name} - Processamento concluido com sucesso", file_path=file.path)
                 except Exception as e:
                     self.logger.error(f"{file.name} - Erro ao processar o arquivo: {e}", file_path=file.path)
-                    self.logger.error(f"Descartando alterações da transação", file_path=file.path)
+                    self.logger.error(f"Descartando alteracoes da transacao", file_path=file.path)
                     conn.rollback()
                     continue
 
