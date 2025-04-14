@@ -11,7 +11,7 @@ from src.utils.logger import get_logger
 class DocumentProcessor:
     """Processa documentos PDF para extração de texto."""
 
-    def __init__(self, log_domain: str = "Ingestão de dados"):
+    def __init__(self, log_domain: str = "Ingestao de dados"):
         self.logger = get_logger(__name__, log_domain=log_domain)
         self.logger.info("Inicializando o DocumentProcessor")
     

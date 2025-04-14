@@ -27,11 +27,11 @@ class FaissManager:
         self.index = None
         self._initialize_index()
 
-        self.logger.debug(f"Index FAISS inicializado. dimensão: {self.dimension}; index_path: {self.index_path}")
+        self.logger.debug(f"Index FAISS inicializado. dimensao: {self.dimension}; index_path: {self.index_path}")
     
     def _initialize_index(self) -> None:
         """Inicializa ou carrega o índice FAISS existente."""
-        self.logger.info(f"Inicializando o índice FAISS em {self.index_path}")
+        self.logger.info(f"Inicializando o indice FAISS em {self.index_path}")
         try:
             os.makedirs(os.path.dirname(self.index_path), exist_ok=True)
 

@@ -1,90 +1,34 @@
 import sys
-import time
 import os
-from typing import Dict, List
+from time import time
+from typing import Dict
 from src.data_ingestion import DataIngestionOrchestrator
 from src.query_processing import QueryOrchestrator
 from src.utils.logger import setup_logging, get_logger
-from langchain.schema import Document
 
 print("Iniciando a aplicação")
-logger = None
 
-def print_metrics(
-    directory_path: str, 
-    pdf_files: List[str], 
-    results: Dict[str, List[Document]], 
-    processing_time: float,
-    embedding_time: float
-) -> None:
-    """Imprime métricas do processamento.
+def log_metrics(metrics_data: Dict[str, any], debug: bool = False, process: str = None) -> None:
+    """
+    Registra métricas do processamento.
     
     Args:
-        directory_path (str): Caminho para o diretório processado
-        pdf_files (List[str]): Lista de arquivos PDF encontrados
-        results (Dict[str, List[Document]]): Resultados do processamento
-        processing_time (float): Tempo total de processamento em segundos
-        embedding_time (float): Tempo de geração dos embeddings em segundos
+        metrics_data (Dict[str, any]): Dicionário contendo as métricas do processamento
+        debug (bool): Se True, exibe métricas detalhadas
+        process (str): Nome do processo sendo registrado
     """
-    total_chunks = sum(len(chunks) for chunks in results.values())
-    processed_files = len(results)
-    total_files = len(pdf_files)
-    avg_chunks_per_doc = total_chunks / processed_files if processed_files > 0 else 0
-    
-    # Calcula métricas adicionais
-    total_pages = sum(
-        max(chunk.metadata["page"] for chunk in chunks)
-        for chunks in results.values()
-    )
-    avg_chunks_per_page = total_chunks / total_pages if total_pages > 0 else 0
-    
-    # Calcula tamanho médio dos chunks
-    chunk_sizes = [
-        len(chunk.page_content)
-        for chunks in results.values()
-        for chunk in chunks
-    ]
-    avg_chunk_size = sum(chunk_sizes) / len(chunk_sizes) if chunk_sizes else 0
-    
-    # Pega a dimensão do embedding do primeiro chunk (todos são iguais)
-    first_chunk = next(iter(iter(results.values())))
-    embedding_dimension = len(first_chunk[0].metadata["embedding"])
-    
-    # Log metrics
-    logger.info("Métricas do processamento", 
-                directory_path=directory_path,
-                total_files=total_files,
-                processed_files=processed_files,
-                total_pages=total_pages,
-                total_chunks=total_chunks,
-                avg_chunks_per_doc=avg_chunks_per_doc,
-                avg_chunks_per_page=avg_chunks_per_page,
-                avg_chunk_size=avg_chunk_size,
-                embedding_dimension=embedding_dimension,
-                embedding_time=embedding_time,
-                processing_time=processing_time)
-    
-    print("\n" + "=" * 80)
-    print("MÉTRICAS DO PROCESSAMENTO")
-    print("=" * 80)
-    print(f"Diretório processado: {directory_path}")
-    print(f"Total de PDFs encontrados: {total_files:,}")
-    print(f"Documentos processados com sucesso: {processed_files:,}")
-    print(f"Total de páginas processadas: {total_pages:,}")
-    print(f"Total de chunks gerados: {total_chunks:,}")
-    print(f"Média de chunks por documento: {avg_chunks_per_doc:.1f}")
-    print(f"Média de chunks por página: {avg_chunks_per_page:.1f}")
-    print(f"Tamanho médio dos chunks: {avg_chunk_size:.0f} caracteres")
-    print("-" * 80)
-    print("MÉTRICAS DE EMBEDDINGS")
-    print(f"Total de embeddings gerados: {total_chunks:,}")
-    print(f"Dimensão dos embeddings: {embedding_dimension}")
-    print(f"Tempo de geração dos embeddings: {embedding_time:.1f} segundos")
-    print(f"Velocidade de embeddings: {total_chunks/embedding_time:.1f} embeddings/segundo")
-    print("-" * 80)
-    print(f"Tempo total de processamento: {processing_time:.1f} segundos")
-    print(f"Velocidade de processamento: {processed_files/processing_time:.1f} docs/segundo")
-    print("=" * 80)
+    if not process:
+        logger.error("Processo nao especificado")
+        raise TypeError("Processo nao especificado")
+
+    logger.info(f"Processo: {process}")
+    for field, value in metrics_data.items():
+        if type(value) == dict and debug:
+            for key, value in value.items():
+                logger.debug(f"{field} - {key}: {value}")
+
+        else:
+            logger.info(f"{field}: {value}")
 
 def ingest_data(directory_path: str) -> None:
     """
@@ -96,17 +40,15 @@ def ingest_data(directory_path: str) -> None:
     logger.info("Iniciando o processo de ingestao de dados")
     
     if not os.path.exists(directory_path):
-        logger.error(f"O diretório {directory_path} não existe")
+        logger.error(f"O diretorio {directory_path} nao existe")
         raise FileNotFoundError(f"O diretório {directory_path} não existe")
     
     ingestion = DataIngestionOrchestrator()
     
     try:      
         # Processa os documentos e mede o tempo
-        start_time = time.time()
         ingestion.process_directory(directory_path)
-        total_time = time.time() - start_time
-        logger.info("Ingestao de dados concluida", processing_time=total_time)
+        logger.info("Encerrando a aplicacao")
         
     except (FileNotFoundError, NotADirectoryError, ValueError) as e:
         logger.error("Erro durante a ingestao de dados", error=str(e))
@@ -118,7 +60,7 @@ def ingest_data(directory_path: str) -> None:
         logger.error("Erro inesperado durante a ingestao de dados", error=str(e))
         raise e
 
-def answer_question(question: str) -> None:
+def answer_question(question: str) -> Dict[str, any]:
     """
     Chama o processo de geração de resposta a partir de uma pergunta do usuário.
 
@@ -128,17 +70,17 @@ def answer_question(question: str) -> None:
     logger.info("Iniciando o processo de geracao de resposta", question=question)
     query_orchestrator = QueryOrchestrator()
     try:
-        answer = query_orchestrator.query_llm(question)
+        metrics_data = query_orchestrator.query_llm(question)
         print(f"\nPergunta: {question}\n")
-        print(f"{answer}\n")
-        logger.info("Pergunta respondida com sucesso", question=question, answer=answer)
-        logger.info("Encerrando a aplicacao")
-        sys.exit(0)
+        print(f"{metrics_data['answer']}\n")
+        logger.info("Pergunta respondida com sucesso", question=question, answer=metrics_data["answer"])
+        return metrics_data
     except Exception as e:
         logger.error("Erro durante a geracao de resposta", question=question, error=str(e))
         raise e
 
 def main():
+    start_time = time()
     global logger
     
 
@@ -168,22 +110,42 @@ def main():
             if sys.argv[1] == "-i":
                 directory_path = sys.argv[2]
                 logger.info("Iniciando a aplicacao - Ingestao de dados", args=sys.argv[1:])
-                ingest_data(directory_path)
+                metrics_data = ingest_data(directory_path)
+
+                log_metrics(metrics_data, debug, process="data_ingestion")
+                total_time = time() - start_time
+                logger.info(f"Tempo total de execucao do programa: {total_time:.2f} segundos")
+                logger.info("Encerrando a aplicacao")
             elif sys.argv[1] == "-q":
                 question = sys.argv[2]
                 logger.info("Iniciando a aplicacao - Geracao de resposta", args=sys.argv[1:])
-                answer_question(question)
+                metrics_data = answer_question(question)
+
+                log_metrics(metrics_data, debug, process="query_processing")
+                total_time = time() - start_time
+                logger.info(f"Tempo total de execucao do programa: {total_time:.2f} segundos")
+                logger.info("Encerrando a aplicacao")
         case 4:
             if sys.argv[1] == "-i" and sys.argv[3] == "--debug":
                 directory_path = sys.argv[2]
                 logger.info("Iniciando a aplicacao em modo debug - Ingestao de dados", args=sys.argv[1:])
-                ingest_data(directory_path, debug=True)
+                metrics_data = ingest_data(directory_path)
+
+                log_metrics(metrics_data, debug, process="data_ingestion")
+                total_time = time() - start_time
+                logger.info(f"Tempo total de execucao do programa: {total_time:.2f} segundos")
+                logger.info("Encerrando a aplicacao")
             elif sys.argv[1] == "-q" and sys.argv[3] == "--debug":
                 question = sys.argv[2]
                 logger.info("Iniciando a aplicacao em modo debug - Geracao de resposta", args=sys.argv[1:])
-                answer_question(question, debug=True)
+                metrics_data = answer_question(question)
 
+                log_metrics(metrics_data, debug, process="query_processing")
+                total_time = time() - start_time
+                logger.info(f"Tempo total de execucao do programa: {total_time:.2f} segundos")
+                logger.info("Encerrando a aplicacao")
         case _:
+
             logger.error("Argumentos de linha de comando invalidos", args=sys.argv[1:])
             print(invalid_use_message)
             return

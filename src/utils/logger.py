@@ -38,7 +38,7 @@ class Logger:
             # 1 para esta função
             # 1 para o método do logger (info, error, etc)
             # 1 para o código real que chamou
-            caller_frame = frame.f_back.f_back.f_back
+            caller_frame = frame.f_back.f_back
             function_name = caller_frame.f_code.co_name
         except (AttributeError, TypeError):
             function_name = "unknown"
@@ -51,7 +51,7 @@ class Logger:
             "log_domain": self.log_domain,
             "function": function_name,
             "message": message,
-            "name": self.logger.name,
+            "caller": self.logger.name,
             **self.context,
             **kwargs
         }
@@ -149,7 +149,7 @@ def setup_logging(
                 log_data = json.loads(record.getMessage())
                 # Formata usando os campos do JSON
                 info_format = f"{log_data.get('timestamp', '')} - {log_data.get('message', '')}"
-                debug_format = f"{log_data.get('timestamp', '')} - {log_data.get('name', '')} - {log_data.get('level', '')} - {log_data.get('message', '')}"
+                debug_format = f"{log_data.get('timestamp', '')} - {log_data.get('caller', '')} - {log_data.get('level', '')} - {log_data.get('message', '')}"
                 return debug_format if debug else info_format
             except json.JSONDecodeError:
                 # Se não for JSON, use a mensagem original

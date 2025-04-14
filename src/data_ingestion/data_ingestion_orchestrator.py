@@ -1,6 +1,7 @@
 import os
 import sqlite3
-from typing import Dict, List, Optional
+from datetime import datetime
+from typing import Dict, List
 
 from src.models import DocumentFile, Chunk, Embedding
 from src.utils import TextNormalizer, EmbeddingGenerator, FaissManager, SQLiteManager
@@ -11,7 +12,7 @@ from .text_chunker import TextChunker
 class DataIngestionOrchestrator:
     """Componente principal para gerenciar o processamento de arquivos PDF."""
 
-    DEFAULT_LOG_DOMAIN = "Ingestão de dados"
+    DEFAULT_LOG_DOMAIN = "Ingestao de dados"
     
     def __init__(self, db_path: str = None, index_path: str = None, chunk_size: int = 800, overlap: int = 160):
         """
@@ -30,6 +31,7 @@ class DataIngestionOrchestrator:
                         chunk_size=chunk_size,
                         overlap=overlap)
         
+        self.metrics_data = {}
         self.document_processor = DocumentProcessor(log_domain=self.DEFAULT_LOG_DOMAIN)
         self.text_chunker = TextChunker(chunk_size, overlap, log_domain=self.DEFAULT_LOG_DOMAIN)
         self.text_normalizer = TextNormalizer(log_domain=self.DEFAULT_LOG_DOMAIN)
@@ -110,8 +112,31 @@ class DataIngestionOrchestrator:
             self.logger.error(f"Erro ao verificar se o documento e duplicado: {e}")
             raise e
         
+    def _set_metrics_data(self) -> None:
+        """
+        Obtém os dados de métricas para o processo de ingestão de dados.
         
-
+        Returns:
+            Dict[str, Any]: Dicionário contendo os dados de métricas
+        """
+        start_time = datetime.now()
+        self.metrics_data["process"] = "Ingestão de dados"
+        self.metrics_data["start_time"] = start_time.strftime("%Y-%m-%d %H:%M:%S")
+        self.metrics_data["text_chunker"] = type(self.text_chunker.splitter).__name__
+        self.metrics_data["chunk_size"] = self.text_chunker.chunk_size
+        self.metrics_data["chunk_overlap"] = self.text_chunker.overlap
+        self.metrics_data["embedding_model"] = self.embedding_generator.model_name
+        self.metrics_data["embedding_dimension"] = self.embedding_generator.embedding_dimension
+        self.metrics_data["faiss_index_path"] = self.faiss_manager.index_path
+        self.metrics_data["faiss_index_type"] = type(self.faiss_manager.index).__name__
+        self.metrics_data["faiss_dimension"] = self.faiss_manager.dimension
+        self.metrics_data["database_path"] = self.sqlite_manager.db_path
+        self.metrics_data["processed_files"] = 0
+        self.metrics_data["processed_pages"] = 0
+        self.metrics_data["processed_chunks"] = 0
+        self.metrics_data["processed_embeddings"] = 0
+        self.metrics_data["duplicate_files"] = 0
+        self.metrics_data["invalid_files"] = 0        
     
     def list_pdf_files(self, directory_path: str) -> List[DocumentFile]:
         """
@@ -171,6 +196,7 @@ class DataIngestionOrchestrator:
             NotADirectoryError: Se o caminho não for um diretório
             ValueError: Se não houver arquivos PDF no diretório
         """
+        self._set_metrics_data()
         if not os.path.exists(directory_path):
             self.logger.error("Diretorio nao encontrado", directory_path=directory_path)
             raise FileNotFoundError(f"Diretório não encontrado: {directory_path}")
@@ -182,6 +208,11 @@ class DataIngestionOrchestrator:
 
         pdf_files = self.list_pdf_files(directory_path)
 
+
+        self.metrics_data["total_files"] = len(pdf_files)
+        total_chunk_size = 0
+    
+
         with self.sqlite_manager.get_connection() as conn:
             self.sqlite_manager.begin(conn)
 
@@ -190,44 +221,69 @@ class DataIngestionOrchestrator:
             file_counter = 0
             duplicate_counter = 0
             for file in pdf_files:
+                file_start_time = datetime.now()
+                file_metrics = {}
                 file_counter += 1
-                self.logger.info(f"Processando arquivos: {file_counter}/{len(pdf_files)}", file_path=file.path)
+                file_metrics["filename"] = file.name
+                file_metrics["file_path"] = file.path
+                
+                
+                self.logger.info(f"Processando arquivos: {file_counter}/{len(pdf_files)}")
+                self.logger.info(f"Iniciando o processamento do arquivo: {file.name}", file_path=file.path)
                 
                 try:
                     # processa o documento, adicionando as páginas, hash e total de páginas ao objeto DocumentFile
                     self.document_processor.process_document(file)
                     # Verifica se é duplicado
+                    file_metrics["total_pages"] = len(file.pages)
                     if self._is_duplicate(file.hash, conn):
+                        file_metrics["is_duplicate"] = True
+                        file_metrics["file_hash"] = file.hash
                         duplicate_counter += 1
                         original_file = self._find_original_document(file.hash, conn)
                         if original_file:
+                            file_metrics["original_file"] = original_file.name
                             self.logger.warning(f"Arquivo duplicado: {file.name} hash: {file.hash}", file_path=file.path)
                             self.logger.warning(f"Arquivo original: {original_file.name} hash: {original_file.hash}", file_path=original_file.path)
 
                         self.logger.info(f"Descartando alteracoes da transacao", file_path=file.path)
+                        file_metrics["file_processing_duration"] = str(datetime.now() - file_start_time)
+                        self.metrics_data[file.name] = file_metrics
+                        self.metrics_data["duplicate_files"] += 1
+                        self.metrics_data["invalid_files"] += 1
+
                         conn.rollback()
                         continue
 
+                    file_metrics["is_duplicate"] = False
+                    file_metrics["file_hash"] = file.hash
                     # Adiciona o hash do documento ao dicionário de hashes
                     self.document_hashes[file.name] = file.hash
+
                     # Insere o documento no banco de dados
                     file.id = self.sqlite_manager.insert_document_file(file, conn)
-  
+                    file_metrics["file_id"] = file.id
+
                     if not file.pages:
-                        self.logger.error(f"{file.name} - Nenhuma pagina encontrada", file_path=file.path)
-                        self.logger.error(f"Descartando alteracoes da transacao", file_path=file.path)
+                        self.logger.error(f"Nenhuma pagina encontrada", file_path=file.path)
+                        self.logger.error(f"Descartando alteracoes da transacao")
+                        file_metrics["invalid_file"] = True
+                        file_metrics["file_processing_duration"] = str(datetime.now() - file_start_time)
+                        self.metrics_data[file.name] = file_metrics
+                        self.metrics_data["invalid_files"] += 1
+
                         conn.rollback()
                         continue
 
                     # Processa cada página e coleta seus chunks
-                    self.logger.info(f"{file.name} - Total de paginas: {len(file.pages)}", file_path=file.path)
-                    self.logger.info(f"{file.name} - Iniciando a criacao de chunks", file_path=file.path)
+                    self.logger.info(f"Total de paginas: {len(file.pages)}")
+                    self.logger.info(f"Iniciando a criacao de chunks")
                     document_chunks : List[Chunk] = []
                     page_counter = 0
                     for page in file.pages:
                         # Divide a página em chunks
                         page_counter += 1
-                        self.logger.debug(f"{file.name} - Processando pagina: {page_counter}/{len(file.pages)}", file_path=file.path)
+                        self.logger.debug(f"Processando pagina: {page_counter}/{len(file.pages)}")
 
                         page_chunks = self.text_chunker.create_chunks(
                             text=page.page_content,
@@ -238,22 +294,29 @@ class DataIngestionOrchestrator:
                             )
 
                         if not page_chunks:
-                            self.logger.error(f"{file.name} - Pagina vazia encontrada: {page.metadata['page']}", file_path=file.path)
+                            self.logger.warning(f"Pagina vazia encontrada: {page.metadata['page']}", file_path=file.path)
                             continue
                         
                         document_chunks.extend(page_chunks)
                     
+
                     if not document_chunks:
-                        self.logger.error(f"{file.name} - Nenhum chunk gerado", file_path=file.path)
-                        self.logger.error(f"Descartando alteracoes da transacao", file_path=file.path)
+                        self.logger.error(f"Nenhum chunk gerado", file_path=file.path)
+                        self.logger.error(f"Descartando alteracoes da transacao")
+                        file_metrics["invalid_file"] = True
+                        file_metrics["file_processing_duration"] = str(datetime.now() - file_start_time)
+                        self.metrics_data[file.name] = file_metrics
+                        self.metrics_data["invalid_files"] += 1
                         conn.rollback()
                         continue
 
                     self.logger.info(f"{file.name} - Total de chunks: {len(document_chunks)}", file_path=file.path)
+                    file_metrics["total_chunks"] = len(document_chunks)
+                    total_chunk_size += sum(len(chunk.content) for chunk in document_chunks)
 
                     # Insere os chunks no banco de dados e retorna os ids dos chunks
                     chunk_ids : List[int] = self.sqlite_manager.insert_chunks(document_chunks, file.id, conn)
-
+                    file_metrics["chunks_inserted"] = True
                     # Normaliza os chunks
                     chunks_content = [chunk.content for chunk in document_chunks]
                     normalized_chunks = self.text_normalizer.normalize(chunks_content)
@@ -261,8 +324,12 @@ class DataIngestionOrchestrator:
                     #Gera os embeddings
                     embedding_vectors = self.embedding_generator.generate_embeddings(normalized_chunks)                    
                     if embedding_vectors.size == 0:
-                        self.logger.error(f"{file.name} - Nenhum embedding gerado", file_path=file.path)
+                        self.logger.error(f"Nenhum embedding gerado", file_path=file.path)
                         self.logger.error(f"Descartando alteracoes da transacao", file_path=file.path)
+                        file_metrics["invalid_file"] = True
+                        file_metrics["file_processing_duration"] = str(datetime.now() - file_start_time)
+                        self.metrics_data[file.name] = file_metrics
+                        self.metrics_data["invalid_files"] += 1
                         conn.rollback()
                         continue
 
@@ -279,18 +346,46 @@ class DataIngestionOrchestrator:
                         )
 
                         embeddings.append(embedding)
+                    
+                    file_metrics["total_embeddings"] = len(embeddings)
                     #Adiciona os embeddings ao índice FAISS, atualizando os objetos Embedding com o seu índice FAISS
                     self.faiss_manager.add_embeddings(embeddings)
+                    file_metrics["embeddings_added"] = True
                     #Adiciona os embeddings ao banco de dados
                     self.sqlite_manager.insert_embeddings(embeddings, conn)
+                    file_metrics["embeddings_inserted"] = True
+                    
+                    self.logger.info(f"Salvando alteracoes no banco de dados", file_path=file.path)
                     #Salva as alterações no banco de dados
-                    self.logger.info(f"{file.name} - Salvando alteracoes no banco de dados", file_path=file.path)
                     conn.commit()
-                    self.logger.info(f"{file.name} - Processamento concluido com sucesso", file_path=file.path)
+
+                    file_metrics["commit_success"] = True
+                    file_metrics["file_processing_duration"] = str(datetime.now() - file_start_time)
+                    self.metrics_data[file.name] = file_metrics
+                    self.metrics_data["processed_files"] += 1
+                    self.metrics_data["processed_pages"] += len(file.pages)
+                    self.metrics_data["processed_chunks"] += len(document_chunks)
+                    self.metrics_data["processed_embeddings"] += len(embeddings)
+
+                    self.logger.info(f"Processamento do arquivo concluido com sucesso", file_path=file.path)
+
                 except Exception as e:
-                    self.logger.error(f"{file.name} - Erro ao processar o arquivo: {e}", file_path=file.path)
+                    self.logger.error(f"Erro ao processar o arquivo: {e}", file_path=file.path)
                     self.logger.error(f"Descartando alteracoes da transacao", file_path=file.path)
+                    file_metrics["invalid_file"] = True
+                    file_metrics["commit_success"] = False
+                    file_metrics["file_processing_duration"] = str(datetime.now() - file_start_time)
+                    self.metrics_data[file.name] = file_metrics
                     conn.rollback()
                     continue
+
+
+
+        self.metrics_data["duration"] = str(datetime.now() - self.metrics_data["start_time"])
+        
+        self.metrics_data["avg_chunk_size"] = total_chunk_size / self.metrics_data["processed_chunks"] if self.metrics_data["processed_chunks"] > 0 else None
+        self.logger.info(f"Processamento do diretorio concluido em {self.metrics_data['duration']}")
+        
+        return self.metrics_data
 
  

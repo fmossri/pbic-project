@@ -7,7 +7,7 @@ from src.utils.logger import get_logger
 class TextChunker:
     """Gerencia a divisão de conteúdo de texto em chunks."""
     
-    def __init__(self, chunk_size: int = 1000, overlap: int = 200, log_domain: str = "Ingestão de dados"):
+    def __init__(self, chunk_size: int = 1000, overlap: int = 200, log_domain: str = "Ingestao de dados"):
         """
         Inicializa o TextChunker.
         
@@ -17,10 +17,11 @@ class TextChunker:
         """
         self.logger = get_logger(__name__, log_domain=log_domain)
         self.logger.info("Inicializando o TextChunker.", chunk_size=chunk_size, overlap=overlap)
-
+        self.chunk_size = chunk_size
+        self.overlap = overlap
         self.splitter = RecursiveCharacterTextSplitter(
-            chunk_size=chunk_size,
-            chunk_overlap=overlap,
+            chunk_size=self.chunk_size,
+            chunk_overlap=self.overlap,
             separators=[
                 "\n\n",  # Parágrafos
                 "\n",    # Quebras de linha
