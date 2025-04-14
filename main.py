@@ -145,9 +145,10 @@ def main():
     invalid_use_message = "Uso incorreto. Use main.py --help para ver a lista de comandos disponíveis." 
     help_message = """
     Para ingestão de dados, use o comando:
-              python main.py -i caminho/para/diretorio
+              python main.py -i caminho/para/diretorio [--debug]
     Para fazer uma pergunta ao modelo, use o comando:
-              python main.py -q "sua pergunta"
+              python main.py -q "sua pergunta" [--debug]
+    ** O argumento --debug é opcional. Exibe mais informações no console e gera logs mais detalhados.
     """
 
     debug = False
