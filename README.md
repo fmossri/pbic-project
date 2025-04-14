@@ -235,7 +235,6 @@ python -m pytest -vv
 
 ### Em Desenvolvimento 🔄
 
-- Sistema de logging estruturado
 - Sistema de configuração
 - Interface de usuário
 - **API RESTful
@@ -269,4 +268,44 @@ python -m pytest -vv
   - Funcionalidade de ingestão, com inserção de domínio, palavras-chave e diretório alvo
   - Sistema de configuração personalizada
   - Funcionalidade de consulta
+
+## Logging System
+
+The system includes a robust logging system with the following features:
+
+- JSON-formatted logs for machine readability
+- Domain-based logging for different components
+- Context tracking and correlation
+- Error handling with stack traces
+- Log file rotation and management
+- Library log suppression
+- Different formats for console and file output
+
+### Log Levels
+
+The system uses standard Python log levels:
+- CRITICAL (50): Critical errors that may cause system failure
+- ERROR (40): Errors that need attention but don't stop the system
+- WARNING (30): Warning messages for potential issues
+- INFO (20): General information about system operation
+- DEBUG (10): Detailed information for debugging
+
+### Log Format
+
+Console output format:
+```
+2025-04-13T20:17:02.282109 - src.utils.logger - INFO - Sistema de registro de logs configurado
+```
+
+File output format (JSON):
+```json
+{
+    "timestamp": "2025-04-13T20:17:02.282109",
+    "level": "INFO",
+    "name": "src.utils.logger",
+    "message": "Sistema de registro de logs configurado",
+    "function": "setup_logging",
+    "context": {}
+}
+```
 
