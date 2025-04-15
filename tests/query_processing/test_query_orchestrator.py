@@ -91,10 +91,10 @@ class TestQueryOrchestrator:
         )
         mock_get_connection.return_value.__enter__.return_value = mock_conn
         
-        # Mock SQLiteManager.get_embeddings_chunks
+        # Mock SQLiteManager.get_chunks_content
         mock_chunks = ["Chunk 1", "Chunk 2", "Chunk 3"]
         mock_get_chunks = mocker.patch(
-            'src.utils.sqlite_manager.SQLiteManager.get_embeddings_chunks',
+            'src.utils.sqlite_manager.SQLiteManager.get_chunks_content',
             return_value=mock_chunks
         )
         

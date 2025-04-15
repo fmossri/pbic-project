@@ -72,7 +72,7 @@ class QueryOrchestrator:
             self.metrics_data["knn_faiss_indices"] = len(flat_indices)
 
             with self.sqlite_manager.get_connection() as conn:
-                chunks_content = self.sqlite_manager.get_embeddings_chunks(conn, flat_indices)
+                chunks_content = self.sqlite_manager.get_chunks_content(conn, flat_indices)
                 self.metrics_data["chunks_content"] = len(chunks_content)
             self.logger.info("Chunks de conteudo recuperados com sucesso")
             return chunks_content

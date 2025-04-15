@@ -1,30 +1,31 @@
 import sqlite3
 import os
 from typing import List, Optional
-from src.models import DocumentFile, Chunk, Embedding
+from src.models import DocumentFile, Chunk, Embedding, Domain
 from src.utils.logger import get_logger
 
 class SQLiteManager:
     """Gerenciador de banco de dados SQLite."""
 
     DEFAULT_DB_PATH: str = os.path.join("storage", "domains", "test_domain", "test.db")
+    CONTROL_SCHEMA_PATH: str = os.path.join("storage", "schemas", "control_schema.sql")
+    CONTROL_DB_PATH: str = os.path.join("storage", "domains", "control.db")
     DEFAULT_SCHEMA_PATH: str = os.path.join("storage", "schemas", "schema.sql")
 
-    def __init__(self, 
-                 db_path: Optional[str] = DEFAULT_DB_PATH,
-                 schema_path: Optional[str] = DEFAULT_SCHEMA_PATH,
-                 log_domain: str = "utils"
-    ):
+    def __init__(self, log_domain: str = "utils"):
         self.logger = get_logger(__name__, log_domain=log_domain)
-        self.logger.info("Inicializando o SQLiteManager", db_path=db_path, schema_path=schema_path)
-        
-        self.db_path = db_path if db_path is not None else self.DEFAULT_DB_PATH
-        self.schema_path = schema_path if schema_path is not None else self.DEFAULT_SCHEMA_PATH
+        self.logger.info("Inicializando o SQLiteManager")
+        self.control_db_path = self.CONTROL_DB_PATH
+        self.db_path = self.DEFAULT_DB_PATH
+        self.schema_path = self.DEFAULT_SCHEMA_PATH
         
         os.makedirs(os.path.dirname(self.db_path), exist_ok=True)
 
-    def initialize_database(self) -> None:
-        self.logger.warning(f"Criando novo banco de dados em {self.db_path}")
+    def initialize_database(self, control: bool = False, db_path: str = None) -> None:
+        self.logger.warning(f"Criando novo banco de dados em {db_path}")
+        if control:
+            self.db_path = self.control_db_path
+            self.schema_path = self.CONTROL_SCHEMA_PATH
         try:
             with open(self.schema_path, "r") as f:
                 schema = f.read()
@@ -42,14 +43,21 @@ class SQLiteManager:
             self.logger.error(f"Erro ao inicializar o banco de dados: {e}")
             raise e
                 
-    def get_connection(self) -> sqlite3.Connection:
+    def get_connection(self, control: bool = False, db_path: str = None) -> sqlite3.Connection:
         """
         Estabelece uma conexão com o banco de dados. Se não existir, inicializa o banco de dados.
         """
+        if control:
+            if not os.path.exists(self.control_db_path):
+                self.logger.info(f"Banco de dados de controle nao encontrado em {self.control_db_path}. Inicializando o banco de dados de controle...")
+                self.initialize_database(self.control_db_path)
+            self.logger.info(f"Conectando ao banco de dados de controle em: {self.control_db_path}")
+            return sqlite3.connect(self.control_db_path)
 
+        self.db_path = db_path if db_path is not None else self.db_path
         if not os.path.exists(self.db_path):
             self.logger.info(f"Banco de dados nao encontrado em {self.db_path}. Inicializando o banco de dados...")
-            self.initialize_database()
+            self.initialize_database(self.db_path)
         
         self.logger.info(f"Conectando ao banco de dados em: {self.db_path}")
         return sqlite3.connect(self.db_path)
@@ -62,6 +70,29 @@ class SQLiteManager:
         conn.execute("PRAGMA foreign_keys = ON")
         conn.execute("BEGIN TRANSACTION")
     
+    def insert_domain(self, domain: Domain, conn: sqlite3.Connection) -> None:
+        """
+        Insere um domínio de conhecimento no banco de dados.
+        """
+        self.logger.info(f"Inserindo domínio de conhecimento no banco de dados: {domain.domain_name}")
+        try:
+            cursor = conn.cursor()
+            cursor.execute(
+                "INSERT INTO domains (name, description, keywords, total_documents, db_path, faiss_path) VALUES (?, ?, ?, ?, ?, ?)",
+                (domain.domain_name, domain.domain_description, domain.domain_keywords, domain.total_documents, domain.domain_db_path, domain.domain_faiss_path)
+            )
+
+            self.logger.debug("Domínio do conhecimento inserido com sucesso", 
+                              domain_name=domain.domain_name, 
+                              domain_description=domain.domain_description, 
+                              domain_keywords=domain.domain_keywords, 
+                              domain_db_path=domain.domain_db_path, 
+                              domain_faiss_path=domain.domain_faiss_path)
+        except sqlite3.Error as e:
+            self.logger.error(f"Erro ao inserir o domínio de conhecimento: {e}")
+            raise e
+            
+
 
     def insert_document_file(self, file: DocumentFile, conn: sqlite3.Connection) -> None:
         """
@@ -136,7 +167,7 @@ class SQLiteManager:
                 self.logger.error(f"Erro ao inserir embeddings: {e}")
                 raise e
     
-    def get_embeddings_chunks(self, conn: sqlite3.Connection, faiss_indices: List[int]) -> List[str]:
+    def get_chunks_content(self, conn: sqlite3.Connection, faiss_indices: List[int]) -> List[str]:
         """
         Retorna o conteúdo dos chunks associados aos índices faiss fornecidos.
 
@@ -173,6 +204,27 @@ class SQLiteManager:
             self.logger.error(f"Erro ao recuperar os chunks: {e}")
             raise e
             
+    def get_domain(self, conn: sqlite3.Connection, domain_name: str) -> Domain:
+        """
+        Retorna um domínio de conhecimento do banco de dados.
+        """
+        self.logger.debug(f"Recuperando domínio de conhecimento do banco de dados: {domain_name}")
+        try:
+            cursor = conn.cursor()
+            cursor.execute("SELECT * FROM domains WHERE name = ?", (domain_name,))
+            domain_data = cursor.fetchone()
+            if domain_data:
+                return Domain(
+                    id=domain_data[0],
+                    domain_name=domain_data[1],
+                    domain_description=domain_data[2],
+                    domain_keywords=domain_data[3],
+                    domain_db_path=domain_data[4],
+                    faiss_index_path=domain_data[5]
+                )
+        except sqlite3.Error as e:
+            self.logger.error(f"Erro ao recuperar o domínio de conhecimento: {e}")
+            raise e
     
     
     

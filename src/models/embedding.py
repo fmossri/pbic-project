@@ -1,6 +1,6 @@
 from pydantic import BaseModel, ConfigDict
 import numpy as np
-from typing import List, Optional
+from typing import Optional
 
 class Embedding(BaseModel):
     id : Optional[int]

@@ -3,7 +3,7 @@ import sqlite3
 from datetime import datetime
 from typing import Dict, List
 
-from src.models import DocumentFile, Chunk, Embedding
+from src.models import DocumentFile, Chunk, Embedding, Domain
 from src.utils import TextNormalizer, EmbeddingGenerator, FaissManager, SQLiteManager
 from src.utils.logger import get_logger
 from .document_processor import DocumentProcessor
@@ -14,7 +14,7 @@ class DataIngestionOrchestrator:
 
     DEFAULT_LOG_DOMAIN = "Ingestao de dados"
     
-    def __init__(self, db_path: str = None, index_path: str = None, chunk_size: int = 800, overlap: int = 160):
+    def __init__(self, domain_name: str, db_path: str = None, index_path: str = None, chunk_size: int = 800, overlap: int = 160):
         """
         Inicializa o orquestrador com os componentes necessários.
         
@@ -138,7 +138,7 @@ class DataIngestionOrchestrator:
         self.metrics_data["duplicate_files"] = 0
         self.metrics_data["invalid_files"] = 0        
     
-    def list_pdf_files(self, directory_path: str) -> List[DocumentFile]:
+    def _list_pdf_files(self, directory_path: str) -> List[DocumentFile]:
         """
         Lista todos os arquivos PDF em um diretório.
 
@@ -181,7 +181,34 @@ class DataIngestionOrchestrator:
         self.logger.info(f"{len(pdf_files)} arquivos PDF encontrados no diretorio", directory_path=directory_path)
         return pdf_files
     
-    def process_directory(self, directory_path: str) -> None:
+    def add_new_domain(self, domain_name: str, domain_description: str, domain_keywords: str) -> None:
+        """
+        Adiciona um novo domínio de conhecimento ao banco de dados.
+
+        Args:
+            domain_name (str): Nome do domínio de conhecimento.
+            domain_description (str): Descrição do domínio de conhecimento.
+            domain_keywords (str): Palavras-chave do domínio de conhecimento, separadas por virgulas.
+        """
+        self.logger.info("Adicionando novo domínio de conhecimento", domain_name=domain_name, domain_description=domain_description, domain_keywords=domain_keywords)
+        
+        try:
+
+            domain_db_path = os.path.join("storage", "domains", f"{domain_name}", f"{domain_name}.db")
+            faiss_index_path = os.path.join("storage", "domains", f"{domain_name}", "vector_store",f"{domain_name}.faiss")
+            domain = Domain(domain_name, domain_description, domain_keywords, domain_db_path, faiss_index_path)
+            with self.sqlite_manager.get_connection(control=True) as conn:
+                self.sqlite_manager.begin(conn)
+
+                self.sqlite_manager.insert_domain(domain, conn)
+                conn.commit()
+
+        except Exception as e:
+            self.logger.error(f"Erro ao adicionar novo domínio de conhecimento: {e}")
+            raise e
+                
+
+    def process_directory(self, directory_path: str, domain_name: str = None) -> None:
         """
         Processa todos os arquivos PDF em um diretório.
         
@@ -206,7 +233,7 @@ class DataIngestionOrchestrator:
         
         self.logger.info("Iniciando o processamento do diretorio", directory_path=directory_path)
 
-        pdf_files = self.list_pdf_files(directory_path)
+        pdf_files = self._list_pdf_files(directory_path)
 
 
         self.metrics_data["total_files"] = len(pdf_files)
