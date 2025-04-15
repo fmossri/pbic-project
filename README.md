@@ -200,8 +200,11 @@ source .venv/bin/activate  # Linux/Mac
 pip install -r requirements.txt
 ```
 ## Uso
+
 ** main.py --help
+
 ** Opcional: adicionar --debug ao final traz mais informações ao console e aos arquivos de log.
+
 ### Processando PDFs e Gerando Embeddings
 
 ```bash
