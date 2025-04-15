@@ -199,9 +199,9 @@ source .venv/bin/activate  # Linux/Mac
 ```bash
 pip install -r requirements.txt
 ```
-
 ## Uso
-
+** main.py --help
+** Opcional: adicionar --debug ao final traz mais informações ao console e aos arquivos de log.
 ### Processando PDFs e Gerando Embeddings
 
 ```bash
@@ -232,9 +232,13 @@ python -m pytest -vv
 - Sistema de consulta e recuperação
 - Integração com Hugging Face para geração de respostas
 - Testes unitários e de integração
+- Logger
 
 ### Em Desenvolvimento 🔄
 
+- Lógica de criação de domínios
+- Separação de documentos ingeridos por domínio (.db e .faiss independentes)
+- Sistema de seleção de domínios para geração de respostas usando busca por similaridade
 - Sistema de configuração
 - Interface de usuário
 - **API RESTful
