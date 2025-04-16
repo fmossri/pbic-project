@@ -199,6 +199,14 @@ source .venv/bin/activate  # Linux/Mac
 ```bash
 pip install -r requirements.txt
 ```
+
+4. Crie um token de acesso com permissões de leitura na Hugging Face;
+
+5. Crie um arquivo .env e adicione a seguinte variável de ambiente:
+```
+HUGGINGFACE_API_TOKEN="seu token de acesso"
+```
+
 ## Uso
 
 ** main.py --help
