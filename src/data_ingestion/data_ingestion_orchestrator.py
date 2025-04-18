@@ -195,11 +195,32 @@ class DataIngestionOrchestrator:
         try:
 
             domain_db_path = os.path.join("storage", "domains", f"{domain_name}", f"{domain_name}.db")
-            faiss_index_path = os.path.join("storage", "domains", f"{domain_name}", "vector_store",f"{domain_name}.faiss")
-            domain = Domain(domain_name, domain_description, domain_keywords, domain_db_path, faiss_index_path)
-            with self.sqlite_manager.get_connection(control=True) as conn:
-                self.sqlite_manager.begin(conn)
+            vector_store_path = os.path.join("storage", "domains", f"{domain_name}", "vector_store",f"{domain_name}.faiss")
+            domain = Domain(
+                id=None, 
+                name=domain_name, 
+                description=domain_description, 
+                keywords=domain_keywords, 
+                db_path=domain_db_path, 
+                vector_store_path=vector_store_path, 
+                total_documents=0,
+                embeddings_dimension=self.embedding_generator.embedding_dimension
+            )
+            normalized_description = self.text_normalizer.normalize([domain.description])
+            domain_vectors = self.embedding_generator.generate_embeddings(normalized_description)
+            domain_embeddings = []
+            for vector in domain_vectors:
+                embedding = Embedding(
+                    chunk_id=None,
+                    faiss_index=None,
+                    embedding=vector
+                )
+                domain_embeddings.append(embedding)
 
+            self.faiss_manager.add_embeddings(domain_embeddings, domain.vector_store_path, domain.embeddings_dimension)
+            domain.faiss_index = domain_embeddings[0].faiss_index
+            with self.sqlite_manager.get_connection(control=True) as conn:  
+                self.sqlite_manager.begin(conn)
                 self.sqlite_manager.insert_domain(domain, conn)
                 conn.commit()
 
@@ -233,6 +254,15 @@ class DataIngestionOrchestrator:
         
         self.logger.info("Iniciando o processamento do diretorio", directory_path=directory_path)
 
+        with self.sqlite_manager.get_connection(control=True) as conn:
+            try:
+                self.sqlite_manager.begin(conn)
+                domain = self.sqlite_manager.get_domain(conn, domain_name)
+                conn.commit()
+            except Exception as e:
+                self.logger.error(f"Erro ao obter o domínio de conhecimento: {e}")
+                raise e
+
         pdf_files = self._list_pdf_files(directory_path)
 
 
@@ -240,7 +270,7 @@ class DataIngestionOrchestrator:
         total_chunk_size = 0
     
 
-        with self.sqlite_manager.get_connection() as conn:
+        with self.sqlite_manager.get_connection(db_path=domain.db_path) as conn:
             self.sqlite_manager.begin(conn)
 
             self.logger.info(f"Iniciando o processamento dos arquivos PDF")
@@ -366,9 +396,7 @@ class DataIngestionOrchestrator:
                         embedding = Embedding(
                             id = None,
                             chunk_id = chunk_id,
-                            faiss_index_path = None,
-                            chunk_faiss_index = None,
-                            dimension = self.embedding_generator.embedding_dimension, 
+                            faiss_index = None,
                             embedding = embedding_vector
                         )
 
@@ -376,7 +404,7 @@ class DataIngestionOrchestrator:
                     
                     file_metrics["total_embeddings"] = len(embeddings)
                     #Adiciona os embeddings ao índice FAISS, atualizando os objetos Embedding com o seu índice FAISS
-                    self.faiss_manager.add_embeddings(embeddings)
+                    self.faiss_manager.add_embeddings(embeddings, domain.vector_store_path, domain.embeddings_dimension)
                     file_metrics["embeddings_added"] = True
                     #Adiciona os embeddings ao banco de dados
                     self.sqlite_manager.insert_embeddings(embeddings, conn)
