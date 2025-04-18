@@ -78,16 +78,17 @@ class SQLiteManager:
         try:
             cursor = conn.cursor()
             cursor.execute(
-                "INSERT INTO domains (name, description, keywords, total_documents, db_path, faiss_path) VALUES (?, ?, ?, ?, ?, ?)",
-                (domain.domain_name, domain.domain_description, domain.domain_keywords, domain.total_documents, domain.domain_db_path, domain.domain_faiss_path)
+                "INSERT INTO domains (name, description, keywords, total_documents, db_path, vector_store_path, faiss_index, embeddings_dimension) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                (domain.name, domain.description, domain.keywords, domain.total_documents, domain.db_path, domain.vector_store_path, domain.faiss_index, domain.embeddings_dimension)
             )
 
             self.logger.debug("Domínio do conhecimento inserido com sucesso", 
-                              domain_name=domain.domain_name, 
-                              domain_description=domain.domain_description, 
-                              domain_keywords=domain.domain_keywords, 
-                              domain_db_path=domain.domain_db_path, 
-                              domain_faiss_path=domain.domain_faiss_path)
+                              domain_name=domain.name, 
+                              domain_description=domain.description, 
+                              domain_keywords=domain.keywords, 
+                              domain_db_path=domain.db_path, 
+                              domain_vector_store_path=domain.vector_store_path,
+                              domain_faiss_index=domain.faiss_index)
         except sqlite3.Error as e:
             self.logger.error(f"Erro ao inserir o domínio de conhecimento: {e}")
             raise e
@@ -158,8 +159,8 @@ class SQLiteManager:
             try:
                 cursor = conn.cursor()
                 cursor.execute(
-                    "INSERT INTO embeddings (chunk_id, faiss_index_path, chunk_faiss_index, dimension) VALUES (?, ?, ?, ?)", 
-                    (embedding.chunk_id, embedding.faiss_index_path, embedding.chunk_faiss_index, embedding.dimension)
+                    "INSERT INTO embeddings (chunk_id, vector_store_path, faiss_index, dimension) VALUES (?, ?, ?, ?)", 
+                    (embedding.chunk_id, embedding.vector_store_path, embedding.faiss_index, embedding.dimension)
                 )
                 embedding.id = cursor.lastrowid
             
@@ -216,11 +217,13 @@ class SQLiteManager:
             if domain_data:
                 return Domain(
                     id=domain_data[0],
-                    domain_name=domain_data[1],
-                    domain_description=domain_data[2],
-                    domain_keywords=domain_data[3],
-                    domain_db_path=domain_data[4],
-                    faiss_index_path=domain_data[5]
+                    name=domain_data[1],
+                    description=domain_data[2],
+                    keywords=domain_data[3],
+                    total_documents=domain_data[4],
+                    db_path=domain_data[5],
+                    vector_store_path=domain_data[6],
+                    faiss_index=domain_data[7]
                 )
         except sqlite3.Error as e:
             self.logger.error(f"Erro ao recuperar o domínio de conhecimento: {e}")
