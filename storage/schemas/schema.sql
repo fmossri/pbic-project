@@ -32,9 +32,7 @@ CREATE TABLE IF NOT EXISTS chunks (
 CREATE TABLE IF NOT EXISTS embeddings (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     chunk_id INTEGER NOT NULL UNIQUE,
-    faiss_index_path TEXT NOT NULL,
-    chunk_faiss_index INTEGER NOT NULL UNIQUE,
-    dimension INTEGER NOT NULL,
+    faiss_index INTEGER NOT NULL UNIQUE,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (chunk_id) REFERENCES chunks(id)
         ON DELETE CASCADE
