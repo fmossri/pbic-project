@@ -324,3 +324,18 @@ File output format (JSON):
 }
 ```
 
+## Próximos Passos
+
+### Sistema de Domínios de Conhecimento (Planejado)
+- Implementação de domínios de conhecimento separados
+- Banco de dados de controle para gerenciamento de domínios
+- Índices FAISS específicos por domínio
+- Busca semântica entre domínios
+- Re-ranqueamento de resultados entre domínios
+
+### Funcionalidades em Desenvolvimento
+- Sistema de configuração
+- Interface de usuário
+- API RESTful
+- Funcionalidades avançadas de busca
+

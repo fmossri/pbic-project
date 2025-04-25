@@ -3,7 +3,7 @@ import sqlite3
 from datetime import datetime
 from typing import Dict, List
 
-from src.models import DocumentFile, Chunk, Embedding
+from src.models import DocumentFile, Chunk, Embedding, Domain
 from src.utils import TextNormalizer, EmbeddingGenerator, FaissManager, SQLiteManager
 from src.utils.logger import get_logger
 from .document_processor import DocumentProcessor
@@ -14,7 +14,7 @@ class DataIngestionOrchestrator:
 
     DEFAULT_LOG_DOMAIN = "Ingestao de dados"
     
-    def __init__(self, db_path: str = None, index_path: str = None, chunk_size: int = 800, overlap: int = 160):
+    def __init__(self, domain_name: str, db_path: str = None, index_path: str = None, chunk_size: int = 800, overlap: int = 160):
         """
         Inicializa o orquestrador com os componentes necessários.
         
@@ -138,7 +138,7 @@ class DataIngestionOrchestrator:
         self.metrics_data["duplicate_files"] = 0
         self.metrics_data["invalid_files"] = 0        
     
-    def list_pdf_files(self, directory_path: str) -> List[DocumentFile]:
+    def _list_pdf_files(self, directory_path: str) -> List[DocumentFile]:
         """
         Lista todos os arquivos PDF em um diretório.
 
@@ -181,7 +181,65 @@ class DataIngestionOrchestrator:
         self.logger.info(f"{len(pdf_files)} arquivos PDF encontrados no diretorio", directory_path=directory_path)
         return pdf_files
     
-    def process_directory(self, directory_path: str) -> None:
+    def add_new_domain(self, domain_name: str, domain_description: str, domain_keywords: str) -> None:
+        """
+        Adiciona um novo domínio de conhecimento ao banco de dados.
+
+        Args:
+            domain_name (str): Nome do domínio de conhecimento.
+            domain_description (str): Descrição do domínio de conhecimento.
+            domain_keywords (str): Palavras-chave do domínio de conhecimento, separadas por virgulas.
+        """
+        self.logger.info("Adicionando novo domínio de conhecimento", domain_name=domain_name, domain_description=domain_description, domain_keywords=domain_keywords)
+        
+        try:
+            with self.sqlite_manager.get_connection(control=True) as conn:  
+                self.sqlite_manager.begin(conn)
+
+                #Verifica se o domain já existe
+                domain = self.sqlite_manager.get_domain(conn, domain_name)
+                if domain:
+                    self.logger.error("Domínio já existe", domain_name=domain_name)
+                    conn.rollback()
+                    return
+                
+                #Cria os caminhos da db e vectorstore
+                domain_db_path = os.path.join("storage", "domains", f"{domain_name}", f"{domain_name}.db")
+                vector_store_path = os.path.join("storage", "domains", f"{domain_name}", "vector_store",f"{domain_name}.faiss")
+                #Cria o objeto Domain
+                domain = Domain(
+                    id=None, 
+                    name=domain_name, 
+                    description=domain_description, 
+                    keywords=domain_keywords, 
+                    db_path=domain_db_path, 
+                    vector_store_path=vector_store_path, 
+                    total_documents=0,
+                    embeddings_dimension=self.embedding_generator.embedding_dimension
+                )
+                normalized_description = self.text_normalizer.normalize([domain.description])
+                domain_vectors = self.embedding_generator.generate_embeddings(normalized_description)
+                domain_embeddings = []
+                for vector in domain_vectors:
+                    embedding = Embedding(
+                        chunk_id=None,
+                        faiss_index=None,
+                        embedding=vector
+                    )
+                    domain_embeddings.append(embedding)
+
+                self.faiss_manager.add_embeddings(domain_embeddings, domain.vector_store_path, domain.embeddings_dimension)
+                domain.faiss_index = domain_embeddings[0].faiss_index
+
+                self.sqlite_manager.insert_domain(domain, conn)
+                conn.commit()
+
+        except Exception as e:
+            self.logger.error(f"Erro ao adicionar novo domínio de conhecimento: {e}")
+            raise e
+                
+
+    def process_directory(self, directory_path: str, domain_name: str = None) -> None:
         """
         Processa todos os arquivos PDF em um diretório.
         
@@ -206,14 +264,23 @@ class DataIngestionOrchestrator:
         
         self.logger.info("Iniciando o processamento do diretorio", directory_path=directory_path)
 
-        pdf_files = self.list_pdf_files(directory_path)
+        with self.sqlite_manager.get_connection(control=True) as conn:
+            try:
+                self.sqlite_manager.begin(conn)
+                domain = self.sqlite_manager.get_domain(conn, domain_name)
+                conn.commit()
+            except Exception as e:
+                self.logger.error(f"Erro ao obter o domínio de conhecimento: {e}")
+                raise e
+
+        pdf_files = self._list_pdf_files(directory_path)
 
 
         self.metrics_data["total_files"] = len(pdf_files)
         total_chunk_size = 0
     
 
-        with self.sqlite_manager.get_connection() as conn:
+        with self.sqlite_manager.get_connection(db_path=domain.db_path) as conn:
             self.sqlite_manager.begin(conn)
 
             self.logger.info(f"Iniciando o processamento dos arquivos PDF")
@@ -339,9 +406,7 @@ class DataIngestionOrchestrator:
                         embedding = Embedding(
                             id = None,
                             chunk_id = chunk_id,
-                            faiss_index_path = None,
-                            chunk_faiss_index = None,
-                            dimension = self.embedding_generator.embedding_dimension, 
+                            faiss_index = None,
                             embedding = embedding_vector
                         )
 
@@ -349,7 +414,7 @@ class DataIngestionOrchestrator:
                     
                     file_metrics["total_embeddings"] = len(embeddings)
                     #Adiciona os embeddings ao índice FAISS, atualizando os objetos Embedding com o seu índice FAISS
-                    self.faiss_manager.add_embeddings(embeddings)
+                    self.faiss_manager.add_embeddings(embeddings, domain.vector_store_path, domain.embeddings_dimension)
                     file_metrics["embeddings_added"] = True
                     #Adiciona os embeddings ao banco de dados
                     self.sqlite_manager.insert_embeddings(embeddings, conn)

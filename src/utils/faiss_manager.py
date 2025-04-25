@@ -11,7 +11,7 @@ class FaissManager:
 
     DEFAULT_INDEX_PATH: str = os.path.join("storage", "domains", "test_domain", "vector_store", "test.faiss")
     
-    def __init__(self, index_path: str = DEFAULT_INDEX_PATH, dimension: int = 384, log_domain: str = "utils"):
+    def __init__(self, log_domain: str = "utils"):
         """
         Inicializa o armazenamento vetorial.
         
@@ -22,10 +22,9 @@ class FaissManager:
         self.logger = get_logger(__name__, log_domain=log_domain)
         self.logger.info(f"Inicializando o FaissManager")
 
-        self.index_path = index_path if index_path is not None else self.DEFAULT_INDEX_PATH
-        self.dimension = dimension
+        self.index_path = None
+        self.dimension = None
         self.index = None
-        self._initialize_index()
 
         self.logger.debug(f"Index FAISS inicializado. dimensao: {self.dimension}; index_path: {self.index_path}")
     
@@ -50,7 +49,7 @@ class FaissManager:
             self.logger.error(f"Erro ao inicializar o índice FAISS: {e}")
             raise e
     
-    def add_embeddings(self, embeddings: List[Embedding]) -> None:
+    def add_embeddings(self, embeddings: List[Embedding], vector_store_path: str, embedding_dimension: int) -> None:
         """
         Adiciona embeddings ao índice.
         
@@ -58,9 +57,11 @@ class FaissManager:
             embeddings (List[Embedding]): Lista de embeddings
         """
         self.logger.debug(f"Adicionando {len(embeddings)} embeddings ao índice FAISS")
-        # Obtém o número de embeddings já existentes no índice
-
+        self.index_path = vector_store_path
+        self.dimension = embedding_dimension
         try:
+            self._initialize_index()
+            # Obtém o número de embeddings já existentes no índice
             start_idx = self.index.ntotal
             # Extrai os vetores dos objetos Embedding
             embedding_values = np.vstack([embedding.embedding for embedding in embeddings])
@@ -69,8 +70,8 @@ class FaissManager:
             self.index.add(embedding_values)
 
             for i, embedding in enumerate(embeddings):
-                embedding.chunk_faiss_index = start_idx + i
-                embedding.faiss_index_path = self.index_path
+                # Registra o índice do embedding no objeto Embedding
+                embedding.faiss_index = start_idx + i
                 
                 # Salva o estado
                 self._save_state()
