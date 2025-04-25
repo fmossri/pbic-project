@@ -4,7 +4,6 @@ import faiss
 import numpy as np
 from typing import List
 import os
-from src.models import Embedding
 from src.utils.logger import get_logger
 class FaissManager:
     """Componente para armazenamento e indexação de vetores usando FAISS."""
@@ -49,7 +48,7 @@ class FaissManager:
             self.logger.error(f"Erro ao inicializar o índice FAISS: {e}")
             raise e
     
-    def add_embeddings(self, embeddings: List[Embedding], vector_store_path: str, embedding_dimension: int) -> None:
+    def add_embeddings(self, embeddings: np.ndarray, vector_store_path: str, embedding_dimension: int) -> List[int]:
         """
         Adiciona embeddings ao índice.
         
@@ -63,20 +62,18 @@ class FaissManager:
             self._initialize_index()
             # Obtém o número de embeddings já existentes no índice
             start_idx = self.index.ntotal
-            # Extrai os vetores dos objetos Embedding
-            embedding_values = np.vstack([embedding.embedding for embedding in embeddings])
-
             # Adiciona os embeddings ao índice FAISS
-            self.index.add(embedding_values)
+            self.index.add(embeddings)
 
-            for i, embedding in enumerate(embeddings):
-                # Registra o índice do embedding no objeto Embedding
-                embedding.faiss_index = start_idx + i
+            faiss_indices = []
+            for i in range(embeddings.shape[0]):  #embeddings.shape[0] dá o número de embeddings no ndarray.
+                # Adiciona o índice do embedding à lista
+                faiss_indices.append(start_idx + i)
                 
-                # Salva o estado
-                self._save_state()
-
+            # Salva o estado
+            self._save_state()
             self.logger.debug(f"Embeddings adicionados ao índice FAISS com sucesso")
+            return faiss_indices
 
         except Exception as e:
             self.logger.error(f"Erro ao adicionar embeddings ao índice FAISS: {e}")

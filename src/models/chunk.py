@@ -7,4 +7,5 @@ class Chunk(BaseModel):
     page_number : int
     chunk_page_index : int
     chunk_start_char_position : int
+    faiss_index: Optional[int] = None
     content : str

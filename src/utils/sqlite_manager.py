@@ -118,7 +118,7 @@ class SQLiteManager:
             self.logger.error(f"Erro ao inserir o arquivo de documento: {e}")
             raise e
         
-    def insert_chunks(self, chunks: List[Chunk], file_id: int, conn: sqlite3.Connection) -> List[int]:
+    def insert_chunks(self, chunks: List[Chunk], file_id: int, conn: sqlite3.Connection) -> None:
         """
         Insere um chunk no banco de dados.
         Args:
@@ -127,46 +127,22 @@ class SQLiteManager:
             conn: Conexão com o banco de dados SQLite.
         """
         self.logger.debug(f"Inserindo objetos Chunk no banco de dados: {self.db_path}")
-        chunk_ids : List[int] = []
         for chunk in chunks:
 
             try:
                     cursor = conn.cursor()
                     cursor.execute(
-                        "INSERT INTO chunks (document_id, page_number, content, chunk_page_index, chunk_start_char_position) VALUES (?, ?, ?, ?, ?)", 
-                        (file_id, chunk.page_number, chunk.content, chunk.chunk_page_index, chunk.chunk_start_char_position)
+                        "INSERT INTO chunks (document_id, page_number, content, chunk_page_index, faiss_index, chunk_start_char_position) VALUES (?, ?, ?, ?, ?, ?)", 
+                        (file_id, chunk.page_number, chunk.content, chunk.chunk_page_index, chunk.faiss_index, chunk.chunk_start_char_position)
                     )
                     chunk.id = cursor.lastrowid
-
-                    chunk_ids.append(chunk.id)
             
             except sqlite3.Error as e:
                 self.logger.error(f"Erro ao inserir chunks: {e}")
                 raise e
         
-        self.logger.info(f"Chunks inseridos com sucesso: {chunk_ids}")
-        return chunk_ids
+        self.logger.info(f"{len(chunks)} Chunks inseridos com sucesso")
         
-    def insert_embeddings(self, embeddings: List[Embedding], conn: sqlite3.Connection) -> None:
-        """
-        Insere um embedding no banco de dados.
-        Args:
-            embedding: objetoEmbedding a ser inserido.
-            conn: Conexão com o banco de dados SQLite.
-        """
-        self.logger.debug(f"Inserindo objetos Embedding no banco de dados: {self.db_path}")
-        for embedding in embeddings:
-            try:
-                cursor = conn.cursor()
-                cursor.execute(
-                    "INSERT INTO embeddings (chunk_id, vector_store_path, faiss_index, dimension) VALUES (?, ?, ?, ?)", 
-                    (embedding.chunk_id, embedding.vector_store_path, embedding.faiss_index, embedding.dimension)
-                )
-                embedding.id = cursor.lastrowid
-            
-            except sqlite3.Error as e:
-                self.logger.error(f"Erro ao inserir embeddings: {e}")
-                raise e
     
     def get_chunks_content(self, conn: sqlite3.Connection, faiss_indices: List[int]) -> List[str]:
         """
@@ -188,9 +164,8 @@ class SQLiteManager:
             query = f"""
                 SELECT chunks.content 
                 FROM chunks 
-                JOIN embeddings ON chunk_id = chunks.id
-                WHERE embeddings.chunk_faiss_index IN ({placeholders})
-                ORDER BY CASE embeddings.chunk_faiss_index
+                WHERE chunks.faiss_index IN ({placeholders})
+                ORDER BY CASE chunks.faiss_index
                     {order_cases}
                 END
             """

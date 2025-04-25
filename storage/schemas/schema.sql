@@ -22,6 +22,7 @@ CREATE TABLE IF NOT EXISTS chunks (
     page_number INTEGER NOT NULL,
     chunk_page_index INTEGER NOT NULL,
     chunk_start_char_position INTEGER NOT NULL,
+    faiss_index INTEGER NOT NULL UNIQUE,
     content TEXT NOT NULL UNIQUE,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (document_id) REFERENCES document_files(id)

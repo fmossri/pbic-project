@@ -3,7 +3,7 @@ import sqlite3
 from datetime import datetime
 from typing import Dict, List
 
-from src.models import DocumentFile, Chunk, Embedding, Domain
+from src.models import DocumentFile, Chunk, Domain
 from src.utils import TextNormalizer, EmbeddingGenerator, FaissManager, SQLiteManager
 from src.utils.logger import get_logger
 from .document_processor import DocumentProcessor
@@ -206,7 +206,7 @@ class DataIngestionOrchestrator:
                 #Cria os caminhos da db e vectorstore
                 domain_db_path = os.path.join("storage", "domains", f"{domain_name}", f"{domain_name}.db")
                 vector_store_path = os.path.join("storage", "domains", f"{domain_name}", "vector_store",f"{domain_name}.faiss")
-                #Cria o objeto Domain
+
                 domain = Domain(
                     id=None, 
                     name=domain_name, 
@@ -219,17 +219,9 @@ class DataIngestionOrchestrator:
                 )
                 normalized_description = self.text_normalizer.normalize([domain.description])
                 domain_vectors = self.embedding_generator.generate_embeddings(normalized_description)
-                domain_embeddings = []
-                for vector in domain_vectors:
-                    embedding = Embedding(
-                        chunk_id=None,
-                        faiss_index=None,
-                        embedding=vector
-                    )
-                    domain_embeddings.append(embedding)
 
-                self.faiss_manager.add_embeddings(domain_embeddings, domain.vector_store_path, domain.embeddings_dimension)
-                domain.faiss_index = domain_embeddings[0].faiss_index
+                [faiss_index] = self.faiss_manager.add_embeddings(domain_vectors, domain.vector_store_path, domain.embeddings_dimension)
+                domain.faiss_index = faiss_index
 
                 self.sqlite_manager.insert_domain(domain, conn)
                 conn.commit()
@@ -301,8 +293,9 @@ class DataIngestionOrchestrator:
                 try:
                     # processa o documento, adicionando as páginas, hash e total de páginas ao objeto DocumentFile
                     self.document_processor.process_document(file)
-                    # Verifica se é duplicado
+
                     file_metrics["total_pages"] = len(file.pages)
+                    # Verifica se o documento é uma réplica
                     if self._is_duplicate(file.hash, conn):
                         file_metrics["is_duplicate"] = True
                         file_metrics["file_hash"] = file.hash
@@ -324,10 +317,11 @@ class DataIngestionOrchestrator:
 
                     file_metrics["is_duplicate"] = False
                     file_metrics["file_hash"] = file.hash
+
                     # Adiciona o hash do documento ao dicionário de hashes
                     self.document_hashes[file.name] = file.hash
 
-                    # Insere o documento no banco de dados
+                    # Insere o documento no banco de dados e recebe seu id
                     file.id = self.sqlite_manager.insert_document_file(file, conn)
                     file_metrics["file_id"] = file.id
 
@@ -339,19 +333,22 @@ class DataIngestionOrchestrator:
                         self.metrics_data[file.name] = file_metrics
                         self.metrics_data["invalid_files"] += 1
 
+                        # Descarta e passa ao próximo arquivo
                         conn.rollback()
                         continue
 
-                    # Processa cada página e coleta seus chunks
+
                     self.logger.info(f"Total de paginas: {len(file.pages)}")
                     self.logger.info(f"Iniciando a criacao de chunks")
                     document_chunks : List[Chunk] = []
                     page_counter = 0
+
+                    # Processa cada página e coleta seus chunks
                     for page in file.pages:
-                        # Divide a página em chunks
                         page_counter += 1
                         self.logger.debug(f"Processando pagina: {page_counter}/{len(file.pages)}")
 
+                        # Divide a página criando objetos Chunk com conteúdo, document_id e outros metadados
                         page_chunks = self.text_chunker.create_chunks(
                             text=page.page_content,
                             metadata={
@@ -364,6 +361,7 @@ class DataIngestionOrchestrator:
                             self.logger.warning(f"Pagina vazia encontrada: {page.metadata['page']}", file_path=file.path)
                             continue
                         
+                        #Adiciona os chunks da página à lista de chunks do documento
                         document_chunks.extend(page_chunks)
                     
 
@@ -374,6 +372,7 @@ class DataIngestionOrchestrator:
                         file_metrics["file_processing_duration"] = str(datetime.now() - file_start_time)
                         self.metrics_data[file.name] = file_metrics
                         self.metrics_data["invalid_files"] += 1
+                        # Descarta e passa ao próximo arquivo
                         conn.rollback()
                         continue
 
@@ -381,9 +380,6 @@ class DataIngestionOrchestrator:
                     file_metrics["total_chunks"] = len(document_chunks)
                     total_chunk_size += sum(len(chunk.content) for chunk in document_chunks)
 
-                    # Insere os chunks no banco de dados e retorna os ids dos chunks
-                    chunk_ids : List[int] = self.sqlite_manager.insert_chunks(document_chunks, file.id, conn)
-                    file_metrics["chunks_inserted"] = True
                     # Normaliza os chunks
                     chunks_content = [chunk.content for chunk in document_chunks]
                     normalized_chunks = self.text_normalizer.normalize(chunks_content)
@@ -400,25 +396,18 @@ class DataIngestionOrchestrator:
                         conn.rollback()
                         continue
 
-                    #Cria os objetos Embedding
-                    embeddings : List[Embedding] = []
-                    for embedding_vector, chunk_id in zip(embedding_vectors, chunk_ids):
-                        embedding = Embedding(
-                            id = None,
-                            chunk_id = chunk_id,
-                            faiss_index = None,
-                            embedding = embedding_vector
-                        )
-
-                        embeddings.append(embedding)
-                    
-                    file_metrics["total_embeddings"] = len(embeddings)
-                    #Adiciona os embeddings ao índice FAISS, atualizando os objetos Embedding com o seu índice FAISS
-                    self.faiss_manager.add_embeddings(embeddings, domain.vector_store_path, domain.embeddings_dimension)
+                    file_metrics["total_embeddings"] = len(embedding_vectors)
+                    #Adiciona os embeddings ao índice FAISS, recebendo os índices dos embeddings em ordem
+                    faiss_indices = self.faiss_manager.add_embeddings(embedding_vectors, domain.vector_store_path, domain.embeddings_dimension)
                     file_metrics["embeddings_added"] = True
-                    #Adiciona os embeddings ao banco de dados
-                    self.sqlite_manager.insert_embeddings(embeddings, conn)
-                    file_metrics["embeddings_inserted"] = True
+
+                    #Adiciona os índices faiss aos chunks
+                    for i, chunk in enumerate(document_chunks):
+                        chunk.faiss_index = faiss_indices[i]
+
+                    #Insere os chunks no banco de dados
+                    self.sqlite_manager.insert_chunks(document_chunks, file.id, conn)
+                    file_metrics["chunks_inserted"] = True
                     
                     self.logger.info(f"Salvando alteracoes no banco de dados", file_path=file.path)
                     #Salva as alterações no banco de dados
@@ -430,7 +419,7 @@ class DataIngestionOrchestrator:
                     self.metrics_data["processed_files"] += 1
                     self.metrics_data["processed_pages"] += len(file.pages)
                     self.metrics_data["processed_chunks"] += len(document_chunks)
-                    self.metrics_data["processed_embeddings"] += len(embeddings)
+                    self.metrics_data["processed_embeddings"] += embedding_vectors.shape[0]
 
                     self.logger.info(f"Processamento do arquivo concluido com sucesso", file_path=file.path)
 
