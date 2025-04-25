@@ -1,11 +1,11 @@
 from pydantic import BaseModel, ConfigDict
-from typing import Optional, List
+from typing import Optional
 
 class Domain(BaseModel):
     id: Optional[int]
     name: str
     description: str
-    keywords: List[str]
+    keywords: str
     db_path: str
     vector_store_path: str
     total_documents: int

@@ -193,34 +193,44 @@ class DataIngestionOrchestrator:
         self.logger.info("Adicionando novo domínio de conhecimento", domain_name=domain_name, domain_description=domain_description, domain_keywords=domain_keywords)
         
         try:
-
-            domain_db_path = os.path.join("storage", "domains", f"{domain_name}", f"{domain_name}.db")
-            vector_store_path = os.path.join("storage", "domains", f"{domain_name}", "vector_store",f"{domain_name}.faiss")
-            domain = Domain(
-                id=None, 
-                name=domain_name, 
-                description=domain_description, 
-                keywords=domain_keywords, 
-                db_path=domain_db_path, 
-                vector_store_path=vector_store_path, 
-                total_documents=0,
-                embeddings_dimension=self.embedding_generator.embedding_dimension
-            )
-            normalized_description = self.text_normalizer.normalize([domain.description])
-            domain_vectors = self.embedding_generator.generate_embeddings(normalized_description)
-            domain_embeddings = []
-            for vector in domain_vectors:
-                embedding = Embedding(
-                    chunk_id=None,
-                    faiss_index=None,
-                    embedding=vector
-                )
-                domain_embeddings.append(embedding)
-
-            self.faiss_manager.add_embeddings(domain_embeddings, domain.vector_store_path, domain.embeddings_dimension)
-            domain.faiss_index = domain_embeddings[0].faiss_index
             with self.sqlite_manager.get_connection(control=True) as conn:  
                 self.sqlite_manager.begin(conn)
+
+                #Verifica se o domain já existe
+                domain = self.sqlite_manager.get_domain(conn, domain_name)
+                if domain:
+                    self.logger.error("Domínio já existe", domain_name=domain_name)
+                    conn.rollback()
+                    return
+                
+                #Cria os caminhos da db e vectorstore
+                domain_db_path = os.path.join("storage", "domains", f"{domain_name}", f"{domain_name}.db")
+                vector_store_path = os.path.join("storage", "domains", f"{domain_name}", "vector_store",f"{domain_name}.faiss")
+                #Cria o objeto Domain
+                domain = Domain(
+                    id=None, 
+                    name=domain_name, 
+                    description=domain_description, 
+                    keywords=domain_keywords, 
+                    db_path=domain_db_path, 
+                    vector_store_path=vector_store_path, 
+                    total_documents=0,
+                    embeddings_dimension=self.embedding_generator.embedding_dimension
+                )
+                normalized_description = self.text_normalizer.normalize([domain.description])
+                domain_vectors = self.embedding_generator.generate_embeddings(normalized_description)
+                domain_embeddings = []
+                for vector in domain_vectors:
+                    embedding = Embedding(
+                        chunk_id=None,
+                        faiss_index=None,
+                        embedding=vector
+                    )
+                    domain_embeddings.append(embedding)
+
+                self.faiss_manager.add_embeddings(domain_embeddings, domain.vector_store_path, domain.embeddings_dimension)
+                domain.faiss_index = domain_embeddings[0].faiss_index
+
                 self.sqlite_manager.insert_domain(domain, conn)
                 conn.commit()
 

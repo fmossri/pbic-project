@@ -205,7 +205,7 @@ class SQLiteManager:
             self.logger.error(f"Erro ao recuperar os chunks: {e}")
             raise e
             
-    def get_domain(self, conn: sqlite3.Connection, domain_name: str) -> Domain:
+    def get_domain(self, conn: sqlite3.Connection, domain_name: str) -> Optional[Domain]:
         """
         Retorna um domínio de conhecimento do banco de dados.
         """
@@ -225,6 +225,8 @@ class SQLiteManager:
                     vector_store_path=domain_data[6],
                     faiss_index=domain_data[7]
                 )
+            
+            return None
         except sqlite3.Error as e:
             self.logger.error(f"Erro ao recuperar o domínio de conhecimento: {e}")
             raise e
