@@ -14,7 +14,7 @@ class DataIngestionOrchestrator:
 
     DEFAULT_LOG_DOMAIN = "Ingestao de dados"
     
-    def __init__(self, domain_name: str, db_path: str = None, index_path: str = None, chunk_size: int = 800, overlap: int = 160):
+    def __init__(self, chunk_size: int = 800, overlap: int = 160):
         """
         Inicializa o orquestrador com os componentes necessários.
         
@@ -25,19 +25,15 @@ class DataIngestionOrchestrator:
             overlap (int): Sobreposição entre chunks.
         """
         self.logger = get_logger(__name__, log_domain=self.DEFAULT_LOG_DOMAIN)
-        self.logger.info("Inicializando o DataIngestionOrchestrator", 
-                        db_path=db_path, 
-                        index_path=index_path,
-                        chunk_size=chunk_size,
-                        overlap=overlap)
+        self.logger.info("Inicializando o DataIngestionOrchestrator")
         
         self.metrics_data = {}
         self.document_processor = DocumentProcessor(log_domain=self.DEFAULT_LOG_DOMAIN)
         self.text_chunker = TextChunker(chunk_size, overlap, log_domain=self.DEFAULT_LOG_DOMAIN)
         self.text_normalizer = TextNormalizer(log_domain=self.DEFAULT_LOG_DOMAIN)
         self.embedding_generator = EmbeddingGenerator(log_domain=self.DEFAULT_LOG_DOMAIN)
-        self.sqlite_manager = SQLiteManager(db_path=db_path, log_domain=self.DEFAULT_LOG_DOMAIN)
-        self.faiss_manager = FaissManager(index_path=index_path, log_domain=self.DEFAULT_LOG_DOMAIN)
+        self.sqlite_manager = SQLiteManager(log_domain=self.DEFAULT_LOG_DOMAIN)
+        self.faiss_manager = FaissManager(log_domain=self.DEFAULT_LOG_DOMAIN)
         self.document_hashes: Dict[str, str] = {}
         
     def _find_original_document(self, duplicate_hash: str, conn: sqlite3.Connection) -> DocumentFile:
@@ -121,7 +117,7 @@ class DataIngestionOrchestrator:
         """
         start_time = datetime.now()
         self.metrics_data["process"] = "Ingestão de dados"
-        self.metrics_data["start_time"] = start_time.strftime("%Y-%m-%d %H:%M:%S")
+        self.metrics_data["start_time"] = start_time
         self.metrics_data["text_chunker"] = type(self.text_chunker.splitter).__name__
         self.metrics_data["chunk_size"] = self.text_chunker.chunk_size
         self.metrics_data["chunk_overlap"] = self.text_chunker.overlap
@@ -215,6 +211,7 @@ class DataIngestionOrchestrator:
                     db_path=domain_db_path, 
                     vector_store_path=vector_store_path, 
                     total_documents=0,
+                    faiss_index=None,
                     embeddings_dimension=self.embedding_generator.embedding_dimension
                 )
                 normalized_description = self.text_normalizer.normalize([domain.description])
@@ -230,7 +227,6 @@ class DataIngestionOrchestrator:
             self.logger.error(f"Erro ao adicionar novo domínio de conhecimento: {e}")
             raise e
                 
-
     def process_directory(self, directory_path: str, domain_name: str = None) -> None:
         """
         Processa todos os arquivos PDF em um diretório.
@@ -433,10 +429,8 @@ class DataIngestionOrchestrator:
                     conn.rollback()
                     continue
 
-
-
         self.metrics_data["duration"] = str(datetime.now() - self.metrics_data["start_time"])
-        
+        self.metrics_data["start_time"] = self.metrics_data["start_time"].strftime("%Y-%m-%d %H:%M:%S")
         self.metrics_data["avg_chunk_size"] = total_chunk_size / self.metrics_data["processed_chunks"] if self.metrics_data["processed_chunks"] > 0 else None
         self.logger.info(f"Processamento do diretorio concluido em {self.metrics_data['duration']}")
         

@@ -7,7 +7,6 @@ import faiss
 from pathlib import Path
 
 from src.utils import FaissManager
-from src.models import Embedding
 
 class TestFaissManager:
     """Test suite for FaissManager class."""
@@ -26,84 +25,85 @@ class TestFaissManager:
             file_path = os.path.join(test_dir, file)
             if os.path.isfile(file_path):
                 os.unlink(file_path)
-    
+    @pytest.fixture
+    def index_path(self, test_indices_dir):
+        test_index_path = os.path.join(test_indices_dir, f"test_index_{os.getpid()}.faiss")
+        return test_index_path
+
     @pytest.fixture
     def faiss_manager(self, test_indices_dir):
         """Create a FaissManager instance configured to use the test directory."""
         # Initialize FaissManager with the test directory
         # Use a different name to avoid conflicts with other tests
-        test_index_path = os.path.join(test_indices_dir, f"test_index_{os.getpid()}.faiss")
+
         manager = FaissManager(
-            index_path=test_index_path,
-            dimension=384,  # Standard dimension for test
             log_domain="test_domain"
         )
+        manager.index_path = os.path.join(test_indices_dir, f"test_index_{os.getpid()}.faiss")
+        manager.dimension = 384
         
         return manager
     
     @pytest.fixture
     def sample_embeddings(self):
         """Create sample embeddings for testing."""
-        embeddings = []
+        embeddings = np.zeros((5, 384), dtype=np.float32)
         
         # Create 5 test embeddings
         for i in range(5):
             # Create a normalized random vector
             vec = np.random.random(384).astype(np.float32)
             vec = vec / np.linalg.norm(vec)
-            
-            embedding = Embedding(
-                id=None,
-                chunk_id=i + 1,
-                faiss_index_path=None,  # Will be set by FaissManager
-                chunk_faiss_index=None,  # Will be set by FaissManager
-                dimension=384,
-                embedding=vec
-            )
-            
-            embeddings.append(embedding)
+            embeddings[i] = vec
         
         return embeddings
     
-    def test_initialization(self, test_indices_dir):
+    def test_initialization(self, index_path):
         """Test FaissManager initialization."""
-        # Create a new FaissManager instance
-        test_index_path = os.path.join(test_indices_dir, "init_test.faiss")
         
         # Make sure there's no index file before the test
-        if os.path.exists(test_index_path):
-            os.unlink(test_index_path)
+        if os.path.exists(index_path):
+            os.unlink(index_path)
         
         manager = FaissManager(
-            index_path=test_index_path,
-            dimension=512,  # Different dimension for this test
             log_domain="test_domain"
         )
+        manager.dimension = 512
+        manager.index_path = index_path
+        manager._initialize_index()
         
         # Verify the manager was initialized correctly
-        assert manager.index_path == test_index_path
+        assert manager.index_path == index_path
         assert manager.dimension == 512
         assert manager.index is not None
         assert isinstance(manager.index, faiss.Index)
         assert manager.index.d == 512  # Dimension matches
         
         # Verify that an index file was created
-        assert os.path.exists(test_index_path)
+        assert os.path.exists(index_path)
     
     def test_add_embeddings(self, faiss_manager, sample_embeddings):
         """Test adding embeddings to the index."""
+        
         # Get the initial count of vectors in the index
+        faiss_manager._initialize_index()
         initial_count = faiss_manager.index.ntotal
-        original_count = len(sample_embeddings)
+        original_count = sample_embeddings.shape[0]
         
         # Add the sample embeddings to the index
-        faiss_manager.add_embeddings(sample_embeddings)
+        vector_store_path = faiss_manager.index_path
+        embedding_dimension = faiss_manager.dimension
+        faiss_indices = faiss_manager.add_embeddings(sample_embeddings, vector_store_path, embedding_dimension)
         
-        # ONLY verify that the vectors were added to the index
+        # Verify that the vectors were added to the index
         assert faiss_manager.index.ntotal == initial_count + original_count
         
-        # We no longer expect the embedding objects to be modified
-        # No assertions about faiss_index_path or chunk_faiss_index
+        # Verify that the returned faiss_indices has the correct length
+        assert len(faiss_indices) == original_count
+        
+        # Verify indices are sequential starting from initial_count
+        for i, index in enumerate(faiss_indices):
+            assert index == initial_count + i
     
     def test_index_persistence(self, test_indices_dir):
         """Test that the index is persisted to disk."""
@@ -112,32 +112,24 @@ class TestFaissManager:
         
         # Create a manager and add some vectors
         manager1 = FaissManager(
-            index_path=test_index_path,
-            dimension=384,
             log_domain="test_domain"
         )
-        
+        manager1.index_path = test_index_path
+        manager1.dimension = 384
         # Create and add a test embedding
         vec = np.random.random(384).astype(np.float32)
         vec = vec / np.linalg.norm(vec)
+        vec_array = np.reshape(vec, (1, 384))
         
-        embedding = Embedding(
-            id=None,
-            chunk_id=1,
-            faiss_index_path=None,
-            chunk_faiss_index=None,
-            dimension=384,
-            embedding=vec
-        )
-        
-        manager1.add_embeddings([embedding])
+        manager1.add_embeddings(vec_array, test_index_path, 384)
         
         # Create a new manager that should load the existing index
         manager2 = FaissManager(
-            index_path=test_index_path,
-            dimension=384
+            log_domain="test_domain"
         )
-        
+        manager2.index_path = test_index_path
+        manager2.dimension = 384
+        manager2._initialize_index()
         # Verify that the second manager has the same vector count
         assert manager2.index.ntotal == 1
         
@@ -152,64 +144,46 @@ class TestFaissManager:
     
     def test_multiple_adds(self, faiss_manager, sample_embeddings):
         """Test adding embeddings in multiple batches."""
+        # Initialize index explicitly
+        faiss_manager._initialize_index()
+        
         # Split the sample embeddings into two batches
         batch1 = sample_embeddings[:2]
         batch2 = sample_embeddings[2:]
         
         # Add the first batch
-        faiss_manager.add_embeddings(batch1)
+        vector_store_path = faiss_manager.index_path
+        embedding_dimension = faiss_manager.dimension
+        faiss_indices1 = faiss_manager.add_embeddings(batch1, vector_store_path, embedding_dimension)
         
-        # Verify only that vectors were added to the index
-        assert faiss_manager.index.ntotal == len(batch1)
+        # Verify vectors were added to the index
+        assert faiss_manager.index.ntotal == batch1.shape[0]
         
         # Add the second batch
-        faiss_manager.add_embeddings(batch2)
+        faiss_indices2 = faiss_manager.add_embeddings(batch2, vector_store_path, embedding_dimension)
         
         # Verify that all vectors were added
-        assert faiss_manager.index.ntotal == len(batch1) + len(batch2)
+        assert faiss_manager.index.ntotal == batch1.shape[0] + batch2.shape[0]
+        
+        # Verify the returned indices are correct
+        assert len(faiss_indices1) == batch1.shape[0]
+        assert len(faiss_indices2) == batch2.shape[0]
+        assert faiss_indices2[0] == batch1.shape[0]  # Second batch should start after first batch
     
-    def test_index_reuse(self, test_indices_dir):
-        """Test creating a new manager with the same index file."""
-        # Create a unique index name
-        test_index_path = os.path.join(test_indices_dir, "reuse_test.faiss")
+    def test_search_faiss_index(self, faiss_manager, sample_embeddings):
+        """Test searching for similar vectors."""
+        # Initialize index explicitly
+        faiss_manager._initialize_index()
         
-        # Make sure the file doesn't exist initially
-        if os.path.exists(test_index_path):
-            os.unlink(test_index_path)
+        # Add sample embeddings to the index
+        vector_store_path = faiss_manager.index_path
+        embedding_dimension = faiss_manager.dimension
+        faiss_manager.add_embeddings(sample_embeddings, vector_store_path, embedding_dimension)
         
-        # Create the first manager and add vectors
-        manager1 = FaissManager(
-            index_path=test_index_path,
-            dimension=384
-        )
+        # Search for a vector (use the first one from the sample set)
+        query_vector = sample_embeddings[0].reshape(1, -1)
+        distances, indices = faiss_manager.search_faiss_index(query_vector, k=1)
         
-        # Create and add multiple embeddings
-        embedding_count = 5
-        embeddings = []
-        
-        for i in range(embedding_count):
-            vec = np.random.random(384).astype(np.float32)
-            vec = vec / np.linalg.norm(vec)
-            
-            embedding = Embedding(
-                id=None,
-                chunk_id=i + 1,
-                faiss_index_path=None,
-                chunk_faiss_index=None,
-                dimension=384,
-                embedding=vec
-            )
-            
-            embeddings.append(embedding)
-        
-        # Add embeddings to the first manager
-        manager1.add_embeddings(embeddings)
-        
-        # Create a second manager that should load the index
-        manager2 = FaissManager(
-            index_path=test_index_path,
-            dimension=384
-        )
-        
-        # Verify the second manager loaded all vectors
-        assert manager2.index.ntotal == embedding_count
+        # The most similar vector should be itself
+        assert indices[0][0] == 0
+        assert distances[0][0] < 1e-5  # Should be very close to 0

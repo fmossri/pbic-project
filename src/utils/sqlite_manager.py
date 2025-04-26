@@ -1,7 +1,7 @@
 import sqlite3
 import os
 from typing import List, Optional
-from src.models import DocumentFile, Chunk, Embedding, Domain
+from src.models import DocumentFile, Chunk, Domain
 from src.utils.logger import get_logger
 
 class SQLiteManager:
@@ -93,8 +93,6 @@ class SQLiteManager:
             self.logger.error(f"Erro ao inserir o domínio de conhecimento: {e}")
             raise e
             
-
-
     def insert_document_file(self, file: DocumentFile, conn: sqlite3.Connection) -> None:
         """
         Insere um arquivo de documento no banco de dados.
@@ -142,8 +140,7 @@ class SQLiteManager:
                 raise e
         
         self.logger.info(f"{len(chunks)} Chunks inseridos com sucesso")
-        
-    
+         
     def get_chunks_content(self, conn: sqlite3.Connection, faiss_indices: List[int]) -> List[str]:
         """
         Retorna o conteúdo dos chunks associados aos índices faiss fornecidos.
@@ -198,7 +195,8 @@ class SQLiteManager:
                     total_documents=domain_data[4],
                     db_path=domain_data[5],
                     vector_store_path=domain_data[6],
-                    faiss_index=domain_data[7]
+                    faiss_index=domain_data[7],
+                    embeddings_dimension=domain_data[8]
                 )
             
             return None

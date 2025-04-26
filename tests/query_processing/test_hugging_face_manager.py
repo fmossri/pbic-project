@@ -26,12 +26,14 @@ class TestHuggingFaceManager:
         manager = HuggingFaceManager(log_domain="test_domain")
         
         # Test with empty context prompt
-        result = manager.generate_answer("question", "")
-        assert result == "prompt vazio ou inválido"
+        with pytest.raises(ValueError) as exc_info:
+            manager.generate_answer("question", "")
+        assert "Prompt vazio ou inválido" in str(exc_info.value)
         
         # Test with None context prompt
-        result = manager.generate_answer("question", None)
-        assert result == "prompt vazio ou inválido"
+        with pytest.raises(ValueError) as exc_info:
+            manager.generate_answer("question", None)
+        assert "Prompt vazio ou inválido" in str(exc_info.value)
     
     def test_generate_answer_success(self):
         """Testa a geração de resposta com sucesso."""

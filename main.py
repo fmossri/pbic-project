@@ -61,11 +61,11 @@ def ingest_data(directory_path: str, domain_name: str) -> None:
         logger.error(f"O diretorio {directory_path} nao existe")
         raise FileNotFoundError(f"O diretório {directory_path} não existe")
     
-    ingestion = DataIngestionOrchestrator(domain_name=domain_name)
+    ingestion = DataIngestionOrchestrator()
     
     try:      
         # Processa os documentos e mede o tempo
-        ingestion.process_directory(directory_path)
+        ingestion.process_directory(directory_path, domain_name)
         logger.info("Encerrando a aplicacao")
         
     except (FileNotFoundError, NotADirectoryError, ValueError) as e:

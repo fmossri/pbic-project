@@ -71,7 +71,7 @@ class TestQueryOrchestrator:
         # Verify mocks were called
         mock_normalize.assert_called_once_with("teste de query")
         mock_generate_embeddings.assert_called_once_with("query normalizada")
-        assert "Não foi possível gerar um embedding para a query" in str(exc_info.value)
+        assert "Erro ao gerar o embedding da query" in str(exc_info.value)
     
     def test_retrieve_documents(self, query_orchestrator, mocker):
         """Testa a recuperação de documentos."""
@@ -112,7 +112,7 @@ class TestQueryOrchestrator:
         """Testa a recuperação de documentos com embedding vazio."""
         with pytest.raises(ValueError) as exc_info:
             query_orchestrator._retrieve_documents(None)
-        assert "Embedding vazio ou inválido" in str(exc_info.value)
+        assert "Vetor de embedding vazio ou inválido" in str(exc_info.value)
     
     def test_prepare_context_prompt(self, query_orchestrator):
         """Testa a preparação do prompt de contexto."""
@@ -169,8 +169,11 @@ class TestQueryOrchestrator:
         mock_prepare_prompt.assert_called_once_with(test_query, mock_chunks)
         mock_generate_answer.assert_called_once_with(test_query, mock_prompt)
         
-        # Verify result
-        assert result == mock_answer
+        # Verify result is a dictionary with expected content
+        assert isinstance(result, dict)
+        assert result["answer"] == mock_answer
+        assert result["question"] == test_query
+        assert result["success"] == True
     
     def test_query_llm_empty_query(self, query_orchestrator):
         """Testa o comportamento com uma query vazia no fluxo completo."""
