@@ -7,12 +7,38 @@ class TestQueryOrchestrator:
     """Suite de testes para a classe QueryOrchestrator."""
     
     @pytest.fixture
-    def query_orchestrator(self):
-        """Fixture que fornece uma instância do QueryOrchestrator."""
-        return QueryOrchestrator()
+    def query_orchestrator(self, mocker):
+        """Fixture que fornece uma instância do QueryOrchestrator com componentes mockados."""
+        # Mock heavy components before initialization
+        mocker.patch('src.utils.text_normalizer.TextNormalizer.__init__', return_value=None)
+        mocker.patch('src.utils.embedding_generator.EmbeddingGenerator.__init__', return_value=None)
+        mocker.patch('src.utils.embedding_generator.EmbeddingGenerator.embedding_dimension', 384, create=True)
+        mocker.patch('src.utils.embedding_generator.EmbeddingGenerator.model_name', "mock-model", create=True)
+        mocker.patch('src.utils.faiss_manager.FaissManager.__init__', return_value=None)
+        mocker.patch('src.utils.faiss_manager.FaissManager.index_path', "mock/path.faiss", create=True)
+        mocker.patch('src.utils.faiss_manager.FaissManager.dimension', 384, create=True)
+        mocker.patch('src.utils.faiss_manager.FaissManager.index', MagicMock(), create=True)
+        mocker.patch('src.utils.sqlite_manager.SQLiteManager.__init__', return_value=None)
+        mocker.patch('src.utils.sqlite_manager.SQLiteManager.db_path', "mock/path.db", create=True)
+        mocker.patch('src.query_processing.hugging_face_manager.HuggingFaceManager.__init__', return_value=None)
+        mocker.patch('src.query_processing.hugging_face_manager.HuggingFaceManager.client', MagicMock(), create=True)
+        
+        orchestrator = QueryOrchestrator()
+        
+        # Mock logger to avoid actual logging
+        orchestrator.logger = MagicMock()
+        
+        return orchestrator
     
-    def test_initialization(self):
+    def test_initialization(self, mocker):
         """Testa a inicialização do QueryOrchestrator."""
+        # Mock initializations to make the test faster
+        mocker.patch('src.utils.text_normalizer.TextNormalizer.__init__', return_value=None)
+        mocker.patch('src.utils.embedding_generator.EmbeddingGenerator.__init__', return_value=None)
+        mocker.patch('src.utils.faiss_manager.FaissManager.__init__', return_value=None)
+        mocker.patch('src.utils.sqlite_manager.SQLiteManager.__init__', return_value=None) 
+        mocker.patch('src.query_processing.hugging_face_manager.HuggingFaceManager.__init__', return_value=None)
+        
         orchestrator = QueryOrchestrator()
         assert orchestrator is not None
         assert orchestrator.text_normalizer is not None
@@ -30,15 +56,17 @@ class TestQueryOrchestrator:
     def test_process_query(self, query_orchestrator, mocker):
         """Testa o processamento de uma query válida."""
         # Mock do TextNormalizer
-        mock_normalize = mocker.patch(
-            'src.utils.text_normalizer.TextNormalizer.normalize',
+        mock_normalize = mocker.patch.object(
+            query_orchestrator.text_normalizer,
+            'normalize',
             return_value="query normalizada"
         )
         
         # Mock do EmbeddingGenerator
         mock_embeddings = np.array([[0.1] * 384], dtype=np.float32)
-        mock_generate_embeddings = mocker.patch(
-            'src.utils.embedding_generator.EmbeddingGenerator.generate_embeddings',
+        mock_generate_embeddings = mocker.patch.object(
+            query_orchestrator.embedding_generator,
+            'generate_embeddings',
             return_value=mock_embeddings
         )
         
@@ -54,14 +82,16 @@ class TestQueryOrchestrator:
     def test_embedding_error(self, query_orchestrator, mocker):
         """Testa o comportamento quando o embedding não pode ser gerado."""
         # Mock do TextNormalizer
-        mock_normalize = mocker.patch(
-            'src.utils.text_normalizer.TextNormalizer.normalize',
+        mock_normalize = mocker.patch.object(
+            query_orchestrator.text_normalizer,
+            'normalize',
             return_value="query normalizada"
         )
         
         # Mock do EmbeddingGenerator para retornar um array vazio
-        mock_generate_embeddings = mocker.patch(
-            'src.utils.embedding_generator.EmbeddingGenerator.generate_embeddings',
+        mock_generate_embeddings = mocker.patch.object(
+            query_orchestrator.embedding_generator,
+            'generate_embeddings',
             return_value=np.array([])
         )
         
@@ -79,22 +109,25 @@ class TestQueryOrchestrator:
         mock_embedding = np.array([[0.1] * 384], dtype=np.float32)
         
         # Mock FaissManager.search_faiss_index
-        mock_search = mocker.patch(
-            'src.utils.faiss_manager.FaissManager.search_faiss_index',
+        mock_search = mocker.patch.object(
+            query_orchestrator.faiss_manager,
+            'search_faiss_index',
             return_value=(np.array([[0.8, 0.7, 0.6]]), np.array([[1, 2, 3]]))
         )
         
         # Mock SQLiteManager.get_connection
         mock_conn = MagicMock()
-        mock_get_connection = mocker.patch(
-            'src.utils.sqlite_manager.SQLiteManager.get_connection'
+        mock_get_connection = mocker.patch.object(
+            query_orchestrator.sqlite_manager,
+            'get_connection'
         )
         mock_get_connection.return_value.__enter__.return_value = mock_conn
         
         # Mock SQLiteManager.get_chunks_content
         mock_chunks = ["Chunk 1", "Chunk 2", "Chunk 3"]
-        mock_get_chunks = mocker.patch(
-            'src.utils.sqlite_manager.SQLiteManager.get_chunks_content',
+        mock_get_chunks = mocker.patch.object(
+            query_orchestrator.sqlite_manager,
+            'get_chunks_content',
             return_value=mock_chunks
         )
         
@@ -154,8 +187,9 @@ class TestQueryOrchestrator:
         
         # Mock para HuggingFaceManager.generate_answer
         mock_answer = "Esta é a resposta gerada pelo modelo."
-        mock_generate_answer = mocker.patch(
-            'src.query_processing.hugging_face_manager.HuggingFaceManager.generate_answer',
+        mock_generate_answer = mocker.patch.object(
+            query_orchestrator.hugging_face_manager,
+            'generate_answer',
             return_value=mock_answer
         )
         
