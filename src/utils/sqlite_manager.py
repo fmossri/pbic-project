@@ -220,7 +220,7 @@ class SQLiteManager:
         """
         Insere um domínio de conhecimento no banco de dados.
         """
-        self.logger.info(f"Inserindo domínio de conhecimento no banco de dados: {domain.domain_name}")
+        self.logger.info(f"Inserindo domínio de conhecimento no banco de dados: {domain.name}")
         try:
             cursor = conn.cursor()
             cursor.execute(
