@@ -255,7 +255,7 @@ class DataIngestionOrchestrator:
         with self.sqlite_manager.get_connection(control=True) as conn:
             try:
                 self.sqlite_manager.begin(conn)
-                domain = self.sqlite_manager.get_domain(conn, domain_name)
+                [domain] = self.sqlite_manager.get_domain(conn, domain_name)
                 conn.commit()
             except Exception as e:
                 self.logger.error(f"Erro ao obter o domínio de conhecimento: {e}")
@@ -269,13 +269,12 @@ class DataIngestionOrchestrator:
     
 
         with self.sqlite_manager.get_connection(db_path=domain.db_path) as conn:
-            self.sqlite_manager.begin(conn)
-
             self.logger.info(f"Iniciando o processamento dos arquivos PDF")
 
             file_counter = 0
             duplicate_counter = 0
             for file in pdf_files:
+                self.sqlite_manager.begin(conn)
                 file_start_time = datetime.now()
                 file_metrics = {}
                 file_counter += 1
@@ -428,6 +427,18 @@ class DataIngestionOrchestrator:
                     self.metrics_data[file.name] = file_metrics
                     conn.rollback()
                     continue
+        
+
+        with self.sqlite_manager.get_connection(control=True) as conn:
+            try:
+                self.sqlite_manager.begin(conn)
+                domain.total_documents += self.metrics_data["processed_files"]
+                self.sqlite_manager.update_domain(domain, conn)
+                conn.commit()
+            except Exception as e:
+                self.logger.error(f"Erro ao atualizar o domínio de conhecimento: {e}", domain_name=domain.name, domain_total_documents=domain.total_documents)
+                raise e
+
 
         self.metrics_data["duration"] = str(datetime.now() - self.metrics_data["start_time"])
         self.metrics_data["start_time"] = self.metrics_data["start_time"].strftime("%Y-%m-%d %H:%M:%S")

@@ -79,16 +79,23 @@ class FaissManager:
             self.logger.error(f"Erro ao adicionar embeddings ao índice FAISS: {e}")
             raise e
 
-    def search_faiss_index(self, query_embedding: np.ndarray, k: int = 5) -> tuple[np.ndarray, np.ndarray]:
+    def search_faiss_index(self, query_embedding: np.ndarray, k: int = 5, vector_store_path: str = None) -> tuple[np.ndarray, np.ndarray]:
         """
         Realiza uma busca no índice FAISS para encontrar os k embeddings mais similares à query_embedding.
         
         Args:
             query_embedding (np.ndarray): Vetor de embedding da query
+            k (int): Número de resultados a serem retornados
+            vector_store_path (str): Caminho do índice FAISS
+
+        Returns:
+            tuple[np.ndarray, np.ndarray]: Tupla contendo as distâncias e os índices dos embeddings mais similares
         """
         self.logger.info(f"Realizando busca por similaridade no índice FAISS", top_k=k)
         # Verifica se o vetor de embedding é um array unidimensional
+        self.index_path = vector_store_path
         try:
+            self._initialize_index()
             if len(query_embedding.shape) == 1:
                 # Se for unidimensional, converte para bidimensional
                 query_embedding = query_embedding.reshape(1, -1)

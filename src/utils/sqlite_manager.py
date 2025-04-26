@@ -69,29 +69,6 @@ class SQLiteManager:
         self.logger.info(f"Iniciando uma transacao com o banco de dados")
         conn.execute("PRAGMA foreign_keys = ON")
         conn.execute("BEGIN TRANSACTION")
-    
-    def insert_domain(self, domain: Domain, conn: sqlite3.Connection) -> None:
-        """
-        Insere um domínio de conhecimento no banco de dados.
-        """
-        self.logger.info(f"Inserindo domínio de conhecimento no banco de dados: {domain.domain_name}")
-        try:
-            cursor = conn.cursor()
-            cursor.execute(
-                "INSERT INTO domains (name, description, keywords, total_documents, db_path, vector_store_path, faiss_index, embeddings_dimension) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-                (domain.name, domain.description, domain.keywords, domain.total_documents, domain.db_path, domain.vector_store_path, domain.faiss_index, domain.embeddings_dimension)
-            )
-
-            self.logger.debug("Domínio do conhecimento inserido com sucesso", 
-                              domain_name=domain.name, 
-                              domain_description=domain.description, 
-                              domain_keywords=domain.keywords, 
-                              domain_db_path=domain.db_path, 
-                              domain_vector_store_path=domain.vector_store_path,
-                              domain_faiss_index=domain.faiss_index)
-        except sqlite3.Error as e:
-            self.logger.error(f"Erro ao inserir o domínio de conhecimento: {e}")
-            raise e
             
     def insert_document_file(self, file: DocumentFile, conn: sqlite3.Connection) -> None:
         """
@@ -114,6 +91,68 @@ class SQLiteManager:
         
         except sqlite3.Error as e:
             self.logger.error(f"Erro ao inserir o arquivo de documento: {e}")
+            raise e
+
+    def get_document_file(self, conn: sqlite3.Connection, file_id: Optional[int] = None) -> Optional[List[DocumentFile]]:
+        """
+        Recupera um arquivo de documento do banco de dados.
+        """
+        self.logger.debug(f"Recuperando arquivo de documento do banco de dados: {file_id}")
+        try:
+            cursor = conn.cursor()
+            if file_id:
+                cursor.execute("SELECT * FROM document_files WHERE id = ?", (file_id,))
+            else:
+                cursor.execute("SELECT * FROM document_files")
+            
+            all_files : List[DocumentFile] = []
+            file_data = cursor.fetchall()
+            if file_data:
+                for row in file_data:
+                    file = DocumentFile(
+                        id=row[0],
+                        name=row[1],
+                        hash=row[2],
+                        path=row[3],
+                        total_pages=row[4]
+                    )
+                    all_files.append(file)
+
+                return all_files
+            else:
+                return None
+
+        except sqlite3.Error as e:
+            self.logger.error(f"Erro ao recuperar o arquivo de documento: {e}")
+            raise e
+        
+    def update_document_file(self, file: DocumentFile, conn: sqlite3.Connection) -> None:
+        """
+        Atualiza um arquivo de documento no banco de dados.
+        """
+        self.logger.debug(f"Atualizando arquivo de documento no banco de dados: {file.name}")
+        try:
+            cursor = conn.cursor()
+            cursor.execute("UPDATE document_files SET name = ?, hash = ?, path = ?, total_pages = ? WHERE id = ?", 
+                           (file.name, file.hash, file.path, file.total_pages, file.id))
+            conn.commit()
+
+        except sqlite3.Error as e:
+            self.logger.error(f"Erro ao atualizar o arquivo de documento: {e}")
+            raise e
+        
+    def delete_document_file(self, file: DocumentFile, conn: sqlite3.Connection) -> None:
+        """
+        Deleta um arquivo de documento do banco de dados.
+        """
+        self.logger.debug(f"Deletando arquivo de documento do banco de dados: {file.name}")
+        try:
+            cursor = conn.cursor()
+            cursor.execute("DELETE FROM document_files WHERE id = ?", (file.id,))
+            conn.commit()
+
+        except sqlite3.Error as e:
+            self.logger.error(f"Erro ao deletar o arquivo de documento: {e}")
             raise e
         
     def insert_chunks(self, chunks: List[Chunk], file_id: int, conn: sqlite3.Connection) -> None:
@@ -176,33 +215,95 @@ class SQLiteManager:
         except sqlite3.Error as e:
             self.logger.error(f"Erro ao recuperar os chunks: {e}")
             raise e
-            
-    def get_domain(self, conn: sqlite3.Connection, domain_name: str) -> Optional[Domain]:
+
+    def insert_domain(self, domain: Domain, conn: sqlite3.Connection) -> None:
+        """
+        Insere um domínio de conhecimento no banco de dados.
+        """
+        self.logger.info(f"Inserindo domínio de conhecimento no banco de dados: {domain.domain_name}")
+        try:
+            cursor = conn.cursor()
+            cursor.execute(
+                "INSERT INTO domains (name, description, keywords, total_documents, db_path, vector_store_path, faiss_index, embeddings_dimension) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                (domain.name, domain.description, domain.keywords, domain.total_documents, domain.db_path, domain.vector_store_path, domain.faiss_index, domain.embeddings_dimension)
+            )
+
+            self.logger.debug("Domínio do conhecimento inserido com sucesso", 
+                              domain_name=domain.name, 
+                              domain_description=domain.description, 
+                              domain_keywords=domain.keywords, 
+                              domain_db_path=domain.db_path, 
+                              domain_vector_store_path=domain.vector_store_path,
+                              domain_faiss_index=domain.faiss_index)
+        except sqlite3.Error as e:
+            self.logger.error(f"Erro ao inserir o domínio de conhecimento: {e}")
+            raise e
+
+    def get_domain(self, conn: sqlite3.Connection, domain_name: Optional[str]) -> Optional[List[Domain]]:
         """
         Retorna um domínio de conhecimento do banco de dados.
         """
         self.logger.debug(f"Recuperando domínio de conhecimento do banco de dados: {domain_name}")
         try:
             cursor = conn.cursor()
-            cursor.execute("SELECT * FROM domains WHERE name = ?", (domain_name,))
-            domain_data = cursor.fetchone()
-            if domain_data:
-                return Domain(
-                    id=domain_data[0],
-                    name=domain_data[1],
-                    description=domain_data[2],
-                    keywords=domain_data[3],
-                    total_documents=domain_data[4],
-                    db_path=domain_data[5],
-                    vector_store_path=domain_data[6],
-                    faiss_index=domain_data[7],
-                    embeddings_dimension=domain_data[8]
-                )
+            if domain_name:
+                cursor.execute("SELECT * FROM domains WHERE name = ?", (domain_name,))
+
+            else:
+                cursor.execute("SELECT * FROM domains")
             
-            return None
+            all_domains : List[Domain] = []
+            domain_data = cursor.fetchall()
+            if domain_data:
+                for row in domain_data:
+                    domain = Domain(
+                        id=row[0],
+                        name=row[1],
+                        description=row[2],
+                        keywords=row[3],
+                        total_documents=row[4],
+                        db_path=row[5],
+                        vector_store_path=row[6],
+                        faiss_index=row[7],
+                        embeddings_dimension=row[8]
+                    )
+                    all_domains.append(domain)
+
+                return all_domains
+            else:
+                return None
+                
         except sqlite3.Error as e:
             self.logger.error(f"Erro ao recuperar o domínio de conhecimento: {e}")
             raise e
-    
-    
+        
+    def update_domain(self, domain: Domain, conn: sqlite3.Connection) -> None:
+        """
+        Atualiza um domínio de conhecimento no banco de dados.
+        """
+        self.logger.debug(f"Atualizando domínio de conhecimento no banco de dados: {domain.name}")
+        try:
+            cursor = conn.cursor()
+            cursor.execute("UPDATE domains SET name = ?, description = ?, keywords = ?, total_documents = ? WHERE name = ?", 
+                           (domain.name, domain.description, domain.keywords, domain.total_documents, domain.name))
+
+            conn.commit()
+
+        except sqlite3.Error as e:
+            self.logger.error(f"Erro ao atualizar o domínio de conhecimento: {e}")
+            raise e
+        
+    def delete_domain(self, domain: Domain, conn: sqlite3.Connection) -> None:
+        """
+        Deleta um domínio de conhecimento do banco de dados.
+        """
+        self.logger.debug(f"Deletando domínio de conhecimento do banco de dados: {domain.name}")
+        try:
+            cursor = conn.cursor()
+            cursor.execute("DELETE FROM domains WHERE name = ?", (domain.name,))
+            conn.commit()
+
+        except sqlite3.Error as e:
+            self.logger.error(f"Erro ao deletar o domínio de conhecimento: {e}")
+            raise e
     
