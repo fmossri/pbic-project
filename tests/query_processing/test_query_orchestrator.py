@@ -20,6 +20,7 @@ class TestQueryOrchestrator:
         mocker.patch('src.utils.faiss_manager.FaissManager.index', MagicMock(), create=True)
         mocker.patch('src.utils.sqlite_manager.SQLiteManager.__init__', return_value=None)
         mocker.patch('src.utils.sqlite_manager.SQLiteManager.db_path', "mock/path.db", create=True)
+        mocker.patch('src.utils.sqlite_manager.SQLiteManager.control_db_path', "mock/control.db", create=True)
         mocker.patch('src.query_processing.hugging_face_manager.HuggingFaceManager.__init__', return_value=None)
         mocker.patch('src.query_processing.hugging_face_manager.HuggingFaceManager.client', MagicMock(), create=True)
         
@@ -104,9 +105,12 @@ class TestQueryOrchestrator:
         assert "Erro ao gerar o embedding da query" in str(exc_info.value)
     
     def test_retrieve_documents(self, query_orchestrator, mocker):
-        """Testa a recuperação de documentos."""
+        """Testa a recuperação de documentos de múltiplos domínios."""
         # Mock embedding
         mock_embedding = np.array([[0.1] * 384], dtype=np.float32)
+        
+        # Create mock domain
+        mock_domain = MagicMock(name="domain1", db_path="path/to/domain1.db", vector_store_path="path/to/domain1.faiss")
         
         # Mock FaissManager.search_faiss_index
         mock_search = mocker.patch.object(
@@ -132,10 +136,10 @@ class TestQueryOrchestrator:
         )
         
         # Call the method
-        result = query_orchestrator._retrieve_documents(mock_embedding)
+        result = query_orchestrator._retrieve_documents(mock_embedding, mock_domain)
         
         # Verify calls
-        mock_search.assert_called_once_with(mock_embedding)
+        mock_search.assert_called_once_with(mock_embedding, mock_domain.vector_store_path)
         mock_get_chunks.assert_called_once_with(mock_conn, [1, 2, 3])
         
         # Verify result
@@ -143,8 +147,11 @@ class TestQueryOrchestrator:
     
     def test_retrieve_documents_empty_embedding(self, query_orchestrator):
         """Testa a recuperação de documentos com embedding vazio."""
+        # Create mock domain
+        mock_domain = MagicMock(name="domain1", db_path="path/to/domain1.db", vector_store_path="path/to/domain1.faiss")
+        
         with pytest.raises(ValueError) as exc_info:
-            query_orchestrator._retrieve_documents(None)
+            query_orchestrator._retrieve_documents(None, mock_domain)
         assert "Vetor de embedding vazio ou inválido" in str(exc_info.value)
     
     def test_prepare_context_prompt(self, query_orchestrator):
@@ -167,6 +174,16 @@ class TestQueryOrchestrator:
             query_orchestrator,
             '_process_query',
             return_value=mock_embedding
+        )
+        
+        # Create a mock domain
+        mock_domain = MagicMock(name="test_domain", db_path="path/to/test_domain.db", vector_store_path="path/to/test_domain.faiss")
+        
+        # Mock _select_domains to return our test domain
+        mock_select_domains = mocker.patch.object(
+            query_orchestrator,
+            '_select_domains',
+            return_value=[mock_domain]
         )
         
         # Mock para _retrieve_documents
@@ -198,8 +215,9 @@ class TestQueryOrchestrator:
         result = query_orchestrator.query_llm(test_query)
         
         # Verify calls
+        mock_select_domains.assert_called_once_with(test_query)
         mock_process_query.assert_called_once_with(test_query)
-        mock_retrieve_docs.assert_called_once_with(mock_embedding)
+        mock_retrieve_docs.assert_called_once_with(mock_embedding, mock_domain)
         mock_prepare_prompt.assert_called_once_with(test_query, mock_chunks)
         mock_generate_answer.assert_called_once_with(test_query, mock_prompt)
         
@@ -217,14 +235,17 @@ class TestQueryOrchestrator:
     
     def test_query_llm_error_handling(self, query_orchestrator, mocker):
         """Testa o tratamento de erros no fluxo completo."""
-        # Mock _process_query para lançar uma exceção
+        # Mock _select_domains to raise an exception
+        error_message = "Erro de teste"
         mocker.patch.object(
             query_orchestrator,
-            '_process_query',
-            side_effect=Exception("Erro de teste")
+            '_select_domains',
+            side_effect=Exception(error_message)
         )
         
-        # Test that the exception is propagated
-        with pytest.raises(Exception) as exc_info:
+        # Test that an exception is propagated
+        with pytest.raises(Exception):
             query_orchestrator.query_llm("Teste de query")
-        assert "Erro de teste" in str(exc_info.value) 
+            
+        # Verify that the metrics data captures the failure
+        assert query_orchestrator.metrics_data["success"] == False 

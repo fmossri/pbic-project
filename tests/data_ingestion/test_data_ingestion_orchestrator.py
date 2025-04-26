@@ -2,7 +2,7 @@ import os
 import pytest
 import shutil
 import numpy as np
-from unittest.mock import patch, MagicMock, call
+from unittest.mock import patch, MagicMock
 from src.data_ingestion import DataIngestionOrchestrator
 from src.models import DocumentFile, Domain
 from langchain.schema import Document
@@ -108,8 +108,12 @@ class TestDataIngestionOrchestrator:
             embeddings_dimension=384
         )
         
-        # Mock get_domain to return our test domain
-        mocker.patch('src.utils.sqlite_manager.SQLiteManager.get_domain', return_value=domain)
+        # Mock the implementation to return a list with just one domain,
+        # which is what the implementation expects for unpacking with [domain]
+        mocker.patch('src.utils.sqlite_manager.SQLiteManager.get_domain', return_value=[domain])
+        
+        # Also mock update_domain to verify it gets called
+        mocker.patch('src.utils.sqlite_manager.SQLiteManager.update_domain')
         
         return domain
     
@@ -202,6 +206,11 @@ class TestDataIngestionOrchestrator:
             return_value=[1]  # Now returns a list of integers
         )
 
+        # 5. Mock update_domain method
+        mocks['update_domain'] = mocker.patch(
+            'src.utils.sqlite_manager.SQLiteManager.update_domain'
+        )
+
         # Return the dictionary of mocks for tests to use if needed
         return mocks
             
@@ -276,6 +285,9 @@ class TestDataIngestionOrchestrator:
         # Reset mocks
         self.mock_conn.reset_mock()
         self.mock_control_conn.reset_mock()
+        
+        # Mock update_domain directly on SQLiteManager
+        mock_update_domain = mocker.patch('src.utils.sqlite_manager.SQLiteManager.update_domain')
 
         # Mock document processor
         def mock_process_document(file):
@@ -304,14 +316,16 @@ class TestDataIngestionOrchestrator:
         orchestrator.process_directory(self.test_pdfs_dir, domain_name="test_domain")
 
         # Verify calls to databases
-        assert mocked_managers['get_connection'].call_count >= 2 # At least 2 calls: control DB and domain DB
+        # At least 3 calls: initial control DB, domain DB for each file, final control DB for update
+        assert mocked_managers['get_connection'].call_count >= 3
         
-        # Verify control=True was passed to get_connection
+        # Verify control=True was passed to get_connection at least twice (initial and final)
         control_calls = [call for call in mocked_managers['get_connection'].call_args_list 
                         if call.kwargs.get('control') == True]
-        assert len(control_calls) >= 1, "get_connection should be called with control=True"
+        assert len(control_calls) >= 2, "get_connection should be called with control=True twice"
         
-        # Verify begin was called for both connections
+        # Verify begin was called for each connection
+        # Should be called once per file processed (for domain DB)
         assert mocked_managers['sqlite_begin'].call_count >= 2
         
         # Verify mock_is_duplicate was called at least once
@@ -322,12 +336,25 @@ class TestDataIngestionOrchestrator:
         mocked_managers['insert_chunk'].assert_called_once()
         mocked_managers['add_embeddings'].assert_called_once()
         
-        # Verify commits: one for control DB, one for regular DB
-        assert self.mock_control_conn.commit.call_count == 1, "Control DB should be committed once"
-        assert self.mock_conn.commit.call_count == 1, "Regular DB should be committed once"
+        # Verify domain DB committed once (for successful file)
+        assert self.mock_conn.commit.call_count == 1, "Domain DB should be committed once"
+        
+        # Verify control DB committed twice:
+        # 1. After getting the domain in the beginning
+        # 2. After updating domain metrics at the end
+        assert self.mock_control_conn.commit.call_count == 2, "Control DB should be committed twice: once when getting domain, once when updating"
         
         # Verify rollback was called exactly once (for the duplicate file)
         self.mock_conn.rollback.assert_called_once()
+        
+        # Verify domain was updated at the end with proper metrics
+        mock_update_domain.assert_called_once()
+        
+        # Verify the domain was updated with the correct values
+        update_args = mock_update_domain.call_args
+        if update_args:
+            updated_domain = update_args[0][0]  # First positional arg
+            assert updated_domain.total_documents == 1  # Should match processed_files in metrics
 
     def test_duplicate_handling(self, orchestrator, mocked_managers, mocker, domain_fixture):
         """Testa o tratamento de arquivos duplicados."""
@@ -456,3 +483,4 @@ class TestDataIngestionOrchestrator:
         
         # Verify commit on control database
         self.mock_control_conn.commit.assert_called_once() 
+

@@ -182,7 +182,7 @@ class TestFaissManager:
         
         # Search for a vector (use the first one from the sample set)
         query_vector = sample_embeddings[0].reshape(1, -1)
-        distances, indices = faiss_manager.search_faiss_index(query_vector, k=1)
+        distances, indices = faiss_manager.search_faiss_index(query_vector, vector_store_path=vector_store_path, k=1)
         
         # The most similar vector should be itself
         assert indices[0][0] == 0

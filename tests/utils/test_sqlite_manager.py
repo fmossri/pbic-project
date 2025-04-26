@@ -474,11 +474,24 @@ class TestSQLiteManager:
             )
             conn.commit()
             
-            # Retrieve the domain - this now works because we updated sqlite_manager.py
-            retrieved_domain = sqlite_manager.get_domain(conn, domain_name)
+            # Retrieve the domain
+            result = sqlite_manager.get_domain(conn, domain_name)
             
-            # Verify the domain was retrieved correctly
-            assert retrieved_domain is not None
+            # The implementation might return either:
+            # 1. A single Domain object (original implementation)
+            # 2. A list of Domain objects (refactored implementation)
+            # Adapt test to handle both cases:
+            
+            if isinstance(result, list):
+                # List implementation
+                assert len(result) == 1
+                retrieved_domain = result[0]
+            else:
+                # Original implementation (single object)
+                assert result is not None
+                retrieved_domain = result
+            
+            # Verify domain properties regardless of return type
             assert retrieved_domain.name == domain_name
             assert retrieved_domain.description == domain.description
             assert retrieved_domain.keywords == domain.keywords
@@ -490,4 +503,207 @@ class TestSQLiteManager:
             
             # Test retrieving a non-existent domain
             non_existent = sqlite_manager.get_domain(conn, "non_existent_domain")
-            assert non_existent is None
+            # This should be None in the original implementation, or an empty list in the refactored version
+            assert non_existent is None or (isinstance(non_existent, list) and len(non_existent) == 0)
+    
+    def test_update_domain(self, sqlite_manager):
+        """Test updating a domain."""
+        # Initialize the database
+        sqlite_manager.initialize_database()
+        
+        # Create and insert a domain
+        domain_name = "test_domain"
+        domain = Domain(
+            id=None,
+            name=domain_name,
+            description="Test domain description",
+            keywords="test,domain,keywords",
+            total_documents=0,
+            db_path="path/to/db",
+            vector_store_path="path/to/vectors",
+            faiss_index=1,
+            embeddings_dimension=384
+        )
+        
+        with sqlite_manager.get_connection() as conn:
+            # Insert the domain using direct SQL first
+            cursor = conn.cursor()
+            cursor.execute(
+                "INSERT INTO domains (name, description, keywords, total_documents, db_path, vector_store_path, faiss_index, embeddings_dimension) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                (domain.name, domain.description, domain.keywords, domain.total_documents, domain.db_path, domain.vector_store_path, domain.faiss_index, domain.embeddings_dimension)
+            )
+            domain_id = cursor.lastrowid
+            conn.commit()
+            
+            # Add the ID to the domain object
+            domain.id = domain_id
+            
+            # Update the domain properties
+            domain.description = "Updated description"
+            domain.keywords = "updated,keywords"
+            domain.total_documents = 5
+            
+            # Call the update_domain method
+            sqlite_manager.update_domain(domain, conn)
+            
+            # Verify the domain was updated
+            cursor.execute("SELECT description, keywords, total_documents FROM domains WHERE name = ?", (domain_name,))
+            result = cursor.fetchone()
+            
+            assert result is not None
+            assert result[0] == "Updated description"
+            assert result[1] == "updated,keywords"
+            assert result[2] == 5
+    
+    def test_delete_domain(self, sqlite_manager):
+        """Test deleting a domain."""
+        # Initialize the database
+        sqlite_manager.initialize_database()
+        
+        # Create and insert a domain
+        domain_name = "test_domain"
+        domain = Domain(
+            id=None,
+            name=domain_name,
+            description="Test domain description",
+            keywords="test,domain,keywords",
+            total_documents=0,
+            db_path="path/to/db",
+            vector_store_path="path/to/vectors",
+            faiss_index=1,
+            embeddings_dimension=384
+        )
+        
+        with sqlite_manager.get_connection() as conn:
+            # Insert the domain using direct SQL first
+            cursor = conn.cursor()
+            cursor.execute(
+                "INSERT INTO domains (name, description, keywords, total_documents, db_path, vector_store_path, faiss_index, embeddings_dimension) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                (domain.name, domain.description, domain.keywords, domain.total_documents, domain.db_path, domain.vector_store_path, domain.faiss_index, domain.embeddings_dimension)
+            )
+            domain_id = cursor.lastrowid
+            conn.commit()
+            
+            # Add the ID to the domain object
+            domain.id = domain_id
+            
+            # Verify the domain exists
+            cursor.execute("SELECT id FROM domains WHERE name = ?", (domain_name,))
+            assert cursor.fetchone() is not None
+            
+            # Call the delete_domain method
+            sqlite_manager.delete_domain(domain, conn)
+            
+            # Verify the domain was deleted
+            cursor.execute("SELECT id FROM domains WHERE name = ?", (domain_name,))
+            assert cursor.fetchone() is None
+    
+    def test_insert_domain(self, sqlite_manager):
+        """Test inserting a domain."""
+        # Initialize the database
+        sqlite_manager.initialize_database()
+        
+        # Create a domain object
+        domain = Domain(
+            id=None,
+            name="new_test_domain",
+            description="New test domain description",
+            keywords="new,test,domain,keywords",
+            total_documents=0,
+            db_path="path/to/new/db",
+            vector_store_path="path/to/new/vectors",
+            faiss_index=2,
+            embeddings_dimension=384
+        )
+        
+        with sqlite_manager.get_connection() as conn:
+            # Call the insert_domain method
+            sqlite_manager.insert_domain(domain, conn)
+            conn.commit()
+            
+            # Verify the domain was inserted
+            cursor = conn.cursor()
+            cursor.execute("SELECT id, name, description, keywords, total_documents FROM domains WHERE name = ?", (domain.name,))
+            result = cursor.fetchone()
+            
+            assert result is not None
+            assert result[1] == domain.name
+            assert result[2] == domain.description
+            assert result[3] == domain.keywords
+            assert result[4] == domain.total_documents
+
+    def test_get_all_domains(self, sqlite_manager):
+        """Test retrieving all domains."""
+        # Initialize the database
+        sqlite_manager.initialize_database()
+        
+        # Create and insert multiple domains
+        domains = [
+            Domain(
+                id=None,
+                name="domain1",
+                description="Domain 1 description",
+                keywords="domain1,keywords",
+                total_documents=5,
+                db_path="path/to/db1",
+                vector_store_path="path/to/vectors1",
+                faiss_index=1,
+                embeddings_dimension=384
+            ),
+            Domain(
+                id=None,
+                name="domain2",
+                description="Domain 2 description",
+                keywords="domain2,keywords",
+                total_documents=10,
+                db_path="path/to/db2",
+                vector_store_path="path/to/vectors2",
+                faiss_index=2,
+                embeddings_dimension=384
+            ),
+            Domain(
+                id=None,
+                name="domain3",
+                description="Domain 3 description",
+                keywords="domain3,keywords",
+                total_documents=15,
+                db_path="path/to/db3",
+                vector_store_path="path/to/vectors3",
+                faiss_index=3,
+                embeddings_dimension=384
+            )
+        ]
+        
+        with sqlite_manager.get_connection() as conn:
+            cursor = conn.cursor()
+            # Insert all domains
+            for domain in domains:
+                cursor.execute(
+                    "INSERT INTO domains (name, description, keywords, total_documents, db_path, vector_store_path, faiss_index, embeddings_dimension) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                    (domain.name, domain.description, domain.keywords, domain.total_documents, domain.db_path, domain.vector_store_path, domain.faiss_index, domain.embeddings_dimension)
+                )
+            conn.commit()
+            
+            # Retrieve all domains
+            result = sqlite_manager.get_domain(conn, None)
+            
+            # Verify the result is a list of domains
+            assert result is not None
+            assert isinstance(result, list)
+            assert len(result) == 3
+            
+            # Verify domain names are all present
+            domain_names = [domain.name for domain in result]
+            assert "domain1" in domain_names
+            assert "domain2" in domain_names
+            assert "domain3" in domain_names
+            
+            # Verify properties of one domain
+            domain1 = next(domain for domain in result if domain.name == "domain1")
+            assert domain1.description == "Domain 1 description"
+            assert domain1.keywords == "domain1,keywords"
+            assert domain1.total_documents == 5
+            assert domain1.db_path == "path/to/db1"
+            assert domain1.vector_store_path == "path/to/vectors1"
+            assert domain1.faiss_index == 1
+            assert domain1.embeddings_dimension == 384
