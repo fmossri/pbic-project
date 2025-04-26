@@ -2,9 +2,10 @@ import pytest
 import numpy as np
 from src.utils.embedding_generator import EmbeddingGenerator
 
-@pytest.fixture
+@pytest.fixture(scope="module")
 def embedding_generator():
-    """Fixture que fornece uma instância do EmbeddingGenerator."""
+    """Fixture que fornece uma instância do EmbeddingGenerator.
+       Carrega o modelo uma vez por módulo de teste."""
     return EmbeddingGenerator(log_domain="test_domain")
 
 @pytest.fixture
@@ -27,12 +28,11 @@ def single_text():
     """Fixture que fornece um único texto para teste."""
     return ["O processamento de documentos PDF é uma funcionalidade essencial para muitas aplicações."]
 
-def test_initialization():
+def test_initialization(embedding_generator):
     """Testa a inicialização do EmbeddingGenerator."""
-    generator = EmbeddingGenerator(log_domain="test_domain")
-    assert isinstance(generator, EmbeddingGenerator)
-    assert generator.model_name == "all-MiniLM-L6-v2"
-    assert generator.embedding_dimension > 0
+    assert isinstance(embedding_generator, EmbeddingGenerator)
+    assert embedding_generator.model_name == "all-MiniLM-L6-v2"
+    assert embedding_generator.embedding_dimension > 0
 
 def test_empty_texts(embedding_generator):
     """Testa o comportamento com lista vazia de textos."""
