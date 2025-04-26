@@ -255,6 +255,18 @@ python -m pytest -vv
 - **API RESTful
 - **Funcionalidades avançadas de busca
 
+## Últimas Atualizações (YYYY-MM-DD)
+
+- **Refatoração do Modelo `Embedding`:** O modelo `Embedding` foi removido. O atributo `faiss_index` foi migrado para o modelo `Chunk`. Todo o código relevante (`SQLiteManager`, `FaissManager`, orquestradores) foi atualizado para refletir essa mudança.
+- **Conclusão da Lógica de Domínios:**
+    - **Ingestão de Dados:** O `DataIngestionOrchestrator` agora seleciona o domínio correto, utiliza o banco de dados de controle para obter os caminhos, armazena os dados no banco de dados e índice FAISS específicos do domínio e atualiza a contagem `total_documents` do domínio no banco de controle.
+    - **Processamento de Consultas:** O `QueryOrchestrator` implementa a seleção de domínios relevantes com base na consulta (usando LLM e informações do banco de controle) e recupera chunks apenas dos armazenamentos dos domínios selecionados.
+- **Melhorias na Suite de Testes:**
+    - Correção de falhas nos testes dos orquestradores (`DataIngestionOrchestrator`, `QueryOrchestrator`) relacionadas a mocks, serialização, assinaturas de métodos e importações ausentes.
+    - Expansão significativa da cobertura de testes do `SQLiteManager` para operações CRUD de domínio e tratamento de erros, com simulação de erros aprimorada.
+- **Correção de Bugs:**
+    - Corrigido `AttributeError` na chamada do logger em `SQLiteManager.insert_domain` (`domain.domain_name` para `domain.name`).
+
 ## Próximos Passos Possíveis
 
 1. **Aprimoramento do Sistema de Consulta**
