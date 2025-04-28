@@ -11,7 +11,7 @@ st.set_page_config(
     page_icon="📚",
 )
 
-st.sidebar.success("Select a section above.")
+st.sidebar.success("Selecione uma seção acima.")
 
-st.title("📚 RAG System Admin Interface")
-st.write("Welcome! Use the sidebar to navigate between management sections.")
+st.title("📚 Página do Admin do Sistema RAG")
+st.write("Bem-vindo! Use o sidebar para navegar entre as seções de gerenciamento.")
