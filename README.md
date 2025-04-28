@@ -351,3 +351,7 @@ File output format (JSON):
 - API RESTful
 - Funcionalidades avançadas de busca
 
+6.  **FAISS Index with Stable IDs:**
+    - Research and potentially implement a FAISS index strategy that supports stable, user-provided IDs (e.g., `IndexIDMap`) to allow for reliable vector deletion without invalidating existing vector-chunk links.
+    - This will likely involve updating the `FaissManager`, ingestion logic, and how vector references are stored/used.
+
