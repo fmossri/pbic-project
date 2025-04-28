@@ -205,10 +205,11 @@ class DomainManager:
         try:
             with self.sqlite_manager.get_connection(control=True) as conn:
                 domains = self.sqlite_manager.get_domain(conn)
-                self.logger.info("Dominios listados com sucesso", domains=domains)
+                self.logger.info("Dominios listados com sucesso", domains= [domain.name for domain in domains])
                 return domains
         except Exception as e:
-            self.logger.error(f"Erro ao listar dominios de conhecimento: {e}")
+            self.logger.error(f"Erro ao listar dominios de conhecimento: {e}", exc_info=True) # Add exc_info for traceback
+            raise e # Re-raise the exception
 
     def list_domain_documents(self, domain_name: str) -> List[str]:
         """
