@@ -7,5 +7,6 @@ CREATE TABLE IF NOT EXISTS knowledge_domains (
     vector_store_path TEXT NOT NULL UNIQUE,
     db_path TEXT NOT NULL UNIQUE,
     embeddings_dimension INTEGER NOT NULL,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
