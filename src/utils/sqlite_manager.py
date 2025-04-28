@@ -3,6 +3,7 @@ import os
 from typing import List, Optional, Dict, Any
 from src.models import DocumentFile, Chunk, Domain
 from src.utils.logger import get_logger
+import datetime
 
 class SQLiteManager:
     """Gerenciador de banco de dados SQLite."""
@@ -264,7 +265,8 @@ class SQLiteManager:
                         vector_store_path=row[5],
                         db_path=row[6],
                         embeddings_dimension=row[7],
-                        created_at=row[8]
+                        created_at=row[8],
+                        updated_at=row[9]
                     )
                     all_domains.append(domain)
                 return all_domains
@@ -280,6 +282,8 @@ class SQLiteManager:
         Atualiza um domínio de conhecimento no banco de dados de controle.
         """      
         self.logger.debug(f"Atualizando domínio de conhecimento no banco de dados: {domain.name}")
+
+        update["updated_at"] = datetime.datetime.now(datetime.timezone.utc).isoformat()
 
         set_parts, params = [], []
         for column, value in update.items():
@@ -298,7 +302,6 @@ class SQLiteManager:
             cursor = conn.cursor()
             cursor.execute(query, params)
             self.logger.debug(f"Atualização executada para o domínio. Aguardando commit",)
-
 
         except sqlite3.Error as e:
             self.logger.error(f"Erro ao atualizar o domínio de conhecimento: {e}")
