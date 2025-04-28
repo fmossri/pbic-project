@@ -177,56 +177,6 @@ class DataIngestionOrchestrator:
         self.logger.info(f"{len(pdf_files)} arquivos PDF encontrados no diretorio", directory_path=directory_path)
         return pdf_files
     
-    def add_new_domain(self, domain_name: str, domain_description: str, domain_keywords: str) -> None:
-        """
-        Adiciona um novo domínio de conhecimento ao banco de dados.
-
-        Args:
-            domain_name (str): Nome do domínio de conhecimento.
-            domain_description (str): Descrição do domínio de conhecimento.
-            domain_keywords (str): Palavras-chave do domínio de conhecimento, separadas por virgulas.
-        """
-        self.logger.info("Adicionando novo domínio de conhecimento", domain_name=domain_name, domain_description=domain_description, domain_keywords=domain_keywords)
-        
-        try:
-            with self.sqlite_manager.get_connection(control=True) as conn:  
-                self.sqlite_manager.begin(conn)
-
-                #Verifica se o domain já existe
-                domain = self.sqlite_manager.get_domain(conn, domain_name)
-                if domain:
-                    self.logger.error("Domínio já existe", domain_name=domain_name)
-                    conn.rollback()
-                    return
-                
-                #Cria os caminhos da db e vectorstore
-                domain_db_path = os.path.join("storage", "domains", f"{domain_name}", f"{domain_name}.db")
-                vector_store_path = os.path.join("storage", "domains", f"{domain_name}", "vector_store",f"{domain_name}.faiss")
-
-                domain = Domain(
-                    id=None, 
-                    name=domain_name, 
-                    description=domain_description, 
-                    keywords=domain_keywords, 
-                    db_path=domain_db_path, 
-                    vector_store_path=vector_store_path, 
-                    total_documents=0,
-                    faiss_index=None,
-                    embeddings_dimension=self.embedding_generator.embedding_dimension
-                )
-                normalized_description = self.text_normalizer.normalize([domain.description])
-                domain_vectors = self.embedding_generator.generate_embeddings(normalized_description)
-
-                [faiss_index] = self.faiss_manager.add_embeddings(domain_vectors, domain.vector_store_path, domain.embeddings_dimension)
-                domain.faiss_index = faiss_index
-
-                self.sqlite_manager.insert_domain(domain, conn)
-                conn.commit()
-
-        except Exception as e:
-            self.logger.error(f"Erro ao adicionar novo domínio de conhecimento: {e}")
-            raise e
-                
     def process_directory(self, directory_path: str, domain_name: str = None) -> None:
         """
         Processa todos os arquivos PDF em um diretório.
@@ -256,18 +206,20 @@ class DataIngestionOrchestrator:
             try:
                 self.sqlite_manager.begin(conn)
                 [domain] = self.sqlite_manager.get_domain(conn, domain_name)
+                #Antes da primeira ingestão, a dimensão dos embeddings é 0. Define a dimensão dos embeddings do domínio
+                if domain.embeddings_dimension == 0:
+                    domain.embeddings_dimension = self.embedding_generator.embedding_dimension
+                    self.sqlite_manager.update_domain(domain.id, conn, {"embeddings_dimension": domain.embeddings_dimension})
                 conn.commit()
             except Exception as e:
                 self.logger.error(f"Erro ao obter o domínio de conhecimento: {e}")
                 raise e
-
+            
         pdf_files = self._list_pdf_files(directory_path)
-
 
         self.metrics_data["total_files"] = len(pdf_files)
         total_chunk_size = 0
     
-
         with self.sqlite_manager.get_connection(db_path=domain.db_path) as conn:
             self.logger.info(f"Iniciando o processamento dos arquivos PDF")
 
@@ -428,17 +380,15 @@ class DataIngestionOrchestrator:
                     conn.rollback()
                     continue
         
-
         with self.sqlite_manager.get_connection(control=True) as conn:
             try:
                 self.sqlite_manager.begin(conn)
                 domain.total_documents += self.metrics_data["processed_files"]
-                self.sqlite_manager.update_domain(domain, conn)
+                self.sqlite_manager.update_domain(domain, conn, {"total_documents": domain.total_documents})
                 conn.commit()
             except Exception as e:
                 self.logger.error(f"Erro ao atualizar o domínio de conhecimento: {e}", domain_name=domain.name, domain_total_documents=domain.total_documents)
                 raise e
-
 
         self.metrics_data["duration"] = str(datetime.now() - self.metrics_data["start_time"])
         self.metrics_data["start_time"] = self.metrics_data["start_time"].strftime("%Y-%m-%d %H:%M:%S")
