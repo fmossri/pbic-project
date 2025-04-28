@@ -209,7 +209,7 @@ class DataIngestionOrchestrator:
                 #Antes da primeira ingestão, a dimensão dos embeddings é 0. Define a dimensão dos embeddings do domínio
                 if domain.embeddings_dimension == 0:
                     domain.embeddings_dimension = self.embedding_generator.embedding_dimension
-                    self.sqlite_manager.update_domain(domain.id, conn, {"embeddings_dimension": domain.embeddings_dimension})
+                    self.sqlite_manager.update_domain(domain, conn, {"embeddings_dimension": domain.embeddings_dimension})
                 conn.commit()
             except Exception as e:
                 self.logger.error(f"Erro ao obter o domínio de conhecimento: {e}")
@@ -219,7 +219,7 @@ class DataIngestionOrchestrator:
 
         self.metrics_data["total_files"] = len(pdf_files)
         total_chunk_size = 0
-    
+
         with self.sqlite_manager.get_connection(db_path=domain.db_path) as conn:
             self.logger.info(f"Iniciando o processamento dos arquivos PDF")
 
@@ -379,7 +379,7 @@ class DataIngestionOrchestrator:
                     self.metrics_data[file.name] = file_metrics
                     conn.rollback()
                     continue
-        
+
         with self.sqlite_manager.get_connection(control=True) as conn:
             try:
                 self.sqlite_manager.begin(conn)
