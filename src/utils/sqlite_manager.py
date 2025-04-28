@@ -27,15 +27,29 @@ class SQLiteManager:
         if control:
             self.db_path = self.control_db_path
             self.schema_path = self.CONTROL_SCHEMA_PATH
+        else:
+            self.db_path = db_path
+            self.schema_path = self.DOMAIN_SCHEMA_PATH
         try:
             with open(self.schema_path, "r") as f:
                 schema = f.read()
 
-            with sqlite3.connect(self.db_path) as conn:
+            # Use the db_path ARGUMENT here, not self.db_path from instance state
+            path_to_connect = db_path if not control else self.control_db_path 
+            self.logger.info(f"Resolved path for init connection: {path_to_connect}")
+
+            # --- Ensure directory exists before connecting --- 
+            db_dir = os.path.dirname(path_to_connect)
+            if not os.path.exists(db_dir):
+                self.logger.info(f"Database directory does not exist. Creating: {db_dir}")
+                os.makedirs(db_dir, exist_ok=True)
+            # ------------------------------------------------
+
+            with sqlite3.connect(path_to_connect) as conn:
                 conn.executescript(schema)
                 conn.commit()
 
-            self.logger.info(f"Banco de dados inicializado com sucesso")
+            self.logger.info(f"Banco de dados inicializado com sucesso em {path_to_connect}")
 
         except FileNotFoundError as e:
             self.logger.error(f"Erro: Schema nao encontrado em {self.schema_path}: {e}")
@@ -54,11 +68,12 @@ class SQLiteManager:
                 self.initialize_database(self.control_db_path)
             self.logger.info(f"Conectando ao banco de dados de controle em: {self.control_db_path}")
             return sqlite3.connect(self.control_db_path)
-
+        
         self.db_path = db_path if db_path is not None else self.db_path
+
         if not os.path.exists(self.db_path):
             self.logger.info(f"Banco de dados nao encontrado em {self.db_path}. Inicializando o banco de dados...")
-            self.initialize_database(self.db_path)
+            self.initialize_database(db_path=self.db_path)
         
         self.logger.info(f"Conectando ao banco de dados em: {self.db_path}")
         return sqlite3.connect(self.db_path)
