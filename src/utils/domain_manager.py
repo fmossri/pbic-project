@@ -1,12 +1,13 @@
 import os
 import shutil
 from typing import Dict, Any, List, Tuple
-from src.utils import Logger, SQLiteManager
+from src.utils.sqlite_manager import SQLiteManager
+from src.utils.logger import get_logger
 from src.models import Domain
 
 class DomainManager:
     def __init__(self, log_domain: str = "utils"):
-        self.logger = Logger(log_domain)
+        self.logger = get_logger(__name__, log_domain)
         self.logger.info("Inicializando DomainManager")
         
         self.control_db_path = os.path.join("storage", "domains", "control.db")
