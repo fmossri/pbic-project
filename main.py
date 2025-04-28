@@ -4,6 +4,7 @@ from time import time
 from typing import Dict
 from src.data_ingestion import DataIngestionOrchestrator
 from src.query_processing import QueryOrchestrator
+from src.utils import DomainManager
 from src.utils.logger import setup_logging, get_logger
 
 print("Iniciando a aplicação")
@@ -41,8 +42,8 @@ def register_domain(domain_name: str, domain_description: str, domain_keywords: 
     """
     logger.info("Iniciando o processo de criacao de novo dominio de conhecimento")
     try:
-        ingestion = DataIngestionOrchestrator()
-        ingestion.add_new_domain(domain_name, domain_description, domain_keywords)
+        domain_manager = DomainManager()
+        domain_manager.create_domain(domain_name, domain_description, domain_keywords)
         logger.info("Novo dominio de conhecimento criado com sucesso")
     except Exception as e:
         logger.error("Erro durante a criacao de novo dominio de conhecimento", error=str(e))
