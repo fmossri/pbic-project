@@ -1,10 +1,7 @@
 import os
-import shutil
 import pytest
-import tempfile
 import numpy as np
 import faiss
-from pathlib import Path
 
 from src.utils import FaissManager
 

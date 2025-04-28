@@ -1,6 +1,6 @@
 import pytest
 import numpy as np
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock
 from src.query_processing.query_orchestrator import QueryOrchestrator
 
 class TestQueryOrchestrator:

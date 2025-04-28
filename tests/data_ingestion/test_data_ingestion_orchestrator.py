@@ -94,28 +94,33 @@ class TestDataIngestionOrchestrator:
         yield
     
     @pytest.fixture
-    def domain_fixture(self, mocker):
-        """Fixture para criar um domínio de teste."""
+    def domain_fixture(self, mocker, request):
+        """Fixture para criar um domínio de teste com dimensão de embedding opcional."""
+        # Get initial dimension from test parameter, default to 384 if not provided
+        initial_dimension = getattr(request, "param", 384)
+
+        # Use the actual Domain model definition
         domain = Domain(
             id=1,
             name="test_domain",
             description="Test domain description",
             keywords="test,domain,keywords",
-            total_documents=0,
-            db_path="storage/domains/test_domain/test_domain.db",
-            vector_store_path="storage/domains/test_domain/vector_store/test_domain.faiss",
-            faiss_index=1,
-            embeddings_dimension=384
+            total_documents=0, # Default or initial value
+            db_path="storage/domains/test_domain/test_domain.db", # Example path
+            vector_store_path="storage/domains/test_domain/vector_store/test_domain.faiss", # Example path
+            embeddings_dimension=initial_dimension # Use parameter here
+            # created_at is Optional[datetime]=None by default in model
         )
-        
-        # Mock the implementation to return a list with just one domain,
-        # which is what the implementation expects for unpacking with [domain]
-        mocker.patch('src.utils.sqlite_manager.SQLiteManager.get_domain', return_value=[domain])
-        
-        # Also mock update_domain to verify it gets called
-        mocker.patch('src.utils.sqlite_manager.SQLiteManager.update_domain')
-        
-        return domain
+
+        # Mock get_domain to return this specific domain object in a list
+        mock_get_domain = mocker.patch('src.utils.sqlite_manager.SQLiteManager.get_domain', return_value=[domain])
+
+        # Mock update_domain to verify it gets called (use the mock from mocked_managers if preferred,
+        # but patching here ensures it's available when fixture is used)
+        mock_update_domain = mocker.patch('src.utils.sqlite_manager.SQLiteManager.update_domain')
+
+        # Return the domain and the mocks
+        yield domain, mock_get_domain, mock_update_domain
     
     @pytest.fixture
     def orchestrator(self):
@@ -186,11 +191,6 @@ class TestDataIngestionOrchestrator:
         )
         mocks['insert_chunk'] = mocker.patch(
             'src.utils.sqlite_manager.SQLiteManager.insert_chunks', return_value=[1]
-        )
-        
-        # Mock insert_domain method
-        mocks['insert_domain'] = mocker.patch(
-            'src.utils.sqlite_manager.SQLiteManager.insert_domain'
         )
 
         # 3. Mock EmbeddingGenerator method to return a NumPy array
@@ -282,11 +282,13 @@ class TestDataIngestionOrchestrator:
         self, orchestrator, mocked_managers, mocker, domain_fixture
     ):
         """Testa o processamento de um diretório com PDFs válidos (patching methods)."""
+        # domain_fixture provides domain with dimension=384 by default
+        initial_domain, mock_get_domain, mock_update_domain = domain_fixture # Unpack 3 values
+
         # Reset mocks
         self.mock_conn.reset_mock()
         self.mock_control_conn.reset_mock()
-        
-        # Mock update_domain directly on SQLiteManager
+        # Mock update_domain again locally to ensure clean state for assertions
         mock_update_domain = mocker.patch('src.utils.sqlite_manager.SQLiteManager.update_domain')
 
         # Mock document processor
@@ -340,21 +342,22 @@ class TestDataIngestionOrchestrator:
         assert self.mock_conn.commit.call_count == 1, "Domain DB should be committed once"
         
         # Verify control DB committed twice:
-        # 1. After getting the domain in the beginning
-        # 2. After updating domain metrics at the end
-        assert self.mock_control_conn.commit.call_count == 2, "Control DB should be committed twice: once when getting domain, once when updating"
+        # 1. After getting the domain (dimension wasn't 0, so no update here)
+        # 2. After updating domain metrics (total_docs) at the end
+        assert self.mock_control_conn.commit.call_count == 2, f"Control DB should be committed twice (get, update count), got {self.mock_control_conn.commit.call_count}"
         
         # Verify rollback was called exactly once (for the duplicate file)
         self.mock_conn.rollback.assert_called_once()
         
-        # Verify domain was updated at the end with proper metrics
+        # Verify update_domain was called only *once* (for total_documents)
         mock_update_domain.assert_called_once()
         
-        # Verify the domain was updated with the correct values
-        update_args = mock_update_domain.call_args
-        if update_args:
-            updated_domain = update_args[0][0]  # First positional arg
-            assert updated_domain.total_documents == 1  # Should match processed_files in metrics
+        # Verify the domain was updated with the correct values (total_docs=1)
+        call_args_docs_update = mock_update_domain.call_args
+        # Check signature: update_domain(domain_object, conn, update_dict)
+        assert call_args_docs_update.args[0].id == initial_domain.id, "Incorrect domain object ID for total_docs update"
+        assert call_args_docs_update.args[1] == self.mock_control_conn, "Incorrect connection for total_docs update"
+        assert call_args_docs_update.args[2] == {"total_documents": 1}, "Incorrect update dict for total_docs"
 
     def test_duplicate_handling(self, orchestrator, mocked_managers, mocker, domain_fixture):
         """Testa o tratamento de arquivos duplicados."""
@@ -456,31 +459,53 @@ class TestDataIngestionOrchestrator:
         with pytest.raises(ValueError):
             orchestrator.process_directory(self.empty_dir, domain_name="test_domain")
 
-    def test_add_new_domain(self, orchestrator, mocked_managers, mocker):
-        """Testa a adição de um novo domínio."""
-        # Reset mocks
-        self.mock_conn.reset_mock()
+    @pytest.mark.parametrize("domain_fixture", [0], indirect=True)
+    def test_process_directory_updates_embedding_dimension(
+        self, orchestrator, mocked_managers, mocker, domain_fixture
+    ):
+        """
+        Testa se process_directory atualiza embeddings_dimension se for 0.
+        """
+        # domain_fixture now provides the domain with embeddings_dimension=0
+        initial_domain, mock_get_domain, mock_update_domain = domain_fixture
+        # Get expected dimension from the orchestrator's generator instance
+        expected_final_dimension = orchestrator.embedding_generator.embedding_dimension
+
+        # Reset mocks used within the test
         self.mock_control_conn.reset_mock()
-        
-        # Mock the get_domain method to return None (domain doesn't exist yet)
-        mocker.patch('src.utils.sqlite_manager.SQLiteManager.get_domain', return_value=None)
-        
-        # Execute the method
-        orchestrator.add_new_domain("test_domain", "Test domain description", "test,domain,keywords")
-        
-        # Verify calls to control database
-        assert mocked_managers['get_connection'].call_count >= 1
-        # Verify control=True was passed to get_connection
-        control_calls = [call for call in mocked_managers['get_connection'].call_args_list 
-                        if call.kwargs.get('control') == True]
-        assert len(control_calls) >= 1, "get_connection should be called with control=True"
-        
-        # Verify begin was called
-        mocked_managers['sqlite_begin'].assert_called()
-        
-        # Verify domain creation and insertion
-        mocked_managers['insert_domain'].assert_called_once()
-        
-        # Verify commit on control database
-        self.mock_control_conn.commit.assert_called_once() 
+        mock_update_domain.reset_mock() # Reset the specific mock we want to check
+
+        # Mock document processing to simulate one successful file
+        def mock_process_document(file):
+            file.hash = "unique_hash_for_dim_test"
+            file.pages = [Document(page_content="Test content dim update", metadata={"page": 1})]
+            file.total_pages = 1
+            return file
+        orchestrator.document_processor.process_document.side_effect = mock_process_document
+
+        # Mock _is_duplicate to always return False for this test
+        mocker.patch.object(DataIngestionOrchestrator,'_is_duplicate', return_value=False)
+
+        # --- Execute ---
+        orchestrator.process_directory(self.test_pdfs_dir, domain_name="test_domain")
+
+        # --- Assertions ---
+        # Check that get_domain was called initially
+        mock_get_domain.assert_called_once_with(self.mock_control_conn, "test_domain")
+
+        # Check that update_domain was called at least once (for the dimension update)
+        mock_update_domain.assert_called() # We expect at least the dimension update call
+
+        # Check the *first* call to update_domain (for embedding dimension)
+        # Ensure call_args_list is not empty before accessing index 0
+        assert mock_update_domain.call_args_list, "update_domain was not called"
+        call_args_dim_update = mock_update_domain.call_args_list[0]
+        # Verify using the signature: update_domain(domain_id, conn, update_dict)
+        assert call_args_dim_update.args[0] == initial_domain.id, "First call: Incorrect domain ID"
+        assert call_args_dim_update.args[1] == self.mock_control_conn, "First call: Incorrect connection object"
+        assert call_args_dim_update.args[2] == {"embeddings_dimension": expected_final_dimension}, f"First call: Incorrect update dict, expected dim {expected_final_dimension}"
+
+        # Verify control DB committed at least once (for the dimension update)
+        # The second commit for total_docs might happen, but we don't assert it here.
+        assert self.mock_control_conn.commit.call_count >= 1, f"Expected at least 1 commit on control DB for dimension update, got {self.mock_control_conn.commit.call_count}"
 

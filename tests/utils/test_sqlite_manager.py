@@ -1,6 +1,7 @@
 import os
 import pytest
 import sqlite3
+import shutil
 
 from src.models import DocumentFile, Chunk, Domain
 from src.utils import SQLiteManager
@@ -8,8 +9,6 @@ from src.utils import SQLiteManager
 class TestSQLiteManager:
     """Test suite for SQLiteManager class."""
 
-    REAL_SCHEMA_PATH = os.path.join("storage", "schemas", "schema.sql")
-    
     @pytest.fixture
     def temp_db_path(self):
         """Create a temporary database path."""
@@ -22,10 +21,10 @@ class TestSQLiteManager:
         
         yield temp_db_path
         
-        # Clean up after tests
-        if os.path.exists(temp_db_path):
-            os.unlink(temp_db_path)
-    
+        # Clean up using shutil.rmtree
+        if os.path.exists(test_dir):
+            shutil.rmtree(test_dir)
+
     @pytest.fixture
     def temp_control_db_path(self):
         """Create a temporary control database path."""
@@ -38,58 +37,37 @@ class TestSQLiteManager:
         
         yield temp_control_db_path
         
-        # Clean up after tests
-        if os.path.exists(temp_control_db_path):
-            os.unlink(temp_control_db_path)
-    
+        # Clean up using shutil.rmtree
+        if os.path.exists(test_dir):
+            # Remove the specific DB file first if it exists (optional, but safer)
+            if os.path.exists(temp_control_db_path):
+                os.unlink(temp_control_db_path)
+            # Then attempt to remove the directory if empty, otherwise use rmtree if needed
+
     @pytest.fixture
     def schema_path(self):
-        """Create a temporary schema path with a test schema."""
-        # Create a path for the test schema
-        schema_dir = os.path.join("tests", "storage", "schemas")
-        os.makedirs(schema_dir, exist_ok=True)
-        schema_path = os.path.join(schema_dir, "test_schema.sql")
-        
-        # Write a simple schema to the file
-        with open(schema_path, "w") as f:
-            f.write("CREATE TABLE IF NOT EXISTS document_files (id INTEGER PRIMARY KEY, hash TEXT, name TEXT, path TEXT, total_pages INTEGER);\n")
-            f.write("CREATE TABLE IF NOT EXISTS chunks (id INTEGER PRIMARY KEY, document_id INTEGER, page_number INTEGER, content TEXT, chunk_page_index INTEGER, faiss_index INTEGER, chunk_start_char_position INTEGER);\n")
-            f.write("CREATE TABLE IF NOT EXISTS domains (id INTEGER PRIMARY KEY, name TEXT, description TEXT, keywords TEXT, total_documents INTEGER, db_path TEXT, vector_store_path TEXT, faiss_index INTEGER, embeddings_dimension INTEGER);\n")
-            
-        
-        yield schema_path
-        
-        # Clean up after tests
-        if os.path.exists(schema_path):
-            os.unlink(schema_path)
+        """Provide the actual path to the domain-specific schema file."""
+        # Return the default schema path used by the manager
+        yield SQLiteManager.DOMAIN_SCHEMA_PATH
+        # No cleanup needed as we are not creating a temporary file
     
     @pytest.fixture
     def control_schema_path(self):
-        """Create a temporary control schema path with a test schema."""
-        # Create a path for the test control schema
-        schema_dir = os.path.join("tests", "storage", "schemas")
-        os.makedirs(schema_dir, exist_ok=True)
-        control_schema_path = os.path.join(schema_dir, "test_control_schema.sql")
-        
-        # Write a simple control schema to the file
-        with open(control_schema_path, "w") as f:
-            f.write("CREATE TABLE IF NOT EXISTS document_files (id INTEGER PRIMARY KEY, hash TEXT, name TEXT, path TEXT, total_pages INTEGER);\n")
-            
-        yield control_schema_path
-        
-        # Clean up after tests
-        if os.path.exists(control_schema_path):
-            os.unlink(control_schema_path)
+        """Provide the actual path to the control schema file."""
+        # Return the control schema path used by the manager
+        yield SQLiteManager.CONTROL_SCHEMA_PATH
+        # No cleanup needed as we are not creating a temporary file
     
     @pytest.fixture
     def sqlite_manager(self, temp_db_path, schema_path, temp_control_db_path, control_schema_path):
-        """Create a SQLiteManager instance for testing."""
+        """Create a SQLiteManager instance using temporary DB paths and actual schema paths."""
         manager = SQLiteManager()
+        # Set instance paths to temporary test database paths
         manager.db_path = temp_db_path
-        manager.schema_path = schema_path
         manager.control_db_path = temp_control_db_path
-        # Override class constant for testing
-        manager.CONTROL_SCHEMA_PATH = control_schema_path
+        # Set the schema paths the manager instance will use for initialization
+        manager.schema_path = schema_path # Uses actual path from schema_path fixture
+        manager.CONTROL_SCHEMA_PATH = control_schema_path # Uses actual path from control_schema_path fixture
         return manager
     
     @pytest.fixture
@@ -116,6 +94,19 @@ class TestSQLiteManager:
             faiss_index=None  # Updated to include faiss_index field with None value
         )
     
+    @pytest.fixture
+    def sample_domain(self):
+        """Create a sample Domain object for testing."""
+        return Domain(
+            name="test_domain_sample",
+            description="Sample description",
+            keywords="sample, test",
+            total_documents=0,
+            db_path=os.path.join("tests", "storage", "domains", "test_domain_sample", "test_domain_sample.db"),
+            vector_store_path=os.path.join("tests", "storage", "domains", "test_domain_sample", "vector_store", "test_domain_sample.faiss"),
+            embeddings_dimension=0 # Default initial value
+        )
+    
     def test_initialization(self, temp_db_path, schema_path):
         """Test SQLiteManager initialization."""
         manager = SQLiteManager()
@@ -128,14 +119,14 @@ class TestSQLiteManager:
         
         # Test default paths
         default_manager = SQLiteManager()
-        assert default_manager.db_path == SQLiteManager.DEFAULT_DB_PATH
-        assert default_manager.schema_path == SQLiteManager.DEFAULT_SCHEMA_PATH
+        assert default_manager.db_path == SQLiteManager.TEST_DB_PATH
+        assert default_manager.schema_path == SQLiteManager.DOMAIN_SCHEMA_PATH
         assert default_manager.control_db_path == SQLiteManager.CONTROL_DB_PATH
     
     def test_initialize_database(self, sqlite_manager):
-        """Test database initialization."""
+        """Test domain-specific database initialization using the temporary schema."""
         # Initialize the database
-        sqlite_manager.initialize_database()
+        sqlite_manager.initialize_database(db_path=sqlite_manager.db_path) # Explicitly pass path
         
         # Verify the database file was created
         assert os.path.exists(sqlite_manager.db_path)
@@ -151,6 +142,10 @@ class TestSQLiteManager:
             # Check for chunks table
             cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='chunks'")
             assert cursor.fetchone() is not None
+
+            # Check that knowledge_domains table does NOT exist
+            cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='knowledge_domains'")
+            assert cursor.fetchone() is None, "knowledge_domains table should not exist in domain DB"
     
     def test_initialize_database_with_control(self, sqlite_manager):
         """Test control database initialization."""
@@ -158,23 +153,15 @@ class TestSQLiteManager:
         sqlite_manager.initialize_database(control=True)
         
         # Verify the control database file was created
-        assert os.path.exists(sqlite_manager.db_path)
-        assert sqlite_manager.db_path == sqlite_manager.control_db_path
-        
-        # Verify schema path was set to control schema
-        assert sqlite_manager.schema_path == sqlite_manager.CONTROL_SCHEMA_PATH
-        
-        # Verify tables were created
-        with sqlite3.connect(sqlite_manager.db_path) as conn:
+        assert os.path.exists(sqlite_manager.control_db_path)
+
+        # Verify table was created based on the temporary control_schema_path fixture
+        with sqlite3.connect(sqlite_manager.control_db_path) as conn:
             cursor = conn.cursor()
             
-            # Check for document_files table
-            cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='document_files'")
+            # Check for knowledge_domains table
+            cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='knowledge_domains'")
             assert cursor.fetchone() is not None
-            
-            # Chunks table should not exist in control DB schema
-            cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='chunks'")
-            assert cursor.fetchone() is None
     
     def test_initialize_database_file_not_found(self, sqlite_manager):
         """Test error handling when schema file is not found."""
@@ -309,28 +296,33 @@ class TestSQLiteManager:
         
         conn.close()
     
-    def test_transaction_rollback_control_db(self, sqlite_manager, sample_document_file):
-        """Test transaction rollback in control database."""
+    def test_transaction_rollback_control_db(self, sqlite_manager, sample_domain):
+        """Test transaction rollback in control database using a domain."""
         # Initialize the control database
         sqlite_manager.initialize_database(control=True)
         
-        # Start a transaction and insert a document
+        # Start a transaction and insert a domain
         conn = sqlite_manager.get_connection(control=True)
         sqlite_manager.begin(conn)
         
-        document_id = sqlite_manager.insert_document_file(sample_document_file, conn)
-        
-        # Verify the document exists in the transaction
+        # Use insert_domain instead of insert_document_file
+        sqlite_manager.insert_domain(sample_domain, conn)
+        # Get the ID assigned during insertion (needed for verification)
         cursor = conn.cursor()
-        cursor.execute("SELECT COUNT(*) FROM document_files WHERE id = ?", (document_id,))
+        cursor.execute("SELECT id FROM knowledge_domains WHERE name = ?", (sample_domain.name,))
+        domain_id = cursor.fetchone()[0]
+        
+        # Verify the domain exists in the transaction
+        cursor.execute("SELECT COUNT(*) FROM knowledge_domains WHERE id = ?", (domain_id,))
         count = cursor.fetchone()[0]
         assert count == 1
         
         # Rollback the transaction
         conn.rollback()
         
-        # Verify the document doesn't exist after rollback
-        cursor.execute("SELECT COUNT(*) FROM document_files WHERE id = ?", (document_id,))
+        # Verify the domain doesn't exist after rollback
+        # Need to reopen connection or use the same cursor if still valid after rollback
+        cursor.execute("SELECT COUNT(*) FROM knowledge_domains WHERE id = ?", (domain_id,))
         count = cursor.fetchone()[0]
         assert count == 0
         
@@ -447,263 +439,146 @@ class TestSQLiteManager:
             assert chunks_content[1] == "Content 1"  # faiss_index 10
             assert chunks_content[2] == "Content 2"  # faiss_index 20
     
-    def test_get_domain(self, sqlite_manager):
-        """Test retrieving a domain by name."""
-        # Initialize the database
-        sqlite_manager.initialize_database()
+    def test_get_domain(self, sqlite_manager, sample_domain):
+        """Test retrieving domains from the control database."""
+        # Initialize control DB
+        sqlite_manager.initialize_database(control=True)
         
-        # Create and insert a domain
-        domain_name = "test_domain"
-        domain = Domain(
-            id=None,
-            name=domain_name,
-            description="Test domain description",
-            keywords="test,domain,keywords",
-            total_documents=0,
-            db_path="path/to/db",
-            vector_store_path="path/to/vectors",
-            faiss_index=1,
-            embeddings_dimension=384
-        )
-        
-        with sqlite_manager.get_connection() as conn:
+        # Insert a sample domain directly for testing retrieval
+        with sqlite_manager.get_connection(control=True) as conn:
             cursor = conn.cursor()
             cursor.execute(
-                "INSERT INTO domains (name, description, keywords, total_documents, db_path, vector_store_path, faiss_index, embeddings_dimension) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-                (domain.name, domain.description, domain.keywords, domain.total_documents, domain.db_path, domain.vector_store_path, domain.faiss_index, domain.embeddings_dimension)
+                """INSERT INTO knowledge_domains 
+                   (name, description, keywords, total_documents, db_path, vector_store_path, embeddings_dimension) 
+                   VALUES (?, ?, ?, ?, ?, ?, ?)""",
+                (sample_domain.name, sample_domain.description, sample_domain.keywords, 
+                 sample_domain.total_documents, sample_domain.db_path, sample_domain.vector_store_path,
+                 sample_domain.embeddings_dimension)
             )
             conn.commit()
-            
-            # Retrieve the domain
-            result = sqlite_manager.get_domain(conn, domain_name)
-            
-            # The implementation might return either:
-            # 1. A single Domain object (original implementation)
-            # 2. A list of Domain objects (refactored implementation)
-            # Adapt test to handle both cases:
-            
-            if isinstance(result, list):
-                # List implementation
-                assert len(result) == 1
-                retrieved_domain = result[0]
-            else:
-                # Original implementation (single object)
-                assert result is not None
-                retrieved_domain = result
-            
-            # Verify domain properties regardless of return type
-            assert retrieved_domain.name == domain_name
-            assert retrieved_domain.description == domain.description
-            assert retrieved_domain.keywords == domain.keywords
-            assert retrieved_domain.total_documents == domain.total_documents
-            assert retrieved_domain.db_path == domain.db_path
-            assert retrieved_domain.vector_store_path == domain.vector_store_path
-            assert retrieved_domain.faiss_index == domain.faiss_index
-            assert retrieved_domain.embeddings_dimension == domain.embeddings_dimension
-            
-            # Test retrieving a non-existent domain
-            non_existent = sqlite_manager.get_domain(conn, "non_existent_domain")
-            # This should be None in the original implementation, or an empty list in the refactored version
-            assert non_existent is None or (isinstance(non_existent, list) and len(non_existent) == 0)
-    
-    def test_update_domain(self, sqlite_manager):
-        """Test updating a domain."""
-        # Initialize the database
-        sqlite_manager.initialize_database()
-        
-        # Create and insert a domain
-        domain_name = "test_domain"
-        domain = Domain(
-            id=None,
-            name=domain_name,
-            description="Test domain description",
-            keywords="test,domain,keywords",
-            total_documents=0,
-            db_path="path/to/db",
-            vector_store_path="path/to/vectors",
-            faiss_index=1,
-            embeddings_dimension=384
-        )
-        
-        with sqlite_manager.get_connection() as conn:
-            # Insert the domain using direct SQL first
-            cursor = conn.cursor()
-            cursor.execute(
-                "INSERT INTO domains (name, description, keywords, total_documents, db_path, vector_store_path, faiss_index, embeddings_dimension) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-                (domain.name, domain.description, domain.keywords, domain.total_documents, domain.db_path, domain.vector_store_path, domain.faiss_index, domain.embeddings_dimension)
-            )
-            domain_id = cursor.lastrowid
-            conn.commit()
-            
-            # Add the ID to the domain object
-            domain.id = domain_id
-            
-            # Update the domain properties
-            domain.description = "Updated description"
-            domain.keywords = "updated,keywords"
-            domain.total_documents = 5
-            
-            # Call the update_domain method
-            sqlite_manager.update_domain(domain, conn)
-            
-            # Verify the domain was updated
-            cursor.execute("SELECT description, keywords, total_documents FROM domains WHERE name = ?", (domain_name,))
-            result = cursor.fetchone()
-            
-            assert result is not None
-            assert result[0] == "Updated description"
-            assert result[1] == "updated,keywords"
-            assert result[2] == 5
-    
-    def test_delete_domain(self, sqlite_manager):
-        """Test deleting a domain."""
-        # Initialize the database
-        sqlite_manager.initialize_database()
-        
-        # Create and insert a domain
-        domain_name = "test_domain"
-        domain = Domain(
-            id=None,
-            name=domain_name,
-            description="Test domain description",
-            keywords="test,domain,keywords",
-            total_documents=0,
-            db_path="path/to/db",
-            vector_store_path="path/to/vectors",
-            faiss_index=1,
-            embeddings_dimension=384
-        )
-        
-        with sqlite_manager.get_connection() as conn:
-            # Insert the domain using direct SQL first
-            cursor = conn.cursor()
-            cursor.execute(
-                "INSERT INTO domains (name, description, keywords, total_documents, db_path, vector_store_path, faiss_index, embeddings_dimension) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-                (domain.name, domain.description, domain.keywords, domain.total_documents, domain.db_path, domain.vector_store_path, domain.faiss_index, domain.embeddings_dimension)
-            )
-            domain_id = cursor.lastrowid
-            conn.commit()
-            
-            # Add the ID to the domain object
-            domain.id = domain_id
-            
-            # Verify the domain exists
-            cursor.execute("SELECT id FROM domains WHERE name = ?", (domain_name,))
-            assert cursor.fetchone() is not None
-            
-            # Call the delete_domain method
-            sqlite_manager.delete_domain(domain, conn)
-            
-            # Verify the domain was deleted
-            cursor.execute("SELECT id FROM domains WHERE name = ?", (domain_name,))
-            assert cursor.fetchone() is None
-    
-    def test_insert_domain(self, sqlite_manager):
-        """Test inserting a domain."""
-        # Initialize the database
-        sqlite_manager.initialize_database()
-        
-        # Create a domain object
-        domain = Domain(
-            id=None,
-            name="new_test_domain",
-            description="New test domain description",
-            keywords="new,test,domain,keywords",
-            total_documents=0,
-            db_path="path/to/new/db",
-            vector_store_path="path/to/new/vectors",
-            faiss_index=2,
-            embeddings_dimension=384
-        )
-        
-        with sqlite_manager.get_connection() as conn:
-            # Call the insert_domain method
-            sqlite_manager.insert_domain(domain, conn)
-            conn.commit()
-            
-            # Verify the domain was inserted
-            cursor = conn.cursor()
-            cursor.execute("SELECT id, name, description, keywords, total_documents FROM domains WHERE name = ?", (domain.name,))
-            result = cursor.fetchone()
-            
-            assert result is not None
-            assert result[1] == domain.name
-            assert result[2] == domain.description
-            assert result[3] == domain.keywords
-            assert result[4] == domain.total_documents
 
-    def test_get_all_domains(self, sqlite_manager):
-        """Test retrieving all domains."""
-        # Initialize the database
-        sqlite_manager.initialize_database()
-        
-        # Create and insert multiple domains
-        domains = [
-            Domain(
-                id=None,
-                name="domain1",
-                description="Domain 1 description",
-                keywords="domain1,keywords",
-                total_documents=5,
-                db_path="path/to/db1",
-                vector_store_path="path/to/vectors1",
-                faiss_index=1,
-                embeddings_dimension=384
-            ),
-            Domain(
-                id=None,
-                name="domain2",
-                description="Domain 2 description",
-                keywords="domain2,keywords",
-                total_documents=10,
-                db_path="path/to/db2",
-                vector_store_path="path/to/vectors2",
-                faiss_index=2,
-                embeddings_dimension=384
-            ),
-            Domain(
-                id=None,
-                name="domain3",
-                description="Domain 3 description",
-                keywords="domain3,keywords",
-                total_documents=15,
-                db_path="path/to/db3",
-                vector_store_path="path/to/vectors3",
-                faiss_index=3,
-                embeddings_dimension=384
-            )
-        ]
-        
-        with sqlite_manager.get_connection() as conn:
-            cursor = conn.cursor()
-            # Insert all domains
-            for domain in domains:
-                cursor.execute(
-                    "INSERT INTO domains (name, description, keywords, total_documents, db_path, vector_store_path, faiss_index, embeddings_dimension) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-                    (domain.name, domain.description, domain.keywords, domain.total_documents, domain.db_path, domain.vector_store_path, domain.faiss_index, domain.embeddings_dimension)
-                )
+            # Test retrieving the specific domain by name
+            retrieved_domains = sqlite_manager.get_domain(conn, domain_name=sample_domain.name)
+            assert retrieved_domains is not None
+            assert len(retrieved_domains) == 1
+            retrieved_domain = retrieved_domains[0]
+            assert isinstance(retrieved_domain, Domain)
+            assert retrieved_domain.name == sample_domain.name
+            assert retrieved_domain.description == sample_domain.description
+            assert retrieved_domain.db_path == sample_domain.db_path
+            assert retrieved_domain.embeddings_dimension == sample_domain.embeddings_dimension
+
+            # Test retrieving a non-existent domain
+            non_existent = sqlite_manager.get_domain(conn, domain_name="non_existent_domain")
+            assert non_existent is None
+
+    def test_update_domain(self, sqlite_manager, sample_domain):
+        """Test updating a domain in the control database."""
+        # Initialize control DB and insert sample domain
+        sqlite_manager.initialize_database(control=True)
+        with sqlite_manager.get_connection(control=True) as conn:
+            sqlite_manager.insert_domain(sample_domain, conn)
+            cursor = conn.execute("SELECT id FROM knowledge_domains WHERE name = ?", (sample_domain.name,))
+            sample_domain.id = cursor.fetchone()[0]
             conn.commit()
-            
-            # Retrieve all domains
-            result = sqlite_manager.get_domain(conn, None)
-            
-            # Verify the result is a list of domains
+
+        # Define updates
+        updates = {
+            "description": "Updated description",
+            "keywords": "updated, sample",
+            "total_documents": 10
+        }
+
+        # Perform the update using the manager method
+        with sqlite_manager.get_connection(control=True) as conn:
+            sqlite_manager.update_domain(sample_domain, conn, updates)
+            conn.commit()
+
+            # Verify the update in the database
+            cursor = conn.cursor()
+            cursor.execute("SELECT description, keywords, total_documents FROM knowledge_domains WHERE id = ?", (sample_domain.id,))
+            result = cursor.fetchone()
             assert result is not None
-            assert isinstance(result, list)
-            assert len(result) == 3
+            assert result[0] == updates["description"]
+            assert result[1] == updates["keywords"]
+            assert result[2] == updates["total_documents"]
+
+    def test_delete_domain(self, sqlite_manager, sample_domain, mocker):
+        """Test deleting a domain from the control database."""
+        # Initialize control DB and insert sample domain
+        sqlite_manager.initialize_database(control=True)
+        
+        # Note: We no longer need to create dummy files as SQLiteManager doesn't delete them.
+
+        with sqlite_manager.get_connection(control=True) as conn:
+            sqlite_manager.insert_domain(sample_domain, conn)
+            cursor = conn.execute("SELECT id FROM knowledge_domains WHERE name = ?", (sample_domain.name,))
+            sample_domain.id = cursor.fetchone()[0]
+            conn.commit()
+
+        # Perform the deletion
+        with sqlite_manager.get_connection(control=True) as conn:
+            sqlite_manager.delete_domain(sample_domain, conn)
+            conn.commit()
+
+            # Verify the domain is deleted from the database
+            cursor = conn.cursor()
+            cursor.execute("SELECT * FROM knowledge_domains WHERE id = ?", (sample_domain.id,))
+            assert cursor.fetchone() is None
+
+    def test_insert_domain(self, sqlite_manager, sample_domain):
+        """Test inserting a domain into the control database."""
+        # Initialize control DB
+        sqlite_manager.initialize_database(control=True)
+        
+        # Insert the domain using the manager method
+        with sqlite_manager.get_connection(control=True) as conn:
+            sqlite_manager.insert_domain(sample_domain, conn)
+            conn.commit()
+
+            # Verify the domain was inserted correctly
+            cursor = conn.cursor()
+            cursor.execute(
+                """SELECT name, description, keywords, total_documents, db_path, vector_store_path, embeddings_dimension 
+                   FROM knowledge_domains WHERE name = ?""", 
+                (sample_domain.name,)
+            )
+            result = cursor.fetchone()
+            assert result is not None
+            assert result[0] == sample_domain.name
+            assert result[1] == sample_domain.description
+            assert result[2] == sample_domain.keywords
+            assert result[3] == sample_domain.total_documents
+            assert result[4] == sample_domain.db_path
+            assert result[5] == sample_domain.vector_store_path
+            assert result[6] == sample_domain.embeddings_dimension
+
+    def test_get_all_domains(self, sqlite_manager, sample_domain):
+        """Test retrieving all domains from the control database."""
+        # Initialize control DB
+        sqlite_manager.initialize_database(control=True)
+        
+        # Insert multiple sample domains
+        domain1 = sample_domain
+        domain2 = Domain(
+            name="another_domain", description="Another desc", keywords="another", total_documents=5,
+            db_path="/path/to/another.db", vector_store_path="/path/to/another.faiss", embeddings_dimension=384
+        )
+        
+        with sqlite_manager.get_connection(control=True) as conn:
+            sqlite_manager.insert_domain(domain1, conn)
+            sqlite_manager.insert_domain(domain2, conn)
+            conn.commit()
+
+            # Retrieve all domains
+            all_domains = sqlite_manager.get_domain(conn, domain_name=None) # Pass None to get all
             
-            # Verify domain names are all present
-            domain_names = [domain.name for domain in result]
-            assert "domain1" in domain_names
-            assert "domain2" in domain_names
-            assert "domain3" in domain_names
+            assert all_domains is not None
+            assert len(all_domains) == 2
             
-            # Verify properties of one domain
-            domain1 = next(domain for domain in result if domain.name == "domain1")
-            assert domain1.description == "Domain 1 description"
-            assert domain1.keywords == "domain1,keywords"
-            assert domain1.total_documents == 5
-            assert domain1.db_path == "path/to/db1"
-            assert domain1.vector_store_path == "path/to/vectors1"
-            assert domain1.faiss_index == 1
-            assert domain1.embeddings_dimension == 384
+            # Check if the retrieved domains match the inserted ones (names are unique)
+            retrieved_names = {d.name for d in all_domains}
+            assert retrieved_names == {domain1.name, domain2.name}
+            
+            # Verify types
+            assert all(isinstance(d, Domain) for d in all_domains)
