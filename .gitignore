@@ -13,10 +13,8 @@ dist/
 build/
 *.egg-info/
 
-# Banco de dados
-databases/public/
-databases/test/
-indices/
+# Streamlit
+.streamlit/
 
 # Testes e cobertura
 .pytest_cache/
@@ -37,7 +35,9 @@ htmlcov/
 
 # Arquivos temporários
 *.log
-*.tmp 
+*.tmp
+test_logs/
+logs/
 
 # Arquivos do plantUML
 *.png
@@ -47,6 +47,5 @@ components-diagram.puml
 summary.txt
 update.txt
 
-# Database and index files
-storage/domains/*/test.db
-storage/domains/*/vector_store/*.faiss
+# Databases and faiss index files
+storage/domains/

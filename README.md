@@ -255,6 +255,11 @@ python -m pytest -vv
 - **API RESTful
 - **Funcionalidades avançadas de busca
 
+## Problemas Conhecidos
+
+- **Erro do File Watcher do Streamlit com PyTorch:** Ao navegar para a página `Gerenciamento de Domínios`, um erro `RuntimeError: Tried to instantiate class '__path__._path'...` relacionado a `torch.classes` pode aparecer no console. Isso parece ser um problema com o file watcher do Streamlit tentando inspecionar a biblioteca `torch`. Tentativas de solucionar isso adicionando `torch` ou `.venv` à `folderWatchBlacklist` ou definindo `watchFileSystem = false` no arquivo `.streamlit/config.toml` não surtiram efeito. O erro parece ser apenas um ruído no console e não afeta a funcionalidade principal da GUI no momento.
+- **Atualização de Domínio na GUI:** A funcionalidade de editar um domínio na página `Gerenciamento de Domínios` (quando se clica em "💾 Salvar Alterações") atualmente não está persistindo as alterações no banco de dados, embora a interface feche a seção de edição como se a operação tivesse sido bem-sucedida. A lógica de `domain_manager.update_domain_details` ou `sqlite_manager.update_domain` precisa ser revisada.
+
 ## Últimas Atualizações (YYYY-MM-DD)
 
 - **Refatoração do Modelo `Embedding`:** O modelo `Embedding` foi removido. O atributo `faiss_index` foi migrado para o modelo `Chunk`. Todo o código relevante (`SQLiteManager`, `FaissManager`, orquestradores) foi atualizado para refletir essa mudança.
