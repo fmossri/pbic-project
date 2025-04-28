@@ -40,15 +40,15 @@ class DomainManager:
             with self.sqlite_manager.get_connection(control=True) as conn:  
                 self.sqlite_manager.begin(conn)
 
-                #Verifica se o domain já existe
-                domain = self.sqlite_manager.get_domain(conn, domain_name)
-                if domain:
-                    self.logger.error("Domínio já existe", domain=domain.name)
+                # Verifica se o domain já existe
+                existing_domain = self.sqlite_manager.get_domain(conn, domain_name)    
+                if existing_domain:
+                    self.logger.error("Domínio já existe", domain_name=domain_name)
                     conn.rollback()
-                    raise ValueError(f"Domínio já existe: {domain.name}")
+                    raise ValueError(f"Domínio já existe: {domain_name}")
 
+                # Cria o domínio e insere no banco de dados
                 domain = Domain(**domain_data)
-
                 self.sqlite_manager.insert_domain(domain, conn)
                 conn.commit()
                 self.logger.info("Domínio de conhecimento adicionado com sucesso", domain_name=domain_name)
@@ -71,6 +71,9 @@ class DomainManager:
                     self.logger.error("Domínio não encontrado", domain_name=domain_name)
                     conn.rollback()
                     raise ValueError(f"Domínio não encontrado: {domain_name}")
+
+                # Desempacota o domínio
+                [domain] = domain
 
                 #Deleta o diretório do domínio
                 domain_dir = os.path.join("storage", "domains", f"{domain.name}")
@@ -95,37 +98,47 @@ class DomainManager:
         try:
             with self.sqlite_manager.get_connection(control=True) as conn:
                 #Verifica se o domínio existe
-                [domain] = self.sqlite_manager.get_domain(conn, domain_name)
+                domain = self.sqlite_manager.get_domain(conn, domain_name)
                 if not domain:
                     self.logger.error("Domínio não encontrado", domain_name=domain_name)
                     raise ValueError(f"Domínio não encontrado: {domain_name}")
 
+                [domain] = domain
+                
+                # Seleciona os campos do domínio que podem ser atualizados
                 update_fields = {}
                 for column, value in updates.items():
                     if column in Domain.updatable_fields() and value != getattr(domain, column):
                         update_fields[column] = value
-
-                    else:
+                    # Log warning if field is not updatable OR if value is the same
+                    elif column not in Domain.updatable_fields():
                         self.logger.warning("Campo não pode ser atualizado manualmente", column=column)
+                    else: # Optional: log if value is the same
+                        self.logger.debug(f"Valor para '{column}' é o mesmo, atualização ignorada.")
+                
+                # If no valid fields to update, return early
+                if not update_fields:
+                    self.logger.info("Nenhum campo válido ou alterado para atualizar.")
+                    return # Exit before starting transaction
 
                 if "name" in update_fields.keys():
-                    if self.sqlite_manager.get_domain(conn, update_fields["name"]):
-                        self.logger.error("Domínio já existe", domain_name=update_fields["name"])
-                        raise ValueError(f"Domínio já existe: {update_fields['name']}")
-                    
-                    old_name = domain.name
+                    # Verifica se o novo nome já existe
                     new_name = update_fields["name"]
+                    if self.sqlite_manager.get_domain(conn, new_name):
+                        self.logger.error("Domínio já existe", domain_name=new_name)
+                        raise ValueError(f"Domínio já existe: {new_name}")
                     
+                    # Renomeia os arquivos do domínio
+                    old_name = domain.name
                     new_db_path, new_faiss_path = self.rename_domain_paths(old_name, new_name)
-
                     update_fields["db_path"] = new_db_path
                     update_fields["vector_store_path"] = new_faiss_path
 
-                #Atualiza o domínio
+                # Atualiza o domínio
                 self.sqlite_manager.begin(conn)
                 self.sqlite_manager.update_domain(domain, conn, update_fields)
                 conn.commit()
-                self.logger.info("Domínio de conhecimento atualizado com sucesso", domain_name=domain_name)
+                self.logger.info("Domínio de conhecimento atualizado com sucesso", domain_name=domain.name)
         except Exception as e:
             self.logger.error(f"Erro ao atualizar domínio de conhecimento: {e}")
             raise e
@@ -135,6 +148,7 @@ class DomainManager:
         Renomeia os arquivos do domínio.
         """
         self.logger.info("Renomeando arquivos do domínio", old_name=old_name, new_name=new_name)
+        missing_files = []
         try:
             # Tenta renomear o diretório
             old_dir = os.path.join("storage", "domains", f"{old_name}")
@@ -151,7 +165,7 @@ class DomainManager:
                 os.rename(old_db_path, new_db_path)
             else:
                 self.logger.warning(f"Arquivo .db {old_db_path} não encontrado, pulando renomeação do banco de dados.")
-
+                missing_files.append(old_db_path)
             # Tenta renomear o vector_store
             old_faiss_path = os.path.join(f"{new_dir}", "vector_store", f"{old_name}.faiss")
             new_faiss_path = os.path.join(f"{new_dir}", "vector_store", f"{new_name}.faiss")
@@ -159,7 +173,17 @@ class DomainManager:
                 os.rename(old_faiss_path, new_faiss_path)
             else:
                 self.logger.warning(f"Arquivo .faiss {old_faiss_path} não encontrado, pulando renomeação do vectorstore.")
+                missing_files.append(old_faiss_path)
 
+            if len(missing_files) == 1:
+                self.logger.critical(f"Alerta! Inconsistência encontrada no sistema de arquivos. {missing_files[0]} não existe. Remova o domínio e seus arquivos.", domain_name=old_name, missing_files=missing_files)
+                if os.path.isdir(new_dir):
+                    try:
+                        os.rename(new_dir, old_dir)
+                        self.logger.info("Tentativa de reverter renomeação do diretório.")
+                    except OSError as rb_err:
+                        self.logger.error(f"Falha ao reverter renomeação do diretório: {rb_err}. Sistema de arquivos pode estar inconsistente.")
+            
             return new_db_path, new_faiss_path
 
         except OSError as e:
@@ -191,11 +215,13 @@ class DomainManager:
         self.logger.info("Listando documentos do domínio de conhecimento", domain_name=domain_name)
         try:
             with self.sqlite_manager.get_connection(control=True) as conn:
-                [domain] = self.sqlite_manager.get_domain(conn, domain_name)
+                domain = self.sqlite_manager.get_domain(conn, domain_name)
 
                 if not domain:
                     self.logger.error("Domínio não encontrado", domain_name=domain_name)
                     raise ValueError(f"Domínio não encontrado: {domain_name}")
+
+            [domain] = domain 
 
             with self.sqlite_manager.get_connection(control=False, db_path=domain.db_path) as conn:
 
