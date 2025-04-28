@@ -1,6 +1,6 @@
 import sqlite3
 import os
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 from src.models import DocumentFile, Chunk, Domain
 from src.utils.logger import get_logger
 
@@ -224,8 +224,8 @@ class SQLiteManager:
         try:
             cursor = conn.cursor()
             cursor.execute(
-                "INSERT INTO domains (name, description, keywords, total_documents, db_path, vector_store_path, faiss_index, embeddings_dimension) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-                (domain.name, domain.description, domain.keywords, domain.total_documents, domain.db_path, domain.vector_store_path, domain.faiss_index, domain.embeddings_dimension)
+                "INSERT INTO domains (name, description, keywords, total_documents, db_path, vector_store_path, embeddings_dimension) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                (domain.name, domain.description, domain.keywords, domain.total_documents, domain.db_path, domain.vector_store_path, domain.embeddings_dimension)
             )
 
             self.logger.debug("Domínio do conhecimento inserido com sucesso", 
@@ -234,7 +234,7 @@ class SQLiteManager:
                               domain_keywords=domain.keywords, 
                               domain_db_path=domain.db_path, 
                               domain_vector_store_path=domain.vector_store_path,
-                              domain_faiss_index=domain.faiss_index)
+                              domain_embeddings_dimension=domain.embeddings_dimension)
         except sqlite3.Error as e:
             self.logger.error(f"Erro ao inserir o domínio de conhecimento: {e}")
             raise e
@@ -264,8 +264,8 @@ class SQLiteManager:
                         total_documents=row[4],
                         db_path=row[5],
                         vector_store_path=row[6],
-                        faiss_index=row[7],
-                        embeddings_dimension=row[8]
+                        embeddings_dimension=row[7],
+                        created_at=row[8]
                     )
                     all_domains.append(domain)
 
@@ -277,17 +277,30 @@ class SQLiteManager:
             self.logger.error(f"Erro ao recuperar o domínio de conhecimento: {e}")
             raise e
         
-    def update_domain(self, domain: Domain, conn: sqlite3.Connection) -> None:
+    def update_domain(self, domain: Domain, conn: sqlite3.Connection, update: Dict[str, Any]) -> None:
         """
         Atualiza um domínio de conhecimento no banco de dados.
-        """
+        """      
         self.logger.debug(f"Atualizando domínio de conhecimento no banco de dados: {domain.name}")
+
+        set_parts, params = [], []
+        for column, value in update.items():
+            set_parts.append(f"{column} = ?")
+            params.append(value)
+        
+        if not set_parts:
+            self.logger.error(f"Nenhum campo para atualizar")
+            raise ValueError("Nenhum campo para atualizar")
+        
+        set_clause = ", ".join(set_parts)
+        query = f"UPDATE domains SET {set_clause} WHERE id = ?"
+        params.append(domain.id)
+
         try:
             cursor = conn.cursor()
-            cursor.execute("UPDATE domains SET name = ?, description = ?, keywords = ?, total_documents = ? WHERE name = ?", 
-                           (domain.name, domain.description, domain.keywords, domain.total_documents, domain.name))
+            cursor.execute(query, params)
+            self.logger.debug(f"Atualização executada para o domínio. Aguardando commit",)
 
-            conn.commit()
 
         except sqlite3.Error as e:
             self.logger.error(f"Erro ao atualizar o domínio de conhecimento: {e}")
@@ -300,8 +313,8 @@ class SQLiteManager:
         self.logger.debug(f"Deletando domínio de conhecimento do banco de dados: {domain.name}")
         try:
             cursor = conn.cursor()
-            cursor.execute("DELETE FROM domains WHERE name = ?", (domain.name,))
-            conn.commit()
+            cursor.execute("DELETE FROM domains WHERE id = ?", (domain.id))
+            self.logger.debug(f"Domínio removido. Aguardando commit", domain_name=domain.name)
 
         except sqlite3.Error as e:
             self.logger.error(f"Erro ao deletar o domínio de conhecimento: {e}")
