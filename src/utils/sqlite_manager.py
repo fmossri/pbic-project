@@ -7,17 +7,17 @@ from src.utils.logger import get_logger
 class SQLiteManager:
     """Gerenciador de banco de dados SQLite."""
 
-    DEFAULT_DB_PATH: str = os.path.join("storage", "domains", "test_domain", "test.db")
+    TEST_DB_PATH: str = os.path.join("storage", "domains", "test_domain", "test.db")
     CONTROL_SCHEMA_PATH: str = os.path.join("storage", "schemas", "control_schema.sql")
     CONTROL_DB_PATH: str = os.path.join("storage", "domains", "control.db")
-    DEFAULT_SCHEMA_PATH: str = os.path.join("storage", "schemas", "schema.sql")
+    DOMAIN_SCHEMA_PATH: str = os.path.join("storage", "schemas", "schema.sql")
 
     def __init__(self, log_domain: str = "utils"):
         self.logger = get_logger(__name__, log_domain=log_domain)
         self.logger.info("Inicializando o SQLiteManager")
         self.control_db_path = self.CONTROL_DB_PATH
-        self.db_path = self.DEFAULT_DB_PATH
-        self.schema_path = self.DEFAULT_SCHEMA_PATH
+        self.db_path = self.TEST_DB_PATH
+        self.schema_path = self.DOMAIN_SCHEMA_PATH
         
         os.makedirs(os.path.dirname(self.db_path), exist_ok=True)
 
@@ -218,13 +218,13 @@ class SQLiteManager:
 
     def insert_domain(self, domain: Domain, conn: sqlite3.Connection) -> None:
         """
-        Insere um domínio de conhecimento no banco de dados.
+        Insere um domínio de conhecimento no banco de dados de controle.
         """
         self.logger.info(f"Inserindo domínio de conhecimento no banco de dados: {domain.name}")
         try:
             cursor = conn.cursor()
             cursor.execute(
-                "INSERT INTO domains (name, description, keywords, total_documents, db_path, vector_store_path, embeddings_dimension) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                "INSERT INTO knowledge_domains (name, description, keywords, total_documents, db_path, vector_store_path, embeddings_dimension) VALUES (?, ?, ?, ?, ?, ?, ?)",
                 (domain.name, domain.description, domain.keywords, domain.total_documents, domain.db_path, domain.vector_store_path, domain.embeddings_dimension)
             )
 
@@ -239,18 +239,17 @@ class SQLiteManager:
             self.logger.error(f"Erro ao inserir o domínio de conhecimento: {e}")
             raise e
 
-    def get_domain(self, conn: sqlite3.Connection, domain_name: Optional[str]) -> Optional[List[Domain]]:
+    def get_domain(self, conn: sqlite3.Connection, domain_name: Optional[str] = None) -> Optional[List[Domain]]:
         """
-        Retorna um domínio de conhecimento do banco de dados.
+        Retorna um ou todos os domínios de conhecimento do banco de dados de controle.
         """
-        self.logger.debug(f"Recuperando domínio de conhecimento do banco de dados: {domain_name}")
+        self.logger.debug(f"Recuperando domínio(s) de conhecimento do banco de dados: {domain_name or 'Todos'}")
         try:
             cursor = conn.cursor()
             if domain_name:
-                cursor.execute("SELECT * FROM domains WHERE name = ?", (domain_name,))
-
+                cursor.execute("SELECT * FROM knowledge_domains WHERE name = ?", (domain_name,))
             else:
-                cursor.execute("SELECT * FROM domains")
+                cursor.execute("SELECT * FROM knowledge_domains")
             
             all_domains : List[Domain] = []
             domain_data = cursor.fetchall()
@@ -262,24 +261,23 @@ class SQLiteManager:
                         description=row[2],
                         keywords=row[3],
                         total_documents=row[4],
-                        db_path=row[5],
-                        vector_store_path=row[6],
+                        vector_store_path=row[5],
+                        db_path=row[6],
                         embeddings_dimension=row[7],
                         created_at=row[8]
                     )
                     all_domains.append(domain)
-
                 return all_domains
             else:
                 return None
                 
         except sqlite3.Error as e:
-            self.logger.error(f"Erro ao recuperar o domínio de conhecimento: {e}")
+            self.logger.error(f"Erro ao recuperar o(s) domínio(s) de conhecimento: {e}")
             raise e
         
     def update_domain(self, domain: Domain, conn: sqlite3.Connection, update: Dict[str, Any]) -> None:
         """
-        Atualiza um domínio de conhecimento no banco de dados.
+        Atualiza um domínio de conhecimento no banco de dados de controle.
         """      
         self.logger.debug(f"Atualizando domínio de conhecimento no banco de dados: {domain.name}")
 
@@ -293,7 +291,7 @@ class SQLiteManager:
             raise ValueError("Nenhum campo para atualizar")
         
         set_clause = ", ".join(set_parts)
-        query = f"UPDATE domains SET {set_clause} WHERE id = ?"
+        query = f"UPDATE knowledge_domains SET {set_clause} WHERE id = ?"
         params.append(domain.id)
 
         try:
@@ -308,13 +306,13 @@ class SQLiteManager:
         
     def delete_domain(self, domain: Domain, conn: sqlite3.Connection) -> None:
         """
-        Deleta um domínio de conhecimento do banco de dados.
+        Deleta um domínio de conhecimento do banco de dados de controle.
         """
         self.logger.debug(f"Deletando domínio de conhecimento do banco de dados: {domain.name}")
         try:
             cursor = conn.cursor()
-            cursor.execute("DELETE FROM domains WHERE id = ?", (domain.id))
-            self.logger.debug(f"Domínio removido. Aguardando commit", domain_name=domain.name)
+            cursor.execute("DELETE FROM knowledge_domains WHERE id = ?", (domain.id,))
+            self.logger.debug(f"Domínio removido do DB. Aguardando commit", domain_name=domain.name)
 
         except sqlite3.Error as e:
             self.logger.error(f"Erro ao deletar o domínio de conhecimento: {e}")
