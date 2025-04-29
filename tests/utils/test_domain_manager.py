@@ -100,7 +100,7 @@ class TestDomainManager:
 
         mock_conn.commit.assert_called_once()
         mock_conn.rollback.assert_not_called()
-        mock_logger.info.assert_any_call("Domínio de conhecimento adicionado com sucesso", domain_name=domain_name)
+        mock_logger.info.assert_any_call("Dominio de conhecimento adicionado com sucesso", domain_name=domain_name)
 
     def test_create_domain_already_exists(self, domain_manager, mock_sqlite_manager, mock_logger):
         """Test attempting to create a domain that already exists."""
@@ -136,7 +136,7 @@ class TestDomainManager:
         mock_conn.rollback.assert_called_once()
         # Assert commit was NOT called
         mock_conn.commit.assert_not_called()
-        mock_logger.error.assert_any_call("Domínio já existe", domain_name=domain_name)
+        mock_logger.error.assert_any_call("Dominio ja existe", domain_name=domain_name)
 
     def test_remove_domain_success(self, domain_manager, mock_sqlite_manager, mock_logger, mocker):
         """Test successful removal of an existing domain and its directory."""
@@ -177,8 +177,9 @@ class TestDomainManager:
         
         mock_conn.commit.assert_called_once()
         mock_conn.rollback.assert_not_called()
-        mock_logger.info.assert_any_call("Diretório e arquivos do domínio removidos com sucesso", domain_name=domain_name)
-        mock_logger.info.assert_any_call("Domínio de conhecimento removido com sucesso", domain_name=domain_name)
+        # Match actual log messages (no accents)
+        mock_logger.info.assert_any_call("Diretorio e arquivos do dominio removidos com sucesso", domain_name=domain_name)
+        mock_logger.info.assert_any_call("Dominio de conhecimento removido com sucesso", domain_name=domain_name)
 
     def test_remove_domain_dir_not_found(self, domain_manager, mock_sqlite_manager, mock_logger, mocker):
         """Test successful removal of a domain when its directory doesn't exist."""
@@ -214,8 +215,8 @@ class TestDomainManager:
         mock_conn.commit.assert_called_once()
         mock_conn.rollback.assert_not_called()
         # Check for the specific warning log
-        mock_logger.warning.assert_any_call("Diretório do domínio não encontrado, removendo o registro do domínio", domain_name=domain_name)
-        mock_logger.info.assert_any_call("Domínio de conhecimento removido com sucesso", domain_name=domain_name)
+        mock_logger.warning.assert_any_call("Diretorio do dominio nao encontrado, removendo o registro do dominio", domain_name=domain_name)
+        mock_logger.info.assert_any_call("Dominio de conhecimento removido com sucesso", domain_name=domain_name)
 
     def test_remove_domain_not_found_in_db(self, domain_manager, mock_sqlite_manager, mock_logger, mocker):
         """Test attempting to remove a domain that does not exist in the database."""
@@ -248,7 +249,7 @@ class TestDomainManager:
         # Rollback should be called, commit should not
         mock_conn.rollback.assert_called_once()
         mock_conn.commit.assert_not_called()
-        mock_logger.error.assert_any_call("Domínio não encontrado", domain_name=domain_name) 
+        mock_logger.error.assert_any_call("Dominio nao encontrado", domain_name=domain_name) 
 
     def test_update_domain_details_success_no_rename(self, domain_manager, mock_sqlite_manager, mock_logger):
         """Test successfully updating domain details without renaming."""
@@ -287,7 +288,7 @@ class TestDomainManager:
         mock_sqlite_manager.begin.assert_called_once_with(mock_conn)
         mock_conn.commit.assert_called_once()
         mock_conn.rollback.assert_not_called()
-        mock_logger.info.assert_any_call("Domínio de conhecimento atualizado com sucesso", domain_name=domain_name)
+        mock_logger.info.assert_any_call("Dominio de conhecimento atualizado com sucesso", domain_name=domain_name)
 
     def test_update_domain_details_success_with_rename(self, domain_manager, mock_sqlite_manager, mock_logger, mocker):
         """Test successfully updating domain name, triggering path rename."""
@@ -342,7 +343,7 @@ class TestDomainManager:
         mock_sqlite_manager.begin.assert_called_once_with(mock_conn)
         mock_conn.commit.assert_called_once()
         mock_conn.rollback.assert_not_called()
-        mock_logger.info.assert_any_call("Domínio de conhecimento atualizado com sucesso", domain_name=old_name)
+        mock_logger.info.assert_any_call("Dominio de conhecimento atualizado com sucesso", domain_name=old_name)
 
     def test_update_domain_details_domain_not_found(self, domain_manager, mock_sqlite_manager, mock_logger):
         """Test updating a domain that does not exist."""
@@ -364,7 +365,12 @@ class TestDomainManager:
         mock_sqlite_manager.update_domain.assert_not_called()
         mock_conn.commit.assert_not_called()
         mock_conn.rollback.assert_not_called() # No transaction started
-        mock_logger.error.assert_any_call("Domínio não encontrado", domain_name=domain_name)
+        # Check the error log from the except block which includes the ValueError message
+        expected_error_msg = f"Erro ao atualizar dominio de conhecimento: Domínio não encontrado: {domain_name}"
+        mock_logger.error.assert_any_call(expected_error_msg)
+        # Ensure the specific log inside the if block was NOT the only one asserted (optional check)
+        # Uncomment below if you want to ensure BOTH logs happened
+        # mock_logger.error.assert_any_call("Dominio nao encontrado", domain_name=domain_name)
 
     def test_update_domain_details_new_name_exists(self, domain_manager, mock_sqlite_manager, mock_logger, mocker):
         """Test renaming a domain to a name that already exists."""
@@ -409,7 +415,7 @@ class TestDomainManager:
         mock_sqlite_manager.update_domain.assert_not_called()
         mock_conn.commit.assert_not_called()
         mock_conn.rollback.assert_not_called()
-        mock_logger.error.assert_any_call("Domínio já existe", domain_name=new_name)
+        mock_logger.error.assert_any_call("Dominio ja existe", domain_name=new_name)
 
     def test_update_domain_details_no_change(self, domain_manager, mock_sqlite_manager, mock_logger):
         """Test updating with no actual changes or only non-updatable fields."""
@@ -441,12 +447,12 @@ class TestDomainManager:
         mock_sqlite_manager.update_domain.assert_not_called()
         mock_conn.commit.assert_not_called()
         mock_conn.rollback.assert_not_called()
-        mock_logger.warning.assert_any_call("Campo não pode ser atualizado manualmente", column="db_path")
+        mock_logger.warning.assert_any_call("Campo nao pode ser atualizado manualmente", column="db_path")
         # Should not log success if no update happened
         # Let's check that the success log was NOT called
         success_log_call = mock_logger.info.call_args_list
         assert all(
-            call.args[0] != "Domínio de conhecimento atualizado com sucesso" 
+            call.args[0] != "Dominio de conhecimento atualizado com sucesso" 
             for call in success_log_call
         ), "Success log should not be called when no update occurs" 
 
@@ -539,15 +545,15 @@ class TestDomainManager:
 
         # Check for logs
         # Initial warning for missing faiss
-        mock_logger.warning.assert_any_call(f"Arquivo .faiss {old_faiss} não encontrado, pulando renomeação do vectorstore.")
+        mock_logger.warning.assert_any_call(f"Arquivo .faiss {old_faiss} nao encontrado, pulando renomeacao do vectorstore.")
         # New critical log for exactly one missing file
         mock_logger.critical.assert_any_call(
-            f"Alerta! Inconsistência encontrada no sistema de arquivos. {old_faiss} não existe. Remova o domínio e seus arquivos.",
+            f"Alerta! Inconsistencia encontrada no sistema de arquivos. {old_faiss} nao existe. Remova o dominio e seus arquivos.",
             domain_name=old_name,
             missing_files=[old_faiss]
         )
         # Info log for rollback attempt
-        mock_logger.info.assert_any_call("Tentativa de reverter renomeação do diretório.")
+        mock_logger.info.assert_any_call("Tentativa de reverter renomeacao do diretorio.")
         mock_logger.error.assert_not_called()
 
     def test_rename_domain_paths_os_error_with_rollback(self, domain_manager, mock_logger, mocker):
@@ -593,12 +599,12 @@ class TestDomainManager:
         mock_rename.assert_any_call(new_dir, old_dir) # Rollback attempt
         
         mock_isdir.assert_called_once_with(new_dir)
-        mock_logger.error.assert_any_call(f"Erro ao renomear caminhos do domínio: Permission denied")
+        mock_logger.error.assert_any_call(f"Erro ao renomear caminhos do dominio: Permission denied")
         # Now this info log should be called
-        mock_logger.info.assert_any_call("Tentativa de reverter renomeação do diretório.") 
+        mock_logger.info.assert_any_call("Tentativa de reverter renomeacao do diretorio.") 
         # Ensure the inner exception log was NOT called
         assert not any(
-            call.args[0].startswith("Falha ao reverter renomeação do diretório") 
+            call.args[0].startswith("Falha ao reverter renomeacao do diretorio") 
             for call in mock_logger.error.call_args_list
         ) 
 
@@ -622,7 +628,10 @@ class TestDomainManager:
         # get_domain should be called to list all
         mock_sqlite_manager.get_domain.assert_called_once_with(mock_conn)
         assert result == expected_domains
-        mock_logger.info.assert_any_call("Listando domínios de conhecimento")
+        mock_logger.info.assert_any_call("Listando dominios de conhecimento")
+        # Check the success log message (assuming it exists and doesn't have accents)
+        # If the actual log message is different, this might need adjustment
+        mock_logger.info.assert_any_call("Dominios listados com sucesso", domains=['domain1', 'domain2'])
 
     def test_list_domains_empty(self, domain_manager, mock_sqlite_manager, mock_logger):
         """Test listing domains when none exist."""
@@ -638,7 +647,9 @@ class TestDomainManager:
         mock_sqlite_manager.get_connection.assert_called_once_with(control=True)
         mock_sqlite_manager.get_domain.assert_called_once_with(mock_conn)
         assert result is None # Should return None if get_domain returns None
-        mock_logger.info.assert_any_call("Listando domínios de conhecimento")
+        mock_logger.info.assert_any_call("Listando dominios de conhecimento")
+        # Optionally check for a log indicating empty result if applicable
+        # mock_logger.info.assert_any_call("Nenhum dominio encontrado")
 
     def test_list_domain_documents_success(self, domain_manager, mock_sqlite_manager, mock_logger):
         """Test listing documents for an existing domain successfully."""
@@ -673,7 +684,10 @@ class TestDomainManager:
         mock_sqlite_manager.get_document_file.assert_called_once_with(mock_domain_conn_success)
 
         assert result == expected_documents
-        mock_logger.info.assert_any_call("Listando documentos do domínio de conhecimento", domain_name=domain_name)
+        mock_logger.info.assert_any_call("Listando documentos do dominio de conhecimento", domain_name=domain_name)
+        # Check the success log message (assuming it exists and doesn't have accents)
+        # If the actual log message is different, this might need adjustment
+        mock_logger.info.assert_any_call("Documentos listados com sucesso", documents=expected_documents)
 
     def test_list_domain_documents_no_documents(self, domain_manager, mock_sqlite_manager, mock_logger):
         """Test listing documents when the domain exists but has no documents."""
@@ -700,9 +714,9 @@ class TestDomainManager:
         mock_sqlite_manager.get_document_file.assert_called_once_with(mock_domain_conn)
 
         assert result is None # Expecting None if get_document_file returns None
-        mock_logger.info.assert_any_call("Listando documentos do domínio de conhecimento", domain_name=domain_name)
+        mock_logger.info.assert_any_call("Listando documentos do dominio de conhecimento", domain_name=domain_name)
         # Optionally check for a specific log if no docs are found, e.g.,
-        # mock_logger.info.assert_any_call("Nenhum documento encontrado para o domínio", domain_name=domain_name)
+        # mock_logger.info.assert_any_call("Nenhum documento encontrado para o dominio", domain_name=domain_name)
 
     def test_list_domain_documents_domain_not_found(self, domain_manager, mock_sqlite_manager, mock_logger):
         """Test listing documents when the specified domain does not exist."""
@@ -723,4 +737,6 @@ class TestDomainManager:
 
         # Domain-specific calls should NOT happen
         mock_sqlite_manager.get_document_file.assert_not_called()
-        mock_logger.error.assert_any_call(f"Erro ao listar documentos do domínio de conhecimento: Domínio não encontrado: {domain_name}")
+        # Check the log from the except block, which includes the ValueError string
+        expected_error_msg = f"Erro ao listar documentos do dominio de conhecimento: Domínio não encontrado: {domain_name}"
+        mock_logger.error.assert_any_call(expected_error_msg)

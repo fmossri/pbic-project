@@ -123,10 +123,10 @@ class TestSQLiteManager:
         assert default_manager.schema_path == SQLiteManager.DOMAIN_SCHEMA_PATH
         assert default_manager.control_db_path == SQLiteManager.CONTROL_DB_PATH
     
-    def test_initialize_database(self, sqlite_manager):
+    def test_create_database(self, sqlite_manager):
         """Test domain-specific database initialization using the temporary schema."""
         # Initialize the database
-        sqlite_manager.initialize_database(db_path=sqlite_manager.db_path) # Explicitly pass path
+        sqlite_manager.create_database(db_path=sqlite_manager.db_path) # Explicitly pass path
         
         # Verify the database file was created
         assert os.path.exists(sqlite_manager.db_path)
@@ -147,10 +147,10 @@ class TestSQLiteManager:
             cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='knowledge_domains'")
             assert cursor.fetchone() is None, "knowledge_domains table should not exist in domain DB"
     
-    def test_initialize_database_with_control(self, sqlite_manager):
+    def test_create_database_with_control(self, sqlite_manager):
         """Test control database initialization."""
         # Initialize the control database
-        sqlite_manager.initialize_database(control=True)
+        sqlite_manager.create_database(control=True)
         
         # Verify the control database file was created
         assert os.path.exists(sqlite_manager.control_db_path)
@@ -163,14 +163,14 @@ class TestSQLiteManager:
             cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='knowledge_domains'")
             assert cursor.fetchone() is not None
     
-    def test_initialize_database_file_not_found(self, sqlite_manager):
+    def test_create_database_file_not_found(self, sqlite_manager):
         """Test error handling when schema file is not found."""
-        # Set an invalid schema path
-        sqlite_manager.schema_path = "nonexistent_schema.sql"
+        invalid_schema_path = "nonexistent_schema.sql"
         
-        # Try to initialize the database
-        with pytest.raises(FileNotFoundError):
-            sqlite_manager.initialize_database()
+        # Try to initialize the database with an invalid schema path
+        with pytest.raises(FileNotFoundError, match=f"Arquivo do schema nao encontrado em {invalid_schema_path}"):
+            # Pass both the db_path and the invalid schema_path
+            sqlite_manager.create_database(db_path=sqlite_manager.db_path, schema_path=invalid_schema_path)
     
     def test_get_connection(self, sqlite_manager):
         """Test getting a database connection."""
@@ -196,11 +196,11 @@ class TestSQLiteManager:
     
     def test_begin_transaction(self, sqlite_manager):
         """Test beginning a transaction."""
-        # Initialize the database
-        sqlite_manager.initialize_database()
+        # Initialize the database, explicitly providing the path
+        sqlite_manager.create_database(db_path=sqlite_manager.db_path)
         
-        # Get a connection
-        conn = sqlite_manager.get_connection()
+        # Get a connection, explicitly providing the path
+        conn = sqlite_manager.get_connection(db_path=sqlite_manager.db_path)
         
         # Begin a transaction
         sqlite_manager.begin(conn)
@@ -214,11 +214,11 @@ class TestSQLiteManager:
     
     def test_insert_document_file(self, sqlite_manager, sample_document_file):
         """Test inserting a document file."""
-        # Initialize the database
-        sqlite_manager.initialize_database()
+        # Initialize the database, explicitly providing the path
+        sqlite_manager.create_database(db_path=sqlite_manager.db_path)
         
-        # Insert the document file
-        with sqlite_manager.get_connection() as conn:
+        # Insert the document file using get_connection with path
+        with sqlite_manager.get_connection(db_path=sqlite_manager.db_path) as conn:
             document_id = sqlite_manager.insert_document_file(sample_document_file, conn)
             
             # Verify the document was inserted
@@ -238,11 +238,11 @@ class TestSQLiteManager:
     
     def test_insert_chunk(self, sqlite_manager, sample_document_file, sample_chunk):
         """Test inserting a chunk."""
-        # Initialize the database
-        sqlite_manager.initialize_database()
+        # Initialize the database, explicitly providing the path
+        sqlite_manager.create_database(db_path=sqlite_manager.db_path)
         
-        # Insert the document file first
-        with sqlite_manager.get_connection() as conn:
+        # Insert the document file first using get_connection with path
+        with sqlite_manager.get_connection(db_path=sqlite_manager.db_path) as conn:
             document_id = sqlite_manager.insert_document_file(sample_document_file, conn)
             
             # Set the document_id on the chunk and faiss_index
@@ -271,11 +271,11 @@ class TestSQLiteManager:
     
     def test_transaction_rollback(self, sqlite_manager, sample_document_file):
         """Test transaction rollback."""
-        # Initialize the database
-        sqlite_manager.initialize_database()
+        # Initialize the database, explicitly providing the path
+        sqlite_manager.create_database(db_path=sqlite_manager.db_path)
         
-        # Start a transaction and insert a document
-        conn = sqlite_manager.get_connection()
+        # Start a transaction and insert a document using get_connection with path
+        conn = sqlite_manager.get_connection(db_path=sqlite_manager.db_path)
         sqlite_manager.begin(conn)
         
         document_id = sqlite_manager.insert_document_file(sample_document_file, conn)
@@ -299,7 +299,7 @@ class TestSQLiteManager:
     def test_transaction_rollback_control_db(self, sqlite_manager, sample_domain):
         """Test transaction rollback in control database using a domain."""
         # Initialize the control database
-        sqlite_manager.initialize_database(control=True)
+        sqlite_manager.create_database(control=True)
         
         # Start a transaction and insert a domain
         conn = sqlite_manager.get_connection(control=True)
@@ -330,11 +330,11 @@ class TestSQLiteManager:
     
     def test_transaction_commit(self, sqlite_manager, sample_document_file):
         """Test transaction commit."""
-        # Initialize the database
-        sqlite_manager.initialize_database()
+        # Initialize the database, explicitly providing the path
+        sqlite_manager.create_database(db_path=sqlite_manager.db_path)
         
-        # Start a transaction and insert a document
-        conn = sqlite_manager.get_connection()
+        # Start a transaction and insert a document using get_connection with path
+        conn = sqlite_manager.get_connection(db_path=sqlite_manager.db_path)
         sqlite_manager.begin(conn)
         
         document_id = sqlite_manager.insert_document_file(sample_document_file, conn)
@@ -344,7 +344,7 @@ class TestSQLiteManager:
         conn.close()
         
         # Open a new connection and verify the document exists
-        conn2 = sqlite_manager.get_connection()
+        conn2 = sqlite_manager.get_connection(db_path=sqlite_manager.db_path)
         cursor = conn2.cursor()
         cursor.execute("SELECT COUNT(*) FROM document_files WHERE id = ?", (document_id,))
         count = cursor.fetchone()[0]
@@ -354,28 +354,28 @@ class TestSQLiteManager:
     
     def test_sqlite_error_handling(self, sqlite_manager, sample_document_file):
         """Test SQLite error handling."""
-        # Initialize the database
-        sqlite_manager.initialize_database()
+        # Initialize the database, explicitly providing the path
+        sqlite_manager.create_database(db_path=sqlite_manager.db_path)
         
         # Corrupt the document_files table to force an error
-        conn = sqlite_manager.get_connection()
+        conn = sqlite_manager.get_connection(db_path=sqlite_manager.db_path)
         cursor = conn.cursor()
         cursor.execute("DROP TABLE document_files")
         conn.commit()
         conn.close()
         
         # Try to insert a document to trigger an error
-        with sqlite_manager.get_connection() as conn:
+        with sqlite_manager.get_connection(db_path=sqlite_manager.db_path) as conn:
             with pytest.raises(sqlite3.Error):
                 sqlite_manager.insert_document_file(sample_document_file, conn)
     
     def test_get_connection_with_context_manager(self, sqlite_manager):
         """Test using get_connection with a context manager."""
-        # Initialize the database
-        sqlite_manager.initialize_database()
+        # Initialize the database, explicitly providing the path
+        sqlite_manager.create_database(db_path=sqlite_manager.db_path)
         
-        # Use the connection in a with block
-        with sqlite_manager.get_connection() as conn:
+        # Use the connection in a with block, explicitly providing the path
+        with sqlite_manager.get_connection(db_path=sqlite_manager.db_path) as conn:
             cursor = conn.cursor()
             cursor.execute("SELECT sqlite_version();")
             version = cursor.fetchone()
@@ -387,7 +387,7 @@ class TestSQLiteManager:
     def test_get_connection_with_control_and_context_manager(self, sqlite_manager):
         """Test using get_connection with control=True and a context manager."""
         # Initialize the control database
-        sqlite_manager.initialize_database(control=True)
+        sqlite_manager.create_database(control=True)
         
         # Use the connection in a with block
         with sqlite_manager.get_connection(control=True) as conn:
@@ -401,11 +401,11 @@ class TestSQLiteManager:
     
     def test_get_chunks_content(self, sqlite_manager, sample_document_file, sample_chunk):
         """Test retrieving chunks content by faiss indices."""
-        # Initialize the database
-        sqlite_manager.initialize_database()
+        # Initialize the database, explicitly providing the path
+        sqlite_manager.create_database(db_path=sqlite_manager.db_path)
         
-        # Insert a document and a chunk
-        with sqlite_manager.get_connection() as conn:
+        # Insert a document and a chunk using get_connection with path
+        with sqlite_manager.get_connection(db_path=sqlite_manager.db_path) as conn:
             document_id = sqlite_manager.insert_document_file(sample_document_file, conn)
             
             # Set up multiple chunks with different faiss indices
@@ -442,7 +442,7 @@ class TestSQLiteManager:
     def test_get_domain(self, sqlite_manager, sample_domain):
         """Test retrieving domains from the control database."""
         # Initialize control DB
-        sqlite_manager.initialize_database(control=True)
+        sqlite_manager.create_database(control=True)
         
         # Insert a sample domain directly for testing retrieval
         with sqlite_manager.get_connection(control=True) as conn:
@@ -475,7 +475,7 @@ class TestSQLiteManager:
     def test_update_domain(self, sqlite_manager, sample_domain):
         """Test updating a domain in the control database."""
         # Initialize control DB and insert sample domain
-        sqlite_manager.initialize_database(control=True)
+        sqlite_manager.create_database(control=True)
         with sqlite_manager.get_connection(control=True) as conn:
             sqlite_manager.insert_domain(sample_domain, conn)
             cursor = conn.execute("SELECT id FROM knowledge_domains WHERE name = ?", (sample_domain.name,))
@@ -506,7 +506,7 @@ class TestSQLiteManager:
     def test_delete_domain(self, sqlite_manager, sample_domain, mocker):
         """Test deleting a domain from the control database."""
         # Initialize control DB and insert sample domain
-        sqlite_manager.initialize_database(control=True)
+        sqlite_manager.create_database(control=True)
         
         # Note: We no longer need to create dummy files as SQLiteManager doesn't delete them.
 
@@ -529,7 +529,7 @@ class TestSQLiteManager:
     def test_insert_domain(self, sqlite_manager, sample_domain):
         """Test inserting a domain into the control database."""
         # Initialize control DB
-        sqlite_manager.initialize_database(control=True)
+        sqlite_manager.create_database(control=True)
         
         # Insert the domain using the manager method
         with sqlite_manager.get_connection(control=True) as conn:
@@ -556,7 +556,7 @@ class TestSQLiteManager:
     def test_get_all_domains(self, sqlite_manager, sample_domain):
         """Test retrieving all domains from the control database."""
         # Initialize control DB
-        sqlite_manager.initialize_database(control=True)
+        sqlite_manager.create_database(control=True)
         
         # Insert multiple sample domains
         domain1 = sample_domain

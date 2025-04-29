@@ -500,8 +500,8 @@ class TestDataIngestionOrchestrator:
         # Ensure call_args_list is not empty before accessing index 0
         assert mock_update_domain.call_args_list, "update_domain was not called"
         call_args_dim_update = mock_update_domain.call_args_list[0]
-        # Verify using the signature: update_domain(domain_id, conn, update_dict)
-        assert call_args_dim_update.args[0] == initial_domain.id, "First call: Incorrect domain ID"
+        # Verify using the signature: update_domain(domain_object, conn, update_dict)
+        assert call_args_dim_update.args[0] == initial_domain, "First call: Incorrect domain object"
         assert call_args_dim_update.args[1] == self.mock_control_conn, "First call: Incorrect connection object"
         assert call_args_dim_update.args[2] == {"embeddings_dimension": expected_final_dimension}, f"First call: Incorrect update dict, expected dim {expected_final_dimension}"
 

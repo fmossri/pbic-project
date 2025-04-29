@@ -139,7 +139,11 @@ class TestQueryOrchestrator:
         result = query_orchestrator._retrieve_documents(mock_embedding, mock_domain)
         
         # Verify calls
-        mock_search.assert_called_once_with(mock_embedding, mock_domain.vector_store_path)
+        mock_search.assert_called_once_with(
+            query_embedding=mock_embedding, 
+            k=5, 
+            vector_store_path=mock_domain.vector_store_path
+        )
         mock_get_chunks.assert_called_once_with(mock_conn, [1, 2, 3])
         
         # Verify result
@@ -215,7 +219,7 @@ class TestQueryOrchestrator:
         result = query_orchestrator.query_llm(test_query)
         
         # Verify calls
-        mock_select_domains.assert_called_once_with(test_query)
+        mock_select_domains.assert_called_once_with(test_query, None)
         mock_process_query.assert_called_once_with(test_query)
         mock_retrieve_docs.assert_called_once_with(mock_embedding, mock_domain)
         mock_prepare_prompt.assert_called_once_with(test_query, mock_chunks)
