@@ -3,27 +3,62 @@ import os
 from src.data_ingestion import DataIngestionOrchestrator
 from src.utils.domain_manager import DomainManager
 from src.utils.logger import get_logger
+import sys
+from Admin import update_log_levels_callback
+import traceback
 
-# --- Logger ---
-logger = get_logger(__name__, log_domain="gui")
-
-# --- Page Configuration ---
+# --- Page Configuration (at the top) ---
 st.set_page_config(
     page_title="Ingestão de Dados",
     layout="wide"
 )
-st.title("📥 Ingestão de Dados")
+# ----------------------------------------
 
-# --- Domain Management ---
+# --- Logger ---
+logger = get_logger(__name__, log_domain="gui")
+
+# --- Cached Resource Initialization (MUST HAPPEN BEFORE st.set_page_config) ---
+@st.cache_resource
+def get_domain_manager():
+    logger.info("Creating DomainManager instance (cached)")
+    try:
+        return DomainManager(log_domain="gui")
+    except Exception as e:
+        logger.error(f"Failed to create DomainManager instance: {e}", exc_info=True)
+        # Logged the error, now exit script
+        raise SystemExit(f"Failed to initialize DomainManager: {e}. Check logs.")
+
+domain_manager = get_domain_manager()
+# --------------------------------------------------------------------------
+
+st.title("📥 Ingestão de Dados") 
+
+# --- Initialize Session State (if not exists) ---
+if 'debug_mode' not in st.session_state:
+    st.session_state.debug_mode = False
+# ----------------------------------------------
+
+# --- Sidebar Debug Toggle --- 
+st.sidebar.divider()
+print(f"--- DEBUG Data Ingestion: Rendering toggle, state is {st.session_state.get('debug_mode', 'Not Set Yet')} ---", file=sys.stderr)
+st.sidebar.toggle(
+    "Debug Logging", 
+    key="debug_mode", 
+    value=st.session_state.get('debug_mode', False), 
+    help="Enable detailed DEBUG level logging...",
+    on_change=update_log_levels_callback # Add the callback here
+)
+st.sidebar.divider()
+
+# --- Domain Management (now uses cached instance) ---
 try:
-    domain_manager = DomainManager(log_domain="gui")
     domains = domain_manager.list_domains()
     domain_names = [domain.name for domain in domains] if domains else []
     logger.info("Lista de dominios carregada com sucesso.", domain_count=len(domain_names))
 except Exception as e:
     logger.error("Erro ao carregar lista de dominios.", error=str(e), exc_info=True)
     st.error(f"Erro ao carregar lista de dominios: {e}")
-    st.stop() # Stop execution if domains can't be loaded
+    st.stop()
 
 # --- Ingestion Form ---
 st.write("Selecione um domínio e forneça o caminho para o diretório contendo os arquivos a serem ingeridos.")

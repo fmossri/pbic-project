@@ -1,26 +1,52 @@
 import streamlit as st
 import pandas as pd
 from src.utils.domain_manager import DomainManager
-from src.models import Domain # Keep if needed for type hints, otherwise remove
-import traceback # To display error details
+import traceback 
+from src.utils.logger import get_logger
+import sys
+from Admin import update_log_levels_callback # Import callback
 
-st.set_page_config(layout="wide", page_title="Gerenciamento de Domínios")
+# --- Logger ---
+logger = get_logger(__name__, log_domain="gui")
 
-st.title("🧠 Gerenciamento de Domínios de Conhecimento")
-
-# --- Initialization ---
+# --- Initialization (MUST HAPPEN BEFORE st.set_page_config) --- 
+@st.cache_resource 
 def get_domain_manager():
-    # Simple singleton pattern using session state
-    if 'domain_manager' not in st.session_state:
-        try:
-            st.session_state.domain_manager = DomainManager()
-        except Exception as e:
-            st.error(f"Erro ao inicializar o DomainManager: {e}")
-            st.code(traceback.format_exc())
-            st.stop()
-    return st.session_state.domain_manager
+    logger.info("Creating DomainManager instance (cached)")
+    try:
+        return DomainManager()
+    except Exception as e:
+        logger.error(f"Failed to create DomainManager instance: {e}", exc_info=True)
+        st.error(f"Erro ao inicializar o DomainManager: {e}")
+        st.code(traceback.format_exc())
+        st.stop()
 
 domain_manager = get_domain_manager()
+# ---------------------------------------------------------------
+
+# --- Page Configuration (NOW SAFE TO CALL) ---
+st.set_page_config(
+    page_title="Gerenciamento de Domínios",
+    layout="wide"
+)
+st.title("🧠 Gerenciamento de Domínios de Conhecimento")
+# ----------------------------------------------
+
+# --- Initialize Session State (if not exists) ---
+if 'debug_mode' not in st.session_state:
+    st.session_state.debug_mode = False
+
+# --- Sidebar Debug Toggle --- 
+st.sidebar.divider()
+print(f"--- DEBUG Domain Management: Rendering toggle, state is {st.session_state.get('debug_mode', 'Not Set Yet')} ---", file=sys.stderr)
+st.sidebar.toggle(
+    "Debug Logging", 
+    key="debug_mode", 
+    value=st.session_state.get('debug_mode', False), 
+    help="Enable detailed DEBUG level logging...",
+    on_change=update_log_levels_callback # Add the callback here
+)
+st.sidebar.divider()
 
 # --- Initialize Session State for Confirmation ---
 if 'confirming_delete_id' not in st.session_state:
