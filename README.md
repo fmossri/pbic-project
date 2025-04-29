@@ -1,179 +1,156 @@
-# Pipeline RAG de Ingestão de PDFs
+# Sistema RAG de Ingestão de PDFs com GUI e testagem com consultas a LLMs
 
-Sistema para processamento de documentos PDF, geração de embeddings, busca semântica e obtenção de respostas contextuais através de modelos de linguagem.
+Sistema para processamento de documentos PDF em múltiplos domínios de conhecimento, com geração de embeddings, busca semântica, obtenção de respostas contextuais através de LLMs, e uma interface gráfica Streamlit para gerenciamento e consulta.
 
 ## Visão Geral
 
-Este sistema processa documentos PDF, extrai texto, divide em chunks, gera embeddings e responde perguntas utilizando busca por similaridade e recuperação de documentos. O sistema é projetado para ser escalável, confiável e fácil de usar, constituindo uma solução sequencial simples "naive RAG"
+Este sistema implementa um pipeline RAG (Retrieval-Augmented Generation) para processar documentos PDF de um diretório dentro de "domínios" de conhecimento específicos. Para cada domínio ele cria um banco de dados e um índice FAISS. Ele extrai o texto de cada documento, divide em chunks, gera embeddings vetoriais, e armazena os dados em bancos de dados SQLite e índices vetoriais FAISS separados por domínio. Tanto um CLI quanto uma interface gráfica construída com Streamlit permitem ao usuário gerenciar esses domínios, iniciar a ingestão de documentos para um domínio selecionado, e realizar consultas que são respondidas por um LLM (através da API da Hugging Face) com base no contexto recuperado do domínio apropriado.
 
 ### Funcionalidades Principais
 
-- Processamento de documentos PDF
-- Detecção de duplicatas via hash MD5
-- Divisão de texto em chunks
-- Geração de embeddings
-- Normalização de texto
-- Armazenamento de embeddings com FAISS
-- Armazenamento de chunks e metadados com SQLite
-- Busca por similaridade e recuperação de chunks relevantes
-- Integração com modelos de linguagem via API da Hugging Face
+- **Gerenciamento de Domínios:** Criação, listagem, atualização e remoção de domínios de conhecimento isolados.
+- **Ingestão de Documentos por Domínio:** Processamento de diretórios de PDFs para um domínio específico.
+- **Pipeline RAG:**
+    - Extração de texto de PDFs.
+    - Detecção de duplicatas (intra-domínio) via hash MD5.
+    - Divisão de texto em chunks semânticos.
+    - Geração de embeddings (Sentence Transformers).
+    - Normalização de texto.
+    - Armazenamento de metadados e chunks (SQLite por domínio).
+    - Armazenamento e busca vetorial de embeddings (FAISS por domínio).
+- **Interface Gráfica (Streamlit):**
+    - Gerenciamento de domínios.
+    - Interface para ingestão de dados.
+    - Interface de consulta para interagir com o LLM sobre domínios específicos.
+    - Botão de Debug para controle do nível de log.
+- **Consulta Contextual:**
+    - Busca por similaridade no índice FAISS do domínio selecionado.
+    - Recuperação de chunks relevantes.
+    - Integração com LLM (Hugging Face API) para geração de respostas baseadas no contexto recuperado.
+- **Logging:** Sistema de log estruturado em JSON com rastreamento de contexto.
+- **Testes:** Testes unitários e de integração (Pytest) para garantir a funcionalidade dos componentes.
 
 ## Estrutura do Projeto
 
-```
-/root
+```plaintext
+/
+├── .streamlit/
+│   └── config.toml       # Configuração do Streamlit (ex: tema)
+├── logs/
+│   └── app.log           # Logs da aplicação em arquivo
+├── pages/
+│   ├── 1_Domain_Management.py
+│   ├── 2_Data_Ingestion.py
+│   ├── 3_Query_Interface.py
+│   └── 4_Configuration.py # (Placeholder/Em desenvolvimento)
 ├── src/
-│   ├── data_ingestion/
+│   ├── data_ingestion/     # Lógica de ingestão de documentos
+│   │   ├── __init__.py
+│   │   ├── data_ingestion_orchestrator.py
 │   │   ├── document_processor.py
-│   │   ├── text_chunker.py
-│   │   └── data_ingestion_orchestrator.py
-│   ├── query_processing/
-│   │   ├── query_orchestrator.py
-│   │   └── hugging_face_manager.py
-│   ├── utils/
+│   │   └── text_chunker.py
+│   ├── models/             # Modelos Pydantic para estruturas de dados
+│   │   ├── __init__.py
+│   │   ├── chunk.py
+│   │   ├── document_file.py
+│   │   └── domain.py
+│   ├── query_processing/   # Lógica de consulta e interação com LLM
+│   │   ├── __init__.py
+│   │   ├── hugging_face_manager.py
+│   │   └── query_orchestrator.py
+│   ├── utils/              # Utilitários compartilhados
+│   │   ├── __init__.py
+│   │   ├── domain_manager.py
 │   │   ├── embedding_generator.py
-│   │   ├── text_normalizer.py
+│   │   ├── faiss_manager.py
+│   │   ├── logger.py
 │   │   ├── sqlite_manager.py
-│   │   └── faiss_manager.py
-│   └── models/
-│       ├── document_file.py
-│       ├── chunk.py
-│       └── embedding.py
+│   │   └── text_normalizer.py
 ├── storage/
-│   └── domains/
-│       ├── public/
-│       │   ├── public.db
-│       │   └── vector_store/
-│       │       └── index.faiss
-│       └── test_domain/
-│           ├── test.db
-│           └── vector_store/
-│               └── test.faiss
+│   ├── domains/            # Armazenamento de dados por domínio
+│   │   ├── control.db      # Banco de dados de controle (registros de domínio)
+│   │   └── [domain_name]/  # Diretório para cada domínio criado
+│   │       ├── [domain_name].db
+│   │       └── vector_store/
+│   │           └── [domain_name].faiss
+│   └── schemas/            # Schemas SQL para bancos de dados
+│       ├── control_schema.sql
+│       └── schema.sql
 ├── tests/
 │   ├── data_ingestion/
-│   │   ├── test_document_processor.py
+│   │   ├── __init__.py
 │   │   ├── test_data_ingestion_orchestrator.py
+│   │   ├── test_document_processor.py
 │   │   ├── test_text_chunker.py
 │   │   └── test_docs/
-│   │       └── generate_test_pdfs.py
+│   │       └── generate_test_pdfs.py # (Script auxiliar para testes)
 │   ├── query_processing/
-│   │   ├── test_query_orchestrator.py
-│   │   └── test_hugging_face_manager.py
-│   └── utils/
-│       ├── test_embedding_generator.py
-│       ├── test_text_normalizer.py
-│       ├── test_sqlite_manager.py
-│       └── test_faiss_manager.py
-├── main.py
-└── README.md
+│   │   ├── __init__.py
+│   │   ├── test_hugging_face_manager.py
+│   │   └── test_query_orchestrator.py
+│   ├── utils/
+│   │   ├── __init__.py
+│   │   ├── test_domain_manager.py
+│   │   ├── test_embedding_generator.py
+│   │   ├── test_faiss_manager.py
+│   │   ├── test_logger.py
+│   │   ├── test_sqlite_manager.py
+│   │   └── test_text_normalizer.py
+│   └── conftest.py         # Configurações e fixtures para Pytest
+├── Admin.py                # Ponto de entrada principal da GUI Streamlit
+├── main.py                 # Ponto de entrada principal da CLI (Incompleto)
+├── README.md               # Este arquivo
+├── requirements.txt        # Dependências do projeto
+├── .env                    # Arquivo para variáveis de ambiente (não versionado)
+└── .gitignore              # Arquivos/diretórios ignorados pelo Git
 ```
 
 ## Componentes Principais
 
-### Pipeline de Ingestão de Dados
+Esta seção descreve os módulos e classes mais importantes que compõem o sistema.
 
-#### 1. DataIngestionOrchestrator
-- Coordena todo o fluxo de processamento de ingestão
-- Efetua controle de duplicatas via hash MD5
-- Controla transações para garantir a integridade dos dados
-- Processa diretórios inteiros de PDFs
-- Interfaces:
-  * `process_directory`: Executa a pipeline de ingestão
-  * `list_pdf_files`: Lista os pdfs de um diretório
+### Orquestração e Gerenciamento
 
-#### 2. DocumentProcessor
-- Processa arquivos PDF e extrai texto
-- Calcula hash MD5 para detecção de duplicatas
-- Trata erros de PDF inválido com propagação adequada
-- Interfaces:
-  * `process_document`: Extrai o texto e calcula o hash de um documento PDF
+-   **`DomainManager` (`src/utils/domain_manager.py`):** Responsável por gerenciar os domínios de conhecimento (criar, listar, atualizar, deletar) e seus respectivos arquivos (banco de dados, índice vetorial).
+-   **`DataIngestionOrchestrator` (`src/data_ingestion/data_ingestion_orchestrator.py`):** Coordena o pipeline completo de ingestão de documentos para um domínio específico, desde a leitura do PDF até o armazenamento dos chunks e embeddings.
+-   **`QueryOrchestrator` (`src/query_processing/query_orchestrator.py`):** Gerencia o fluxo de consulta, incluindo a geração de embedding da query, busca no índice vetorial, recuperação de chunks, formatação do prompt e interação com o LLM.
 
-#### 3. TextChunker
-- Divide texto em chunks recursivos mantendo coerência
-- Utiliza RecursiveCharacterTextSplitter para divisão por marcadores de quebra natural
-- Preserva estrutura do documento original nos chunks
-- Interfaces:
-  * `chunk_text`: Divisão principal do texto
+### Gerenciamento de Dados e Vetores
 
-### Pipeline de Consulta
+-   **`SQLiteManager` (`src/utils/sqlite_manager.py`):** Interface para os bancos de dados SQLite. Gerencia um banco de controle (`control.db`) para os registros de domínio e bancos de dados específicos para cada domínio, armazenando metadados de documentos e chunks.
+-   **`FaissManager` (`src/utils/faiss_manager.py`):** Interface para os índices vetoriais FAISS. Gerencia a criação, carregamento, adição de embeddings e busca por similaridade dentro do índice FAISS de cada domínio.
 
-#### 1. QueryOrchestrator
-- Coordena todo o processo de consulta
-- Converte consultas em embeddings
-- Recupera chunks relevantes via busca vetorial
-- Prepara contexto para modelos de linguagem
-- Interfaces:
-  * `query_llm`: Executa a pipeline de recuperação e consulta
+### Processamento de Documentos e Texto
 
-#### 2. HuggingFaceManager
-- Interface com a API de Inferência do Hugging Face
-- Suporta diferentes modelos de linguagem (no momento zephyr-7b-beta)
-- Parâmetros de geração configuráveis (temperatura, top_p, etc.)
-- Interfaces:
-  * `generate_answer`: Consulta o LLM e retorna a resposta
+-   **`DocumentProcessor` (`src/data_ingestion/document_processor.py`):** Extrai texto de arquivos PDF e calcula hashes para detecção de duplicatas.
+-   **`TextChunker` (`src/data_ingestion/text_chunker.py`):** Divide o texto extraído em chunks menores, utilizando estratégias como `RecursiveCharacterTextSplitter`.
+-   **`TextNormalizer` (`src/utils/text_normalizer.py`):** Aplica normalização ao texto (e.g., Unicode, lowercase) para consistência.
+-   **`EmbeddingGenerator` (`src/utils/embedding_generator.py`):** Gera embeddings vetoriais para os chunks de texto usando modelos da biblioteca `sentence-transformers`.
 
-### Componentes Compartilhados
+### Interação com LLM
 
-#### 1. TextNormalizer
-- Realiza normalização Unicode (NFKC)
-- Normaliza espaços preservando estrutura
-- Normaliza case para minúsculas
-- Interfaces:
-  * `normalize`: Pipeline completo de normalização
+-   **`HuggingFaceManager` (`src/query_processing/hugging_face_manager.py`):** Interage com a API de Inferência da Hugging Face para enviar prompts formatados (incluindo o contexto recuperado) e obter respostas do modelo de linguagem.
 
-#### 2. EmbeddingGenerator
-- Gera representações vetoriais para texto
-- Realiza processamento em lote para melhor performance
-- Integração com sentence-transformers
-- Interfaces:
-  * `generate_embeddings`: Gera embeddings a partir do texto fornecido
+### Interface Gráfica (GUI)
 
-#### 3. SQLiteManager
-- Gerencia todas as operações de banco de dados
-- Inicialização de schema e controle de versão
-- Controle de transações (commit/rollback)
-- Armazenamento de documentos, chunks e metadados de embeddings
-- Armazena os arquivos .db em `storage/domains/{domain_name}/`
-- Interfaces:
-  * `insert_document_file`: Insere os metadados dos documentos no banco de dados
-  * `insert_chunks`: Insere os chunks de texto no banco de dados
-  * `insert_embeddings`: Insere os metadados dos embeddings
-  * `get_embeddings_chunks`: Recupera os chunks pelos índices FAISS de seus embeddings
-
-#### 4. FaissManager
-- Gerencia índices FAISS para busca por similaridade
-- Cria, carrega e consulta índices
-- Adiciona os embeddings ao índice FAISS
-- Armazena os arquivos .faiss em `storage/domains/{domain_name}/vector_store/`
-- Realiza busca por similaridade
-- Interfaces:
-  * `add_embeddings`: Adiciona embeddings ao índice
-  * `search_faiss_index`: Realiza busca por similaridade
+-   **`Admin.py` e `pages/`:** Aplicação Streamlit que fornece a interface para gerenciamento de domínios, ingestão de dados e consulta ao sistema RAG.
 
 ### Modelos de Dados
 
-#### 1. DocumentFile
-- Representa um documento PDF com metadados
-- Rastreia caminho, hash e contagem de páginas
-
-#### 2. Chunk
-- Representa um chunk de texto com informações de posição
-- Referência para o documento pai
-
-#### 3. Embedding
-- Representa um embedding vetorial
-- Metadados para rastreamento no índice FAISS
-- Referência para o chunk pai
+-   **`src/models/`:** Contém as definições (usando Pydantic) para as estruturas de dados `Domain`, `DocumentFile`, e `Chunk`.
 
 ## Requisitos
 
 - Python 3.10+
+- Git (para clonar o repositório)
 - Dependências principais:
+  * streamlit
+  * pydantic
   * pypdf 5.4.0
   * sentence-transformers 3.4.1
   * faiss-cpu 1.10.0
   * huggingface-hub 0.29.3
-  * langchain 0.3.21
+  * langchain 0.3.21 # Dependência pode ser indireta via langchain-text-splitters
   * langchain-text-splitters 0.3.7
   * SQLAlchemy 2.0.39
   * pytest 8.3.5
@@ -181,98 +158,105 @@ Este sistema processa documentos PDF, extrai texto, divide em chunks, gera embed
 
 ## Instalação
 
-1. Clone o repositório:
-```bash
-git clone https://github.com/fmossri/pbic-project.git
-cd pbic-project
-```
+1.  **Clone o repositório:**
+    ```bash
+    git clone https://github.com/fmossri/pbic-project.git
+    cd pbic-project
+    ```
 
-2. Crie e ative um ambiente virtual:
-```bash
-python -m venv .venv
-source .venv/bin/activate  # Linux/Mac
-# ou
-.venv\Scripts\activate  # Windows
-```
+2.  **Crie e ative um ambiente virtual:** (Recomendado)
+    ```bash
+    # Linux/macOS
+    python3 -m venv .venv
+    source .venv/bin/activate
 
-3. Instale as dependências:
-```bash
-pip install -r requirements.txt
-```
+    # Windows (cmd/powershell)
+    python -m venv .venv
+    .venv\Scripts\activate
+    ```
 
-4. Crie um token de acesso com permissões de leitura na Hugging Face;
+3.  **Instale as dependências:**
+    ```bash
+    pip install -r requirements.txt
+    ```
 
-5. Crie um arquivo .env e adicione a seguinte variável de ambiente:
-```
-HUGGINGFACE_API_TOKEN="seu token de acesso"
-```
+4.  **Configure o Token da Hugging Face:**
+    *   Crie um token de acesso com permissões de leitura no site da [Hugging Face](https://huggingface.co/settings/tokens).
+    *   Crie um arquivo chamado `.env` na raiz do projeto.
+    *   Adicione a seguinte linha ao arquivo `.env`, substituindo `seu-token-aqui` pelo seu token:
+        ```dotenv
+        HUGGINGFACE_API_TOKEN="seu-token-aqui"
+        ```
 
 ## Uso
 
-** main.py --help
+### Via GUI
 
-** Opcional: adicionar --debug ao final traz mais informações ao console e aos arquivos de log.
-
-### Processando PDFs e Gerando Embeddings
+### Iniciando a Interface Gráfica
 
 ```bash
-python main.py -i caminho/do/diretório
+streamlit run Admin.py
 ```
 
-### Realizando Consultas
+### Via CLI
 
+** main.py --help (Incompleto)
+
+#### Adicionando Domínios
 ```bash
-python main.py -q "Sua pergunta aqui"
+python main.py -d "nome do domínio", "breve descrição", "palavras-chave" [--debug]
 ```
 
-### Executando Testes
+#### Processando PDFs e Gerando Embeddings
 
 ```bash
-python -m pytest -vv
+python main.py -i caminho/do/diretório [--debug]
+```
+
+#### Realizando Consultas
+
+```bash
+python main.py -q "Sua pergunta aqui" [--debug]
+```
+
+#### Executando Testes
+
+```bash
+python -m pytest
 ```
 
 ## Estado Atual do Desenvolvimento
 
-### Componentes Concluídos ✅
-
-- Pipeline completo de ingestão de PDF
-- Processamento de texto e chunking semântico
-- Geração de embeddings e normalização de texto
-- Armazenamento SQLite com gerenciamento de transações
-- Armazenamento FAISS para vetores
-- Sistema de consulta e recuperação
-- Integração com Hugging Face para geração de respostas
-- Testes unitários e de integração
-- Logger
-
 ### Em Desenvolvimento 🔄
 
-- Lógica de criação de domínios
-- Separação de documentos ingeridos por domínio (.db e .faiss independentes)
-- Sistema de seleção de domínios para geração de respostas usando busca por similaridade
-- Sistema de configuração
-- Interface de usuário
-- **API RESTful
-- **Funcionalidades avançadas de busca
+0  **Melhorias na interface Streamlit (GUI)**
+    - Corrigir bugs da interface gráfica
+    - Extrair lógica, movendo para componentes ou um novo arquivo
+    - Testar funções do backend
+    - Progredir na interface de configuração customizável
 
-## Problemas Conhecidos
+1. **Sistema de configuração customizável**
+    - Implementar lógica de customização das configurações do sistema
+    - Pode envolver Estratégias e parâmetros de processamento, tratamento de dados, Chunking, Embedding, etc. 
 
-- **Erro do File Watcher do Streamlit com PyTorch:** Ao navegar para a página `Gerenciamento de Domínios`, um erro `RuntimeError: Tried to instantiate class '__path__._path'...` relacionado a `torch.classes` pode aparecer no console. Isso parece ser um problema com o file watcher do Streamlit tentando inspecionar a biblioteca `torch`. Tentativas de solucionar isso adicionando `torch` ou `.venv` à `folderWatchBlacklist` ou definindo `watchFileSystem = false` no arquivo `.streamlit/config.toml` não surtiram efeito. O erro parece ser apenas um ruído no console e não afeta a funcionalidade principal da GUI no momento.
-- **Atualização de Domínio na GUI:** A funcionalidade de editar um domínio na página `Gerenciamento de Domínios` (quando se clica em "💾 Salvar Alterações") atualmente não está persistindo as alterações no banco de dados, embora a interface feche a seção de edição como se a operação tivesse sido bem-sucedida. A lógica de `domain_manager.update_domain_details` ou `sqlite_manager.update_domain` precisa ser revisada.
+2. **Benchmarking**
+    - Pesquisar estratégias de avaliação de sistemas RAG 
+    - Implementar testagem e coleta de métricas relevantes no sistema.
 
-## Últimas Atualizações (YYYY-MM-DD)
+3. **Chunking Semântico**
+    - Implementar estratégia de chunking semântico/agêntico e clusterização à aplicação
+    - Envolverá a refatoração do TextChunker
+    - Talvez permita escolher entre estratégias diferentes através de configuração.
 
-- **Refatoração do Modelo `Embedding`:** O modelo `Embedding` foi removido. O atributo `faiss_index` foi migrado para o modelo `Chunk`. Todo o código relevante (`SQLiteManager`, `FaissManager`, orquestradores) foi atualizado para refletir essa mudança.
-- **Conclusão da Lógica de Domínios:**
-    - **Ingestão de Dados:** O `DataIngestionOrchestrator` agora seleciona o domínio correto, utiliza o banco de dados de controle para obter os caminhos, armazena os dados no banco de dados e índice FAISS específicos do domínio e atualiza a contagem `total_documents` do domínio no banco de controle.
-    - **Processamento de Consultas:** O `QueryOrchestrator` implementa a seleção de domínios relevantes com base na consulta (usando LLM e informações do banco de controle) e recupera chunks apenas dos armazenamentos dos domínios selecionados.
-- **Melhorias na Suite de Testes:**
-    - Correção de falhas nos testes dos orquestradores (`DataIngestionOrchestrator`, `QueryOrchestrator`) relacionadas a mocks, serialização, assinaturas de métodos e importações ausentes.
-    - Expansão significativa da cobertura de testes do `SQLiteManager` para operações CRUD de domínio e tratamento de erros, com simulação de erros aprimorada.
-- **Correção de Bugs:**
-    - Corrigido `AttributeError` na chamada do logger em `SQLiteManager.insert_domain` (`domain.domain_name` para `domain.name`).
+4.  **FAISS Index com IDs Estáveis:**
+    - Pesquisar e implementar opções de index FAISS que suportem IDs (ex. `IndexIDMap`) para permitir a remoção segura de documentos sem comprometer as relações entre as entradas dos chunks no banco de dados e seus vetores no índice.
+    - Isso envolverá refatorar o `FaissManager`, a lógica de ingestão e como os vetores são referenciados, armazenados e usados.
 
-## Próximos Passos Possíveis
+### Próximos Passos 🚀
+- Adicionar OCR à lógica de extração de PDFs
+- Avaliar diferentes modelos de embedding e LLMs.
+
+## Passos Futuros Possíveis
 
 1. **Aprimoramento do Sistema de Consulta**
    - Otimização de prompts
@@ -280,83 +264,34 @@ python -m pytest -vv
    - Re-ranqueamento dos chunks recuperados
    - Atribuição de fontes para fundamentar as respostas
 
-2. **Desenvolvimento de API**
-   - API RESTful com FastAPI
-   - Processamento assíncrono
-   - Validação de entrada com pydantic
-   - Documentação com OpenAPI/Swagger
+2. **placeholder**
+   - Adicionar suporte a outros tipos de documentos (e.g., .docx, .txt).
+   - Implementar seleção de modelos de embedding e LLMs através da configuração.
+   - Explorar outras estratégias avançadas de chunking e recuperação.
+   - Implementar outras opções de normalização e tratamento de texto.
 
 3. **Funcionalidades Avançadas**
    - Busca híbrida com grafos de conhecimento
    - Processamento multi-modal (imagens, tabelas)
+   - Uso de GPU (cuda)
+   - Processamento paralelo
 
-4. **Monitoramento e Logging**
-   - Logging estruturado
-   - Métricas de performance
-   - Verificações de saúde da aplicação
+4. **Saúde da Aplicação**
+   - Otimizar performance e escalabilidade.
+   - Implementar verificações de saúde da aplicação.
+   - Limpar e padronizar logging e coleta de métricas.
+   - Melhorar tratamento de erros e resiliência.
 
-5. **Interface Web**
-  - Criação de página da web para interagir com o sistema
-  - Funcionalidade de ingestão, com inserção de domínio, palavras-chave e diretório alvo
-  - Sistema de configuração personalizada
-  - Funcionalidade de consulta
+## Problemas Conhecidos
 
-## Logging System
+- **Erro do File Watcher do Streamlit com PyTorch:** Ao navegar para a página `Gerenciamento de Domínios`, um erro `RuntimeError: Tried to instantiate class '__path__._path'...` relacionado a `torch.classes` pode aparecer no console. Isso parece ser um problema com o file watcher do Streamlit tentando inspecionar a biblioteca `torch`. Tentativas de solucionar isso adicionando `torch` ou `.venv` à `folderWatchBlacklist` ou definindo `watchFileSystem = false` no arquivo `.streamlit/config.toml` não surtiram efeito. O erro parece ser apenas um ruído no console e não afeta a funcionalidade principal da GUI no momento.
 
-The system includes a robust logging system with the following features:
+- **Erro do Streamlit: SetPageConfigMustBeFirstCommandError** Logo após inicializar e carregar a primeira página, um erro `set_page_config() can only be called once per app page, and must be called as the first Streamlit command in your script.` ocorre quando clicamos em qualquer seção implementada do sidebar; Quando clicamos uma segunda vez em qualquer seção, o erro desaparece e não volta a ocorrer até a próxima inicialização do sistema.
 
-- JSON-formatted logs for machine readability
-- Domain-based logging for different components
-- Context tracking and correlation
-- Error handling with stack traces
-- Log file rotation and management
-- Library log suppression
-- Different formats for console and file output
+## Contribuindo
 
-### Log Levels
+Contribuições são bem-vindas! Por favor, siga as diretrizes de contribuição do projeto.
 
-The system uses standard Python log levels:
-- CRITICAL (50): Critical errors that may cause system failure
-- ERROR (40): Errors that need attention but don't stop the system
-- WARNING (30): Warning messages for potential issues
-- INFO (20): General information about system operation
-- DEBUG (10): Detailed information for debugging
+## Licença
 
-### Log Format
-
-Console output format:
-```
-2025-04-13T20:17:02.282109 - src.utils.logger - INFO - Sistema de registro de logs configurado
-```
-
-File output format (JSON):
-```json
-{
-    "timestamp": "2025-04-13T20:17:02.282109",
-    "level": "INFO",
-    "name": "src.utils.logger",
-    "message": "Sistema de registro de logs configurado",
-    "function": "setup_logging",
-    "context": {}
-}
-```
-
-## Próximos Passos
-
-### Sistema de Domínios de Conhecimento (Planejado)
-- Implementação de domínios de conhecimento separados
-- Banco de dados de controle para gerenciamento de domínios
-- Índices FAISS específicos por domínio
-- Busca semântica entre domínios
-- Re-ranqueamento de resultados entre domínios
-
-### Funcionalidades em Desenvolvimento
-- Sistema de configuração
-- Interface de usuário
-- API RESTful
-- Funcionalidades avançadas de busca
-
-6.  **FAISS Index with Stable IDs:**
-    - Research and potentially implement a FAISS index strategy that supports stable, user-provided IDs (e.g., `IndexIDMap`) to allow for reliable vector deletion without invalidating existing vector-chunk links.
-    - This will likely involve updating the `FaissManager`, ingestion logic, and how vector references are stored/used.
-
+Este projeto é licenciado sob a Licença MIT. Veja o arquivo LICENSE para mais detalhes.
