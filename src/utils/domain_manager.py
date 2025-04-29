@@ -80,9 +80,9 @@ class DomainManager:
                 domain_dir = os.path.join("storage", "domains", f"{domain.name}")
                 if os.path.isdir(domain_dir):
                     shutil.rmtree(domain_dir)
-                    self.logger.info("Diretório e arquivos do dominio removidos com sucesso", domain_name=domain.name)
+                    self.logger.info("Diretorio e arquivos do dominio removidos com sucesso", domain_name=domain.name)
                 else:
-                    self.logger.warning("Diretório do dominio não encontrado, removendo o registro do dominio", domain_name=domain.name)
+                    self.logger.warning("Diretorio do dominio nao encontrado, removendo o registro do dominio", domain_name=domain.name)
 
                 self.sqlite_manager.delete_domain(domain, conn)
                 conn.commit()
@@ -157,7 +157,7 @@ class DomainManager:
             if os.path.exists(old_dir):
                 os.rename(old_dir, new_dir)
             else:
-                self.logger.warning(f"Diretório {old_dir} nao encontrado, pulando renomeacao do diretório.")
+                self.logger.warning(f"Diretorio {old_dir} nao encontrado, pulando renomeacao do diretorio.")
 
             # Tenta renomear o banco de dados
             old_db_path = os.path.join(f"{new_dir}", f"{old_name}.db")
@@ -177,13 +177,13 @@ class DomainManager:
                 missing_files.append(old_faiss_path)
 
             if len(missing_files) == 1:
-                self.logger.critical(f"Alerta! Inconsistência encontrada no sistema de arquivos. {missing_files[0]} nao existe. Remova o dominio e seus arquivos.", domain_name=old_name, missing_files=missing_files)
+                self.logger.critical(f"Alerta! Inconsistencia encontrada no sistema de arquivos. {missing_files[0]} nao existe. Remova o dominio e seus arquivos.", domain_name=old_name, missing_files=missing_files)
                 if os.path.isdir(new_dir):
                     try:
                         os.rename(new_dir, old_dir)
-                        self.logger.info("Tentativa de reverter renomeacao do diretório.")
+                        self.logger.info("Tentativa de reverter renomeacao do diretorio.")
                     except OSError as rb_err:
-                        self.logger.error(f"Falha ao reverter renomeacao do diretório: {rb_err}. Sistema de arquivos pode estar inconsistente.")
+                        self.logger.error(f"Falha ao reverter renomeacao do diretorio: {rb_err}. Sistema de arquivos pode estar inconsistente.")
             
             return new_db_path, new_faiss_path
 
@@ -192,10 +192,10 @@ class DomainManager:
             if os.path.isdir(new_dir):
                 try:
                     os.rename(new_dir, old_dir)
-                    self.logger.info("Tentativa de reverter renomeacao do diretório.")
+                    self.logger.info("Tentativa de reverter renomeacao do diretorio.")
                 except OSError as rb_err:
-                    self.logger.error(f"Falha ao reverter renomeacao do diretório: {rb_err}. Sistema de arquivos pode estar inconsistente.")
-            raise OSError(f"Falha na renomeação do sistema de arquivos: {e}") from e
+                    self.logger.error(f"Falha ao reverter renomeacao do diretorio: {rb_err}. Sistema de arquivos pode estar inconsistente.")
+            raise OSError(f"Falha na renomeacao do sistema de arquivos: {e}") from e
 
     def list_domains(self) -> List[Domain]:
         """
@@ -205,8 +205,17 @@ class DomainManager:
         try:
             with self.sqlite_manager.get_connection(control=True) as conn:
                 domains = self.sqlite_manager.get_domain(conn)
-                self.logger.info("Dominios listados com sucesso", domains= [domain.name for domain in domains])
-                return domains
+                
+                # Check if domains is None before logging success or iterating
+                if domains is None:
+                    self.logger.info("Nenhum dominio encontrado no banco de dados.")
+                    return None # Return None as expected by the test
+                else:
+                    # Log success only if domains were retrieved (could be an empty list)
+                    domain_names = [domain.name for domain in domains]
+                    self.logger.info("Dominios listados com sucesso", domains=domain_names)
+                    return domains # Return the list (potentially empty)
+
         except Exception as e:
             self.logger.error(f"Erro ao listar dominios de conhecimento: {e}", exc_info=True) # Add exc_info for traceback
             raise e # Re-raise the exception

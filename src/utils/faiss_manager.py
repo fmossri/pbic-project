@@ -36,14 +36,14 @@ class FaissManager:
             if os.path.exists(self.index_path):
                 # Carrega o índice existente
                 self.index = faiss.read_index(self.index_path)
-                self.logger.debug(f"Índice FAISS carregado com sucesso: {self.index_path}")
+                self.logger.debug(f"Indice FAISS carregado com sucesso: {self.index_path}")
             else:
                 # Cria um novo índice
-                self.logger.warning(f"Índice FAISS não encontrado. Criando um novo índice")
+                self.logger.warning(f"Indice FAISS nao encontrado. Criando um novo indice")
                 self.index = faiss.IndexFlatL2(self.dimension)
                 # Salva o índice vazio
                 faiss.write_index(self.index, self.index_path)
-                self.logger.warning(f"Índice FAISS salvo com sucesso: {self.index_path}")
+                self.logger.warning(f"Indice FAISS salvo com sucesso: {self.index_path}")
         except Exception as e:
             self.logger.error(f"Erro ao inicializar o índice FAISS: {e}")
             raise e
@@ -79,7 +79,7 @@ class FaissManager:
             self.logger.error(f"Erro ao adicionar embeddings ao índice FAISS: {e}")
             raise e
 
-    def search_faiss_index(self, query_embedding: np.ndarray, k: int = 5, vector_store_path: str = None) -> tuple[np.ndarray, np.ndarray]:
+    def search_faiss_index(self, query_embedding: np.ndarray, vector_store_path: str, k: int = 5) -> tuple[np.ndarray, np.ndarray]:
         """
         Realiza uma busca no índice FAISS para encontrar os k embeddings mais similares à query_embedding.
         
@@ -91,21 +91,35 @@ class FaissManager:
         Returns:
             tuple[np.ndarray, np.ndarray]: Tupla contendo as distâncias e os índices dos embeddings mais similares
         """
-        self.logger.info(f"Realizando busca por similaridade no índice FAISS", top_k=k)
-        # Verifica se o vetor de embedding é um array unidimensional
-        self.index_path = vector_store_path
+        if vector_store_path:
+            self.index_path = vector_store_path
+        else:
+            self.logger.error(f"Caminho do indice FAISS nao fornecido ou invalido")
+            raise ValueError(f"Caminho do índice FAISS não fornecido ou inválido")
+        
+        self.logger.info(f"Realizando busca por similaridade no indice FAISS", top_k=k)
+
         try:
             self._initialize_index()
+            # Verifica se o vetor de embedding é um array unidimensional
             if len(query_embedding.shape) == 1:
                 # Se for unidimensional, converte para bidimensional
                 query_embedding = query_embedding.reshape(1, -1)
 
             # Realiza a busca no índice FAISS
             distances, indices = self.index.search(query_embedding, k)
-            self.logger.debug(f"Busca no índice FAISS realizada com sucesso")
+
+            flat_indices = indices.flatten().tolist()
+            self.logger.debug(
+                f"Busca no indice FAISS realizada com sucesso", 
+                distances_shape=distances.shape, 
+                indices_shape=indices.shape,
+                indices_flat=flat_indices 
+            )
+            # ================================================
             return distances, indices
         except Exception as e:
-            self.logger.error(f"Erro ao realizar busca no índice FAISS: {e}")
+            self.logger.error(f"Erro ao realizar busca no indice FAISS: {e}")
             raise e
         
     def _save_state(self) -> None:
