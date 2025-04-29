@@ -1,5 +1,6 @@
+import os
 import numpy as np
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 from datetime import datetime
 
 from src.models import Domain
@@ -8,6 +9,9 @@ from src.utils.logger import get_logger
 from .hugging_face_manager import HuggingFaceManager
 
 class QueryOrchestrator:
+    """
+    Orquestrador de queries para o sistema de busca.
+    """
     DEFAULT_LOG_DOMAIN = "Processamento de queries"
     def __init__(self):
         self.logger = get_logger(__name__, log_domain=self.DEFAULT_LOG_DOMAIN)
@@ -18,7 +22,7 @@ class QueryOrchestrator:
         self.embedding_generator = EmbeddingGenerator(log_domain=self.DEFAULT_LOG_DOMAIN)
         self.faiss_manager = FaissManager(log_domain=self.DEFAULT_LOG_DOMAIN)
         self.sqlite_manager = SQLiteManager(log_domain=self.DEFAULT_LOG_DOMAIN)
-        self.hugging_face_manager = HuggingFaceManager(log_domain=self.DEFAULT_LOG_DOMAIN)
+        self.hugging_face_manager = HuggingFaceManager(log_domain=self.DEFAULT_LOG_DOMAIN, model_name="HuggingFaceH4/zephyr-7b-beta")
 
     def _process_query(self, query: str) -> np.ndarray:
         """
@@ -52,7 +56,7 @@ class QueryOrchestrator:
             self.logger.error(f"Erro ao processar a query: {str(e)}")
             raise e
     
-    def _select_domains(self, query: str) -> List[Domain]:
+    def _select_domains(self, query: str, selected_domains: Optional[List[str]] = None) -> List[Domain]:
         """
         Seleciona os domínios relevantes para a query.
 
@@ -60,9 +64,9 @@ class QueryOrchestrator:
             query (str): A query original.
             :
         """
-        self.logger.info("Selecionando os domínios relevantes para a query")
+        self.logger.info("Selecionando os dominios relevantes para a query")
         if not query:
-            self.logger.error("Erro ao selecionar os domínios relevantes: Query vazia ou inválida")
+            self.logger.error("Erro ao selecionar os dominios relevantes: Query vazia ou inválida")
             raise ValueError("Query vazia ou inválida")
         
         prepared_prompt = f"""
@@ -82,28 +86,63 @@ class QueryOrchestrator:
         try:
             with self.sqlite_manager.get_connection(control=True) as conn:
                 domains = self.sqlite_manager.get_domain(conn)
-                self.logger.info(f"Domínios selecionados: {domains}")
-                for i, domain in enumerate(domains):
-                    prepared_prompt += f"\n\nDomínio {i+1}:\nNome: {domain.name}\nDescrição: {domain.description}\nPalavras-chave: {domain.keywords}\nid: {domain.id}"
+                fetched_domain_names = [d.name for d in domains] if domains else []
+                self.logger.debug("Dominios recuperados do banco de controle", fetched_domain_count=len(fetched_domain_names), fetched_domain_names=fetched_domain_names)
                 
-                prepared_prompt += f"\n\nPergunta: {query}"
+                # Se nenhum dominio for selecionado, seleciona automaticamente entre todos disponíveis
+                if not selected_domains:
+                    if not domains:
+                        self.logger.error("Banco de controle nao retornou nenhum dominio. Nao e possivel selecionar automaticamente.")
+                        raise ValueError("Nenhum domínio encontrado no banco de controle.")
 
-                self.logger.info(f"Prompt preparado: {prepared_prompt}")
+                    i = 0
+                    valid_domains = []
+                    for domain in domains:
+                        # Se o dominio possuir um arquivo DB, adiciona ao prompt
+                        if domain.db_path and os.path.exists(domain.db_path):
+                            prepared_prompt += f"\n\nDomínio {i+1}:\nNome: {domain.name}\nDescrição: {domain.description}\nPalavras-chave: {domain.keywords}\nid: {domain.id}"
+                            i += 1
+                            valid_domains.append(domain)
+                    
+                    self.logger.info(f"Dominios disponiveis para selecao: {[domain.name for domain in valid_domains] if valid_domains else 'Nenhum'}")
+                    prepared_prompt += f"\n\nPergunta: {query}"
 
-                response: str = self.hugging_face_manager.generate_answer(prepared_prompt)
-                self.logger.info(f"Resposta: {response}")
-                domain_names = response.split("|")
-                domain_names = [name.strip() for name in domain_names]
-                self.logger.info(f"Domínios selecionados: {domain_names}")
-                selected_domains = [domain for domain in domains if domain.name in domain_names]
+                    self.logger.debug(f"Prompt preparado: {prepared_prompt}")
+                    self.logger.info("Enviando prompt para o LLM para selecao de dominio", domain_selection_prompt=prepared_prompt)
 
-                return selected_domains
+                    try:
+                        response: str = self.hugging_face_manager.generate_answer(query, prepared_prompt)
+                        self.logger.debug("chamada ao LLM para selecao de dominio realizada com sucesso.")
+                    except Exception as llm_error:
+                        self.logger.error("Erro durante a chamada ao LLM para selecao de dominio", exc_info=True)
+                        raise llm_error
+
+                    self.logger.debug("Resposta bruta do LLM para selecao de dominio:", raw_response=response)
+                    
+                    response_domain_names = response.split("|")
+                    response_domain_names = [name.strip() for name in response_domain_names]
+                    # === DEBUG LOG: Parsed domain names ===
+                    self.logger.debug(f"Nomes dos dominios parseados: {response_domain_names}")
+                    # ======================================
+                    self.logger.info(f"Dominios selecionados: {response_domain_names}")
+                    selected_domains = [domain for domain in domains if domain.name in response_domain_names]
+
+                # Se o usuario selecionou domínios específicos, simplesmente retorna os objetos Domain selecionados
+                else:
+                    selected_domains = [domain for domain in domains if domain.name in selected_domains]
+                if selected_domains:
+                    self.logger.debug(f"Valor do retorno: Lista final de dominios selecionados: {[domain.name for domain in selected_domains]}")
+                    return selected_domains
+                else:
+                    self.logger.error("Nenhum domínio selecionado")
+                    raise ValueError("Nenhum dominio selecionado")
         
         except Exception as e:
-            self.logger.error(f"Erro ao selecionar os domínios relevantes: {str(e)}")
-            raise e
+            # Log the specific error that occurred during the selection process
+            self.logger.error(f"Erro durante a selecao automatica do dominio: {str(e)}", exc_info=True) 
+            # Raise a more informative ValueError, linking the original exception
+            raise ValueError(f"Falha ao selecionar dominio automaticamente: {str(e)}") from e
         
-
     def _retrieve_documents(self, query_embedding: np.ndarray, domain: Domain) -> List[str]:
         """
         Recupera os chunks de conteúdo relevantes para a query usando o FaissManager.
@@ -114,18 +153,30 @@ class QueryOrchestrator:
         Returns:
             List[str]: Uma lista de chunks de conteúdo relevantes.
         """
-        self.logger.info("Recuperando os chunks de conteudo relevantes")
+        self.logger.info("Recuperando os chunks de conteudo relevantes", domain=domain.name)
         if query_embedding is None or query_embedding.size == 0:
             self.logger.error("Vetor de embedding vazio ou invalido")
             raise ValueError("Vetor de embedding vazio ou inválido")
         
         try:
-            _, indices = self.faiss_manager.search_faiss_index(query_embedding, domain.vector_store_path)
+            # === Log inputs for Faiss search ===
+            self.logger.debug(f"Procurando o indice FAISS em: {domain.vector_store_path}")
+            # ====================================
+            _, indices = self.faiss_manager.search_faiss_index(query_embedding=query_embedding, k=5, vector_store_path=domain.vector_store_path)
             flat_indices = indices.flatten().tolist()
+            # === Log Faiss results ===
+            self.logger.debug(f"Valor de retorno da busca no indice FAISS", flat_indices=flat_indices)
+            # =========================
             self.metrics_data["knn_faiss_indices"] = len(flat_indices)
-
+            
+            # === Log inputs for SQLite lookup ===
+            self.logger.debug(f"Procurando chunks no banco de dados: {domain.db_path} para os indices: {flat_indices}")
+            # ====================================
             with self.sqlite_manager.get_connection(db_path=domain.db_path) as conn:
                 chunks_content = self.sqlite_manager.get_chunks_content(conn, flat_indices)
+    
+                self.logger.debug(f"Valor de retorno da busca no banco de dados: {len(chunks_content)} chunks.", chunks_content=chunks_content)
+    
                 self.metrics_data["chunks_content"] = len(chunks_content)
             self.logger.info("Chunks de conteudo recuperados com sucesso")
             return chunks_content
@@ -181,7 +232,7 @@ class QueryOrchestrator:
         self.metrics_data["faiss_dimension"] = self.faiss_manager.dimension
         self.metrics_data["database_path"] = self.sqlite_manager.db_path
 
-    def query_llm(self, query: str) -> Dict[str, Any]:
+    def query_llm(self, query: str, domain_names: Optional[List[str]] = None) -> Dict[str, Any]:
         """
         Processa a query e retorna a resposta gerada pelo modelo LLM.
 
@@ -202,15 +253,33 @@ class QueryOrchestrator:
 
         try:
             self.metrics_data["question"] = query
-            selected_domains = self._select_domains(query)
+            selected_domains = self._select_domains(query, domain_names)
+            # === DEBUG LOG: Selected Domains ===
+            selected_domain_names_log = [d.name for d in selected_domains] if selected_domains else []
+            self.logger.info(f"Domains selected for retrieval: {selected_domain_names_log}")
+            # ===================================
             query_embedding = self._process_query(query)
 
             chunks_content = []
             for domain in selected_domains:
                 domain_chunks = self._retrieve_documents(query_embedding, domain)
                 chunks_content.extend(domain_chunks)
-
+            if not chunks_content:
+                self.logger.warning("Nenhum chunk de conteudo recuperado")
+                # === DEBUG LOG: Empty Chunks ===
+                self.logger.debug("No content chunks retrieved to build prompt.")
+                # ===============================
+                self.metrics_data["answer"] = "Nenhum resultado encontrado para a query"
+                self.metrics_data["success"] = False
+                return self.metrics_data
+            
+            # === DEBUG LOG: Retrieved Chunks ===
+            self.logger.debug(f"Retrieved chunks for context ({len(chunks_content)} total):", context_chunks=chunks_content)
+            # ===================================
             context_prompt = self._prepare_context_prompt(query, chunks_content)
+            # === DEBUG LOG: Final Prompt ===
+            self.logger.debug("Final prompt being sent to LLM:", final_prompt=context_prompt)
+            # ===============================
             answer = self.hugging_face_manager.generate_answer(query, context_prompt)
             self.metrics_data["answer"] = answer
             self.metrics_data["processing_duration"] = str(datetime.now() - self.metrics_data["start_time"])
