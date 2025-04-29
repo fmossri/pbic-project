@@ -118,7 +118,7 @@ def main():
     if "--debug" in sys.argv:
         debug = True
 
-    setup_logging(log_dir="logs", debug=debug)
+    setup_logging(log_dir="logs/cli", debug=debug)
     logger = get_logger("main")
 
 
