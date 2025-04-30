@@ -172,16 +172,11 @@ def setup_logging(
     # Adiciona handlers ao logger raiz
     root_logger.addHandler(file_handler)
     root_logger.addHandler(console_handler)
-    
-    # === DEBUG PRINT: Handlers added ===
-    print(f"--- DEBUG: Root logger handlers after adding: {root_logger.handlers} ---", file=sys.stderr)
 
-    # --- Silence noisy loggers (like file watcher) --- 
-    noisy_loggers = ['watchdog', 'streamlit.watcher.local_sources_watcher', 'asyncio'] # Add others if needed
+    # --- Silencia loggers de dependências (como file watcher) --- 
+    noisy_loggers = ['watchdog', 'streamlit.watcher.local_sources_watcher', 'asyncio']
     for logger_name in noisy_loggers:
         logging.getLogger(logger_name).setLevel(logging.WARNING) 
-        print(f"--- DEBUG: Set logger '{logger_name}' level to WARNING ---", file=sys.stderr)
-    # --------------------------------------------------
 
     # Configura loggers para bibliotecas - apenas erros
     for lib in ['torch', 'transformers', 'sentence_transformers']:
