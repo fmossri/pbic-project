@@ -36,21 +36,55 @@ retrieval_k = 5
 
 [llm]
 # ID do repositório do modelo Hugging Face Hub para inferência
-model_repo_id = "mistralai/Mistral-7B-Instruct-v0.1" # Exemplo, escolha o modelo apropriado
-# Parâmetros da API de inferência
-max_new_tokens = 1000 # Atualizado para coincidir com valor hardcoded no HuggingFaceManager
+# Default: "mistralai/Mistral-7B-Instruct-v0.1"
+model_repo_id = "mistralai/Mistral-7B-Instruct-v0.1"
+
+# --- Parâmetros da Geração de Texto --- 
+
+# Máximo de tokens a serem gerados na resposta. Controla o comprimento máximo.
+# Default: 1000
+max_new_tokens = 1000
+
+# Controla a aleatoriedade: valores baixos (<0.5) tornam a saída mais focada/determinística,
+# valores altos (>0.7) tornam mais aleatória/criativa.
+# Default: 0.7
 temperature = 0.7
-top_p = 0.9 # Atualizado para coincidir com valor hardcoded no HuggingFaceManager
+
+# Nucleus sampling: considera apenas os tokens cuja probabilidade acumulada excede top_p.
+# Alternativa/Complemento à temperature para controlar aleatoriedade.
+# Default: 0.9
+top_p = 0.9
+
+# Considera apenas os 'k' tokens mais prováveis para a próxima palavra.
+# Limita o pool de palavras candidatas.
+# Default: 50
 top_k = 50
-repetition_penalty = 1.0 # Atualizado para coincidir com valor hardcoded no HuggingFaceManager
+
+# Penaliza tokens que apareceram recentemente para reduzir repetições.
+# Valores > 1.0 aplicam penalidade. 1.0 = sem penalidade.
+# Default: 1.1
+repetition_penalty = 1.1
+
+# --- Parâmetros de Retry --- 
+# Número máximo de tentativas de chamada à API em caso de falha.
+# Default: 3
+max_retries = 3
+
+# Tempo de espera (em segundos) entre as tentativas de chamada à API.
+# Default: 2
+retry_delay_seconds = 2
+
+# --- Template do Prompt --- 
+# Define a estrutura do prompt enviado ao LLM, incluindo contexto e query.
+# Default: (Ver modelo LLMConfig em models.py) !!! Não remover Context:{context} Question: {query} Helpful Answer:
 # Usar um motor de template como Jinja2 depois se necessário
-prompt_template = """Use the following pieces of context to answer the question at the end.
-If you don't know the answer, just say that you don't know, don't try to make up an answer.
-Keep the answer concise and directly address the question.
-Provide the answer based *only* on the provided context. Do not add external information.
+prompt_template = """Use o seguinte contexto para responder a pergunta no final.
+Se você não sabe a resposta, apenas diga que não sabe, não tente inventar uma resposta.
+Mantenha a resposta concisa e diretamente ao ponto da pergunta.
+Forneça a resposta *apenas* com base no contexto fornecido. Não adicione informações externas.
 
 Context:
 {context}
 
 Question: {query}
-Helpful Answer:""" # Prompt atualizado 
+Helpful Answer:""" 
