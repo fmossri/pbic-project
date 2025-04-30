@@ -109,29 +109,29 @@ class DomainManager:
                 # Seleciona os campos do domínio que podem ser atualizados
                 update_fields = {}
                 for column, value in updates.items():
+                    # Verifica se o campo pode ser atualizado manualmente
                     if column in Domain.updatable_fields() and value != getattr(domain, column):
                         update_fields[column] = value
-                    # Log warning if field is not updatable OR if value is the same
                     elif column not in Domain.updatable_fields():
                         self.logger.warning("Campo nao pode ser atualizado manualmente", column=column)
-                    else: # Optional: log if value is the same
+                    else:
                         self.logger.debug(f"Valor para '{column}' é o mesmo, atualizacao ignorada.")
                 
-                # If no valid fields to update, return early
                 if not update_fields:
                     self.logger.info("Nenhum campo valido ou alterado para atualizar.")
-                    return # Exit before starting transaction
+                    return
 
                 if "name" in update_fields.keys():
-                    # Verifica se o novo nome já existe
+                    # Verifica se o novo nome já existe no banco de dados
                     new_name = update_fields["name"]
                     if self.sqlite_manager.get_domain(conn, new_name):
                         self.logger.error("Dominio ja existe", domain_name=new_name)
                         raise ValueError(f"Domínio já existe: {new_name}")
                     
-                    # Renomeia os arquivos do domínio
+                    # Renomeia os arquivos do domínio, padronizando para lowercase e underscore
+                    new_name_fs = new_name.lower().replace(" ", "_")
                     old_name = domain.name
-                    new_db_path, new_faiss_path = self.rename_domain_paths(old_name, new_name)
+                    new_db_path, new_faiss_path = self.rename_domain_paths(old_name, new_name_fs)
                     update_fields["db_path"] = new_db_path
                     update_fields["vector_store_path"] = new_faiss_path
 
@@ -206,19 +206,17 @@ class DomainManager:
             with self.sqlite_manager.get_connection(control=True) as conn:
                 domains = self.sqlite_manager.get_domain(conn)
                 
-                # Check if domains is None before logging success or iterating
                 if domains is None:
                     self.logger.info("Nenhum dominio encontrado no banco de dados.")
-                    return None # Return None as expected by the test
+                    return None
                 else:
-                    # Log success only if domains were retrieved (could be an empty list)
                     domain_names = [domain.name for domain in domains]
                     self.logger.info("Dominios listados com sucesso", domains=domain_names)
-                    return domains # Return the list (potentially empty)
+                    return domains
 
         except Exception as e:
-            self.logger.error(f"Erro ao listar dominios de conhecimento: {e}", exc_info=True) # Add exc_info for traceback
-            raise e # Re-raise the exception
+            self.logger.error(f"Erro ao listar dominios de conhecimento: {e}", exc_info=True)
+            raise e
 
     def list_domain_documents(self, domain_name: str) -> List[str]:
         """

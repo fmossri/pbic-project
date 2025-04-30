@@ -248,7 +248,7 @@ class SQLiteManager:
         """
         Insere um domínio de conhecimento no banco de dados de controle.
         """
-        self.logger.info(f"Inserindo domínio de conhecimento no banco de dados: {domain.name}")
+        self.logger.info(f"Inserindo dominio de conhecimento no banco de dados: {domain.name}")
         try:
             cursor = conn.cursor()
             cursor.execute(
@@ -271,7 +271,7 @@ class SQLiteManager:
         """
         Retorna um ou todos os domínios de conhecimento do banco de dados de controle.
         """
-        self.logger.debug(f"Recuperando domínio(s) de conhecimento do banco de dados: {domain_name or 'Todos'}")
+        self.logger.debug(f"Recuperando dominio(s) de conhecimento do banco de dados: {domain_name or 'Todos'}")
         try:
             cursor = conn.cursor()
             if domain_name:
@@ -301,14 +301,14 @@ class SQLiteManager:
                 return None
                 
         except sqlite3.Error as e:
-            self.logger.error(f"Erro ao recuperar o(s) domínio(s) de conhecimento: {e}")
+            self.logger.error(f"Erro ao recuperar o(s) dominio(s) de conhecimento: {e}")
             raise e
         
     def update_domain(self, domain: Domain, conn: sqlite3.Connection, update: Dict[str, Any]) -> None:
         """
         Atualiza um domínio de conhecimento no banco de dados de controle.
         """      
-        self.logger.debug(f"Atualizando domínio de conhecimento no banco de dados: {domain.name}")
+        self.logger.debug(f"Atualizando dominio de conhecimento no banco de dados: {domain.name}")
 
         update["updated_at"] = datetime.datetime.now(datetime.timezone.utc).isoformat()
 
@@ -328,23 +328,23 @@ class SQLiteManager:
         try:
             cursor = conn.cursor()
             cursor.execute(query, params)
-            self.logger.debug(f"Atualização executada para o domínio. Aguardando commit",)
+            self.logger.debug(f"Atualização executada para o dominio. Aguardando commit",)
 
         except sqlite3.Error as e:
-            self.logger.error(f"Erro ao atualizar o domínio de conhecimento: {e}")
+            self.logger.error(f"Erro ao atualizar o dominio de conhecimento: {e}")
             raise e
         
     def delete_domain(self, domain: Domain, conn: sqlite3.Connection) -> None:
         """
         Deleta um domínio de conhecimento do banco de dados de controle.
         """
-        self.logger.debug(f"Deletando domínio de conhecimento do banco de dados: {domain.name}")
+        self.logger.debug(f"Deletando dominio de conhecimento do banco de dados: {domain.name}")
         try:
             cursor = conn.cursor()
             cursor.execute("DELETE FROM knowledge_domains WHERE id = ?", (domain.id,))
-            self.logger.debug(f"Domínio removido do DB. Aguardando commit", domain_name=domain.name)
+            self.logger.debug(f"Dominio removido do DB. Aguardando commit", domain_name=domain.name)
 
         except sqlite3.Error as e:
-            self.logger.error(f"Erro ao deletar o domínio de conhecimento: {e}")
+            self.logger.error(f"Erro ao deletar o dominio de conhecimento: {e}")
             raise e
     
