@@ -12,14 +12,14 @@ chunk_size = 1000
 chunk_overlap = 200
 
 [embedding]
-# Nome do modelo Hugging Face para sentence-transformers
+# Nome do modelo Hugging Face para sentence-transformers. default: "sentence-transformers/all-MiniLM-L6-v2"
 model_name = "sentence-transformers/all-MiniLM-L6-v2"
-# Dispositivo: "cpu" ou "cuda" (certifique-se de que faiss-gpu está instalado para cuda)
+# Dispositivo: "cpu" ou "cuda" (certifique-se de que faiss-gpu está instalado para cuda). default: "cpu"
 # Considerar adicionar lógica para detectar cuda automaticamente se disponível
 device = "cpu"
-# Tamanho do lote para geração de embeddings
+# Tamanho do lote para geração de embeddings. default: 32
 batch_size = 32
-# Normalizar embeddings (recomendado para similaridade de cosseno)
+# Normalizar embeddings (recomendado para similaridade de cosseno). default: true
 normalize_embeddings = true
 
 [vector_store]
