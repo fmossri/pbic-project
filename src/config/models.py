@@ -30,13 +30,15 @@ class LLMConfig(BaseModel):
     model_repo_id: str = "mistralai/Mistral-7B-Instruct-v0.1"
     max_new_tokens: PositiveInt = 1000
     temperature: confloat(ge=0.0, le=2.0) = 0.7 # type: ignore
-    top_p: Optional[confloat(ge=0.0, le=1.0)] = 0.9 # Padrão atualizado # type: ignore
+    top_p: Optional[confloat(ge=0.0, le=1.0)] = 0.9 # type: ignore
     top_k: Optional[PositiveInt] = 50
-    repetition_penalty: Optional[confloat(ge=1.0)] = 1.0 # Padrão atualizado # type: ignore
-    prompt_template: str = Field(default="""Use the following pieces of context to answer the question at the end.
-If you don't know the answer, just say that you don't know, don't try to make up an answer.
-Keep the answer concise and directly address the question.
-Provide the answer based *only* on the provided context. Do not add external information.
+    repetition_penalty: Optional[confloat(ge=1.0)] = 1.0 # type: ignore
+    max_retries: conint(ge=0) = 3 # type: ignore
+    retry_delay_seconds: PositiveInt = 2
+    prompt_template: str = Field(default="""Use o seguinte contexto para responder a pergunta no final.
+Se você não sabe a resposta, apenas diga que não sabe, não tente inventar uma resposta.
+Mantenha a resposta concisa e diretamente ao ponto da pergunta.
+Forneça a resposta *apenas* com base no contexto fornecido. Não adicione informações externas.
 
 Context:
 {context}
