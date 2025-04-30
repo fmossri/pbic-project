@@ -22,7 +22,6 @@ Este sistema implementa um pipeline RAG (Retrieval-Augmented Generation) para pr
     - Gerenciamento de domínios.
     - Interface para ingestão de dados.
     - Interface de consulta para interagir com o LLM sobre domínios específicos.
-    - Botão de Debug para controle do nível de log.
 - **Consulta Contextual:**
     - Busca por similaridade no índice FAISS do domínio selecionado.
     - Recuperação de chunks relevantes.
@@ -35,7 +34,9 @@ Este sistema implementa um pipeline RAG (Retrieval-Augmented Generation) para pr
 ```plaintext
 /
 ├── .streamlit/
-│   └── config.toml       # Configuração do Streamlit (ex: tema)
+│   └── config.toml
+├── gui/
+│   └── streamlit_utils.toml       # Funções auxiliares do GUI
 ├── logs/
 │   └── app.log           # Logs da aplicação em arquivo
 ├── pages/
@@ -99,15 +100,13 @@ Este sistema implementa um pipeline RAG (Retrieval-Augmented Generation) para pr
 │   └── conftest.py         # Configurações e fixtures para Pytest
 ├── Admin.py                # Ponto de entrada principal da GUI Streamlit
 ├── main.py                 # Ponto de entrada principal da CLI (Incompleto)
-├── README.md               # Este arquivo
-├── requirements.txt        # Dependências do projeto
-├── .env                    # Arquivo para variáveis de ambiente (não versionado)
-└── .gitignore              # Arquivos/diretórios ignorados pelo Git
+├── README.md               
+├── requirements.txt        
+├── .env                    
+└── .gitignore              
 ```
 
 ## Componentes Principais
-
-Esta seção descreve os módulos e classes mais importantes que compõem o sistema.
 
 ### Orquestração e Gerenciamento
 
@@ -229,54 +228,53 @@ python -m pytest
 
 ### Em Desenvolvimento 🔄
 
-0  **Melhorias na interface Streamlit (GUI)**
-    - Corrigir bugs da interface gráfica
-    - Extrair lógica, movendo para componentes ou um novo arquivo
-    - Testar funções do backend
-    - Progredir na interface de configuração customizável
-
 1. **Sistema de configuração customizável**
     - Implementar lógica de customização das configurações do sistema
-    - Pode envolver Estratégias e parâmetros de processamento, tratamento de dados, Chunking, Embedding, etc. 
+    - Pode envolver Estratégias e parâmetros de processamento, tratamento de dados, Chunking, Embedding, etc.
+    - Implementar interface de configuração customizável no GUI 
 
 2. **Benchmarking**
     - Pesquisar estratégias de avaliação de sistemas RAG 
     - Implementar testagem e coleta de métricas relevantes no sistema.
 
-3. **Chunking Semântico**
+## Próximos Passos 🚀
+
+1. **Chunking Semântico**
     - Implementar estratégia de chunking semântico/agêntico e clusterização à aplicação
     - Envolverá a refatoração do TextChunker
     - Talvez permita escolher entre estratégias diferentes através de configuração.
 
-4.  **FAISS Index com IDs Estáveis:**
+2.  **FAISS Index com IDs Estáveis:**
     - Pesquisar e implementar opções de index FAISS que suportem IDs (ex. `IndexIDMap`) para permitir a remoção segura de documentos sem comprometer as relações entre as entradas dos chunks no banco de dados e seus vetores no índice.
     - Isso envolverá refatorar o `FaissManager`, a lógica de ingestão e como os vetores são referenciados, armazenados e usados.
 
-### Próximos Passos 🚀
-- Adicionar OCR à lógica de extração de PDFs
-- Avaliar diferentes modelos de embedding e LLMs.
+3.  **Integração de OCR:**
+    - Adicionar capacidade de OCR (Optical Character Recognition) à lógica de extração de conteúdo de PDFs, permitindo processar documentos baseados em imagem.
 
-## Passos Futuros Possíveis
+4.  **Avaliação de Modelos:**
+    - Avaliar o desempenho e a adequação de diferentes modelos de embedding e LLMs para as tarefas específicas da aplicação.
 
-1. **Aprimoramento do Sistema de Consulta**
+### Possíveis Melhorias 💡
+
+   **Aprimoramento do Sistema de Consulta**
    - Otimização de prompts
    - Expansão de consultas usando sinônimos
    - Re-ranqueamento dos chunks recuperados
    - Atribuição de fontes para fundamentar as respostas
 
-2. **placeholder**
+   **Expansão de Funcionalidades**
    - Adicionar suporte a outros tipos de documentos (e.g., .docx, .txt).
    - Implementar seleção de modelos de embedding e LLMs através da configuração.
    - Explorar outras estratégias avançadas de chunking e recuperação.
    - Implementar outras opções de normalização e tratamento de texto.
 
-3. **Funcionalidades Avançadas**
+   **Funcionalidades Avançadas**
    - Busca híbrida com grafos de conhecimento
    - Processamento multi-modal (imagens, tabelas)
    - Uso de GPU (cuda)
    - Processamento paralelo
 
-4. **Saúde da Aplicação**
+   **Saúde da Aplicação**
    - Otimizar performance e escalabilidade.
    - Implementar verificações de saúde da aplicação.
    - Limpar e padronizar logging e coleta de métricas.
@@ -284,9 +282,7 @@ python -m pytest
 
 ## Problemas Conhecidos
 
-- **Erro do File Watcher do Streamlit com PyTorch:** Ao navegar para a página `Gerenciamento de Domínios`, um erro `RuntimeError: Tried to instantiate class '__path__._path'...` relacionado a `torch.classes` pode aparecer no console. Isso parece ser um problema com o file watcher do Streamlit tentando inspecionar a biblioteca `torch`. Tentativas de solucionar isso adicionando `torch` ou `.venv` à `folderWatchBlacklist` ou definindo `watchFileSystem = false` no arquivo `.streamlit/config.toml` não surtiram efeito. O erro parece ser apenas um ruído no console e não afeta a funcionalidade principal da GUI no momento.
-
-- **Erro do Streamlit: SetPageConfigMustBeFirstCommandError** Logo após inicializar e carregar a primeira página, um erro `set_page_config() can only be called once per app page, and must be called as the first Streamlit command in your script.` ocorre quando clicamos em qualquer seção implementada do sidebar; Quando clicamos uma segunda vez em qualquer seção, o erro desaparece e não volta a ocorrer até a próxima inicialização do sistema.
+- **Erro do File Watcher do Streamlit com PyTorch:** Ao navegar para a página `Gerenciamento de Domínios`, um erro `RuntimeError: Tried to instantiate class '__path__._path'...` relacionado a `torch.classes` pode aparecer no console. Isso parece ser um problema com o file watcher do Streamlit tentando inspecionar a biblioteca `torch`. Tentativas de solucionar isso adicionando `torch` ou `.venv` à `folderWatchBlacklist` ou definindo `watchFileSystem = false` no arquivo `.streamlit/config.toml` não surtiram efeito. O erro parece ser apenas um ruído no console e não afeta a funcionalidade principal da GUI no momento. **Workaround: Silenciar Watcher em `.streamlit/config.toml` com `fileWatcherType = "none"`. Porém, ao modificarmos o código, necessitamos atualizar a página ou reiniciar o streamlit.
 
 ## Contribuindo
 
