@@ -1,0 +1,56 @@
+[system]
+log_level = "INFO"
+log_file = "logs/app.log"
+storage_base_path = "storage/domains"
+# default_domain = "" # Opcional: Definir um nome de domínio padrão
+
+[ingestion]
+# Estratégia de chunking: "recursive" ou potencialmente "semantic" depois
+chunk_strategy = "recursive"
+# Parâmetros para RecursiveCharacterTextSplitter
+chunk_size = 1000
+chunk_overlap = 200
+
+[embedding]
+# Nome do modelo Hugging Face para sentence-transformers
+model_name = "sentence-transformers/all-MiniLM-L6-v2"
+# Dispositivo: "cpu" ou "cuda" (certifique-se de que faiss-gpu está instalado para cuda)
+# Considerar adicionar lógica para detectar cuda automaticamente se disponível
+device = "cpu"
+# Tamanho do lote para geração de embeddings
+batch_size = 32
+# Normalizar embeddings (recomendado para similaridade de cosseno)
+normalize_embeddings = true
+
+[vector_store]
+# Tipo de índice FAISS: "IndexFlatL2" (simples, busca exata), potencialmente "IndexIDMap" depois
+index_type = "IndexFlatL2"
+# Parâmetros para tipos específicos de índice (ex: nlist para IndexIVFFlat) iriam aqui
+# index_params = { nlist = 100 } # Exemplo
+
+[query]
+# Número de chunks relevantes a recuperar do FAISS
+retrieval_k = 5
+# Futuro: Estratégia de re-ranking (ex: "none", "cohere", "cross-encoder")
+# rerank_strategy = "none"
+
+[llm]
+# ID do repositório do modelo Hugging Face Hub para inferência
+model_repo_id = "mistralai/Mistral-7B-Instruct-v0.1" # Exemplo, escolha o modelo apropriado
+# Parâmetros da API de inferência
+max_new_tokens = 1000 # Atualizado para coincidir com valor hardcoded no HuggingFaceManager
+temperature = 0.7
+top_p = 0.9 # Atualizado para coincidir com valor hardcoded no HuggingFaceManager
+top_k = 50
+repetition_penalty = 1.0 # Atualizado para coincidir com valor hardcoded no HuggingFaceManager
+# Usar um motor de template como Jinja2 depois se necessário
+prompt_template = """Use the following pieces of context to answer the question at the end.
+If you don't know the answer, just say that you don't know, don't try to make up an answer.
+Keep the answer concise and directly address the question.
+Provide the answer based *only* on the provided context. Do not add external information.
+
+Context:
+{context}
+
+Question: {query}
+Helpful Answer:""" # Prompt atualizado 

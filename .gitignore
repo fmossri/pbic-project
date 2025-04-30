@@ -46,6 +46,7 @@ components-diagram.puml
 # resumos
 summary.txt
 update.txt
+config-brainstorm.txt
 
 # Databases and faiss index files
 storage/domains/
