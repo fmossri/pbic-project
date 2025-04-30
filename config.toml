@@ -7,8 +7,15 @@ storage_base_path = "storage/domains"
 [ingestion]
 # Estratégia de chunking: "recursive" ou potencialmente "semantic" depois
 chunk_strategy = "recursive"
-# Parâmetros para RecursiveCharacterTextSplitter
+
+# --- Parâmetros para RecursiveCharacterTextSplitter ---
+
+# Tamanho máximo em caracteres do chunk.
+# Default: 1000
 chunk_size = 1000
+
+# Tamanho do overlap entre os chunks. Controla quantos caracteres do final do chunk anterior estarão presentes no ínicio do próximo chunk.
+# Default: 200
 chunk_overlap = 200
 
 [embedding]
