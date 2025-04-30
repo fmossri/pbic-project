@@ -28,8 +28,9 @@ def log_metrics(metrics_data: Dict[str, any], debug: bool = False, process: str 
             for key, value in value.items():
                 logger.debug(f"{field} - {key}: {value}")
 
-        else:
-            logger.info(f"{field}: {value}")
+        #TODO: Selecionar as informações exibidas no console
+        #else:
+        #    logger.info(f"{field}: {value}")
 
 def register_domain(domain_name: str, domain_description: str, domain_keywords: str) -> Dict[str, any]:
     """
@@ -118,7 +119,9 @@ def main():
     if "--debug" in sys.argv:
         debug = True
 
-    setup_logging(log_dir="logs/cli", debug=debug)
+    # Configura o logging
+    log_dir = os.path.join("logs", "cli")
+    setup_logging(log_dir=log_dir, debug=debug)
     logger = get_logger("main")
 
 
