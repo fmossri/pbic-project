@@ -1,9 +1,9 @@
 import os
 import sqlite3
 from datetime import datetime
-from typing import Dict, List
+from typing import Dict, List, Any
 
-from src.models import DocumentFile, Chunk, Domain
+from src.models import DocumentFile, Chunk
 from src.utils import TextNormalizer, EmbeddingGenerator, FaissManager, SQLiteManager
 from src.utils.logger import get_logger
 from .document_processor import DocumentProcessor
@@ -177,7 +177,7 @@ class DataIngestionOrchestrator:
         self.logger.info(f"{len(pdf_files)} arquivos PDF encontrados no diretorio", directory_path=directory_path)
         return pdf_files
     
-    def process_directory(self, directory_path: str, domain_name: str = None) -> None:
+    def process_directory(self, directory_path: str, domain_name: str = None) -> Dict[str, Any]:
         """
         Processa todos os arquivos PDF em um diretório.
         
@@ -257,7 +257,6 @@ class DataIngestionOrchestrator:
                         file_metrics["file_processing_duration"] = str(datetime.now() - file_start_time)
                         self.metrics_data[file.name] = file_metrics
                         self.metrics_data["duplicate_files"] += 1
-                        self.metrics_data["invalid_files"] += 1
 
                         conn.rollback()
                         continue
@@ -374,8 +373,10 @@ class DataIngestionOrchestrator:
                     self.logger.error(f"Erro ao processar o arquivo: {e}", file_path=file.path)
                     self.logger.error(f"Descartando alteracoes da transacao", file_path=file.path)
                     file_metrics["invalid_file"] = True
+
                     file_metrics["commit_success"] = False
                     file_metrics["file_processing_duration"] = str(datetime.now() - file_start_time)
+                    self.metrics_data["invalid_files"] += 1
                     self.metrics_data[file.name] = file_metrics
                     conn.rollback()
                     continue
@@ -393,8 +394,12 @@ class DataIngestionOrchestrator:
         self.metrics_data["duration"] = str(datetime.now() - self.metrics_data["start_time"])
         self.metrics_data["start_time"] = self.metrics_data["start_time"].strftime("%Y-%m-%d %H:%M:%S")
         self.metrics_data["avg_chunk_size"] = total_chunk_size / self.metrics_data["processed_chunks"] if self.metrics_data["processed_chunks"] > 0 else None
+        if self.metrics_data["processed_files"] == 0:
+            self.logger.warning(f"Nenhum arquivo processado.")
+            
         self.logger.info(f"Processamento do diretorio concluido em {self.metrics_data['duration']}")
-        
+        self.logger.info(f"Arquivos processados: {self.metrics_data['processed_files']}, Duplicatas: {self.metrics_data['duplicate_files']}, Invalidos: {self.metrics_data['invalid_files']}")
+
         return self.metrics_data
 
  
