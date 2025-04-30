@@ -1,9 +1,6 @@
 import streamlit as st
-import os
-import sys
 
-from src.utils.logger import setup_logging
-from gui.streamlit_utils import update_log_levels_callback
+from gui.streamlit_utils import update_log_levels_callback, initialize_logging_session
 
 
 st.set_page_config(
@@ -20,14 +17,6 @@ if 'debug_mode' not in st.session_state:
 st.title("📚 Página do Admin do Sistema RAG")
 st.write("Bem-vindo! Use o sidebar para navegar entre as seções de gerenciamento.")
 
-# --- Configura o logging uma vez via função cacheada ---
-@st.cache_resource
-def initialize_logging_session():
-    print(f"--- DEBUG Admin.py: Executando initialize_logging_session ---", file=sys.stderr)
-    initial_debug_state = st.session_state.get('debug_mode', False)
-    log_dir = os.path.join("logs", "gui")
-    setup_logging(log_dir=log_dir, debug=initial_debug_state)
-    return True
 
 initialize_logging_session()
 

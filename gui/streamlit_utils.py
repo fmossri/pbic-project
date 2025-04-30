@@ -1,8 +1,8 @@
 import streamlit as st
 import logging
 import traceback
-
-from src.utils.logger import get_logger
+import os
+from src.utils.logger import get_logger, setup_logging
 from src.utils.domain_manager import DomainManager
 
 logger = get_logger(__name__, log_domain="streamlit_utils")
@@ -23,7 +23,8 @@ def update_log_levels_callback():
         root_level = min(file_level, console_level) # Root precisa ser o mais verboso
         
         callback_logger.info(f"Definindo niveis de log: Root={root_level}, File={file_level}, Console={console_level}")
-        
+        print(f"--- DEBUG debug_mode: {is_debug} ---")
+
         # Define o nivel do root logger
         root_logger.setLevel(root_level)
         
@@ -42,6 +43,8 @@ def update_log_levels_callback():
         
         if not handler_found:
              callback_logger.warning("Nenhum handler encontrado no root logger durante o callback.")
+
+
              
     except Exception as e:
         callback_logger.error(f"Error in update_log_levels_callback: {e}", exc_info=True)
@@ -57,3 +60,12 @@ def get_domain_manager():
         st.error(f"Erro ao inicializar o DomainManager: {e}")
         st.code(traceback.format_exc())
         st.stop()
+
+# --- Função de cache para configurar o logging em qualquer página e apenas uma vez ---
+@st.cache_resource
+def initialize_logging_session():
+    initial_debug_state = st.session_state.get('debug_mode', False)
+    log_dir = os.path.join("logs", "gui")
+    setup_logging(log_dir=log_dir, debug=initial_debug_state)
+    print(f"--- Logger inicializado ---")
+    return True

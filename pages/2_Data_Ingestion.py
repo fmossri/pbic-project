@@ -3,7 +3,7 @@ import os
 
 from src.data_ingestion import DataIngestionOrchestrator
 from src.utils.logger import get_logger
-from gui.streamlit_utils import update_log_levels_callback, get_domain_manager
+from gui.streamlit_utils import update_log_levels_callback, get_domain_manager, initialize_logging_session
 
 
 st.set_page_config(
@@ -11,6 +11,7 @@ st.set_page_config(
     layout="wide"
 )
 
+initialize_logging_session()
 logger = get_logger(__name__, log_domain="gui")
 
 @st.cache_resource
