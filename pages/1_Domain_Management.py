@@ -1,5 +1,4 @@
 import streamlit as st
-import sys
 import pandas as pd
 import traceback 
 
@@ -12,9 +11,6 @@ st.set_page_config(
     layout="wide"
 )
 
-st.title("🧠 Gerenciamento de Domínios de Conhecimento")
-
-# --- Inicialização de Recursos ---
 logger = get_logger(__name__, log_domain="gui")
 domain_manager = get_domain_manager()
 
@@ -26,9 +22,12 @@ if 'confirming_delete_id' not in st.session_state:
 if 'selected_domain_id' not in st.session_state:
     st.session_state.selected_domain_id = None
 
+# --- Titulo da Página ---
+st.title("🧠 Gerenciamento de Domínios de Conhecimento")
+
 # --- Sidebar Debug Toggle --- 
 st.sidebar.divider()
-print(f"--- DEBUG Domain Management: Renderizando toggle, estado é {st.session_state.get('debug_mode', 'Nao definido ainda')} ---", file=sys.stderr)
+logger.info(f"--- DEBUG Domain Management: Renderizando toggle, estado é {st.session_state.get('debug_mode', 'Nao definido ainda')} ---")
 st.sidebar.toggle(
     "Debug Logging", 
     key="debug_mode", 

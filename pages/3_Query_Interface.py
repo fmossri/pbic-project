@@ -1,15 +1,10 @@
-# Placeholder for Query Interface Page 
-
 import streamlit as st
 import os
-from src.utils.domain_manager import DomainManager
+
 from src.utils.logger import get_logger
 from src.query_processing import QueryOrchestrator 
-
 from gui.streamlit_utils import update_log_levels_callback, get_domain_manager
 
-import sys
-import traceback
 
 st.set_page_config(
     page_title="Query Interface",
@@ -27,11 +22,8 @@ def get_query_orchestrator():
         logger.error(f"Failed to create QueryOrchestrator instance: {e}", exc_info=True)
         raise SystemExit(f"Failed to initialize QueryOrchestrator: {e}. Check logs.")
 
-
 domain_manager = get_domain_manager()
 orchestrator = get_query_orchestrator()
-
-st.title("💬 Query Interface")
 
 # --- Inicializa session state ---
 if 'debug_mode' not in st.session_state:
@@ -40,6 +32,9 @@ if "messages" not in st.session_state:
     st.session_state.messages = [] 
 if 'selected_query_domain' not in st.session_state:
     st.session_state.selected_query_domain = "Auto" 
+
+# --- Titulo da Página ---
+st.title("💬 Query Interface")
 
 # --- Configuração de seleção de domínio ---
 try:
@@ -94,7 +89,7 @@ with st.sidebar:
     
     # --- Sidebar Debug Toggle --- 
     st.sidebar.divider()
-    logger.info(f"--- Renderizando toggle, debug_mode = {st.session_state.get('debug_mode', 'Nao definido ainda')} ---", file=sys.stderr)
+    logger.info(f"--- Renderizando toggle, debug_mode = {st.session_state.get('debug_mode', 'Nao definido ainda')} ---")
     st.sidebar.toggle(
         "Debug Logging", 
         key="debug_mode",

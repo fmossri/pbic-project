@@ -1,12 +1,8 @@
 import streamlit as st
 import os
-import sys
-import traceback
 
 from src.data_ingestion import DataIngestionOrchestrator
-from src.utils.domain_manager import DomainManager
 from src.utils.logger import get_logger
-
 from gui.streamlit_utils import update_log_levels_callback, get_domain_manager
 
 
@@ -15,7 +11,6 @@ st.set_page_config(
     layout="wide"
 )
 
-# --- Logger ---
 logger = get_logger(__name__, log_domain="gui")
 
 @st.cache_resource
@@ -27,7 +22,6 @@ def get_data_ingestion_orchestrator():
         logger.error(f"Failed to create DataIngestionOrchestrator instance: {e}", exc_info=True)
         raise SystemExit(f"Failed to initialize DataIngestionOrchestrator: {e}. Check logs.")
 
-# --- Inicialização de Recursos
 domain_manager = get_domain_manager()
 orchestrator = get_data_ingestion_orchestrator()
 
@@ -91,7 +85,7 @@ st.title("📥 Ingestão de Dados")
 
 # --- Sidebar Debug Toggle --- 
 st.sidebar.divider()
-print(f"--- DEBUG Data Ingestion: Rendering toggle, state is {st.session_state.get('debug_mode', 'Not Set Yet')} ---", file=sys.stderr)
+logger.info(f"--- DEBUG Data Ingestion: Rendering toggle, state is {st.session_state.get('debug_mode', 'Not Set Yet')} ---")
 st.sidebar.toggle(
     "Debug Logging", 
     key="debug_mode", 
