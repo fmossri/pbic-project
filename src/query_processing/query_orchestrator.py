@@ -3,7 +3,8 @@ import numpy as np
 from typing import List, Dict, Any, Optional
 from datetime import datetime
 
-from src.models import Domain
+from src.config.models import AppConfig
+from src.models import Domain, Chunk
 from src.utils import TextNormalizer, EmbeddingGenerator, FaissManager, SQLiteManager
 from src.utils.logger import get_logger
 from .hugging_face_manager import HuggingFaceManager
@@ -13,16 +14,16 @@ class QueryOrchestrator:
     Orquestrador de queries para o sistema de busca.
     """
     DEFAULT_LOG_DOMAIN = "Processamento de queries"
-    def __init__(self):
+    def __init__(self, config: AppConfig):
         self.logger = get_logger(__name__, log_domain=self.DEFAULT_LOG_DOMAIN)
         self.logger.info("Inicializando o QueryOrchestrator")
 
         self.metrics_data = {}
-        self.text_normalizer = TextNormalizer(log_domain=self.DEFAULT_LOG_DOMAIN)
-        self.embedding_generator = EmbeddingGenerator(log_domain=self.DEFAULT_LOG_DOMAIN)
-        self.faiss_manager = FaissManager(log_domain=self.DEFAULT_LOG_DOMAIN)
-        self.sqlite_manager = SQLiteManager(log_domain=self.DEFAULT_LOG_DOMAIN)
-        self.hugging_face_manager = HuggingFaceManager(log_domain=self.DEFAULT_LOG_DOMAIN, model_name="HuggingFaceH4/zephyr-7b-beta")
+        self.text_normalizer = TextNormalizer(config=config.text_normalizer, log_domain=self.DEFAULT_LOG_DOMAIN)
+        self.embedding_generator = EmbeddingGenerator(config=config.embedding, log_domain=self.DEFAULT_LOG_DOMAIN)
+        self.faiss_manager = FaissManager(config=config.vector_store, query_config=config.query, log_domain=self.DEFAULT_LOG_DOMAIN)
+        self.sqlite_manager = SQLiteManager(config=config.system, log_domain=self.DEFAULT_LOG_DOMAIN)
+        self.hugging_face_manager = HuggingFaceManager(config=config.llm, log_domain=self.DEFAULT_LOG_DOMAIN)
 
     def _process_query(self, query: str) -> np.ndarray:
         """
@@ -162,14 +163,18 @@ class QueryOrchestrator:
         try:
             self.logger.debug(f"Procurando o indice FAISS em: {domain.vector_store_path}")
 
-            _, indices = self.faiss_manager.search_faiss_index(query_embedding=query_embedding, k=5, vector_store_path=domain.vector_store_path)
-            flat_indices = indices.flatten().tolist()
-            self.logger.debug(f"Valor de retorno da busca no indice FAISS", flat_indices=flat_indices)
-            self.metrics_data["knn_faiss_indices"] = len(flat_indices)
+            _, ids = self.faiss_manager.search_faiss_index(
+                query_embedding=query_embedding, 
+                index_path=domain.vector_store_path,
+                dimension=domain.embeddings_dimension,
+            )
+            flat_ids = ids.flatten().tolist()
+            self.logger.debug(f"Valor de retorno da busca no indice FAISS", flat_ids=flat_ids)
+            self.metrics_data["knn_chunk_ids"] = len(flat_ids)
             
-            self.logger.debug(f"Procurando chunks no banco de dados: {domain.db_path} para os indices: {flat_indices}")
+            self.logger.debug(f"Procurando chunks no banco de dados: {domain.db_path} para os ids: {flat_ids}")
             with self.sqlite_manager.get_connection(db_path=domain.db_path) as conn:
-                chunks_content = self.sqlite_manager.get_chunks_content(conn, flat_indices)
+                chunks_content = self.sqlite_manager.get_chunks(conn, flat_ids)
     
                 self.logger.debug(f"Valor de retorno da busca no banco de dados: {len(chunks_content)} chunks.", chunks_content=chunks_content)
     
@@ -181,35 +186,60 @@ class QueryOrchestrator:
             self.logger.error(f"Erro ao recuperar chunks de conteudo: {str(e)}")
             raise e
     
-    def _prepare_context_prompt(self, query: str, chunks_content: List[str]) -> str:
+    def _prepare_context_prompt(self, query: str, chunks_content: List[Chunk]) -> str:
         """
-        Prepara o prompt para ser enviado ao modelo LLM.
+        Prepara o prompt para ser enviado ao modelo LLM usando o template da configuração.
 
         Args:
             query (str): A query original.
-            chunks_content (List[str]): Uma lista de strings contendo os chunks recuperados.
+            chunks_content (List[Chunk]): Uma lista de objetos Chunk recuperados.
 
         Returns:
             str: O prompt preparado para a geração de resposta.
+        
+        Raises:
+            ValueError: Se a query ou os chunks forem inválidos, ou se o template do prompt
+                        tiver placeholders ausentes.
         """
-        self.logger.info("Preparando o prompt de contexto")
+        self.logger.info("Preparando o prompt de contexto a partir de chunks recuperados")
         if not query:
             self.logger.error("Erro ao preparar o prompt de contexto: Query vazia ou invalida")
             raise ValueError("Query vazia ou inválida")
         
         if not chunks_content:
+            # Considerar se isso deve ser um erro ou apenas retornar uma resposta indicando que não há contexto.
+            # Por enquanto, mantendo como erro conforme lógica anterior.
             self.logger.error("Erro ao preparar o prompt de contexto: Lista de chunks vazia ou invalida")
             raise ValueError("Lista de chunks vazia ou inválida")
         
-        context_prompt = f"""
-        Context:
-        {chunks_content}
+        # Extrai o conteúdo de cada chunk e junta em uma única string
+        context_str = "\n\n".join([chunk.content for chunk in chunks_content])
+        
+        # Obtém o template da configuração do LLM
+        template = self.hugging_face_manager.config.prompt_template
 
-        Question:
-        {query}
-        """
-        self.logger.debug("Prompt de contexto preparado com sucesso")
-        return context_prompt
+        # Formata o prompt usando o template
+        try:
+            context_prompt = template.format(context=context_str, query=query)
+            self.logger.debug("Prompt de contexto preparado com sucesso usando template.")
+            return context_prompt
+        except KeyError as e:
+            self.logger.error(
+                f"Erro ao formatar o prompt template: Placeholder {e} está faltando no template.", 
+                template=template,
+                placeholders_available=['context', 'query'] # Placeholders esperados
+            )
+            # Re-levanta o erro para indicar um problema de configuração do template
+            raise ValueError(f"Erro ao formatar o prompt template: Placeholder {e} faltando no template configurado.") from e
+        except Exception as e:
+            # Captura outros erros de formatação potenciais
+            self.logger.error(
+                f"Erro inesperado ao formatar o prompt template: {e}", 
+                template=template,
+                context_preview=context_str[:100] + '...' if len(context_str) > 100 else context_str,
+                query=query
+            )
+            raise ValueError(f"Erro inesperado ao formatar o prompt: {e}") from e
     
     def _setup_metrics_data(self) -> None:
         """
@@ -221,12 +251,9 @@ class QueryOrchestrator:
         start_time = datetime.now()
         self.metrics_data["process"] = "Processamento de queries"
         self.metrics_data["start_time"] = start_time
-        self.metrics_data["embedding_model"] = self.embedding_generator.model_name
+        self.metrics_data["embedding_model"] = self.embedding_generator.config.model_name
         self.metrics_data["embedding_dimension"] = self.embedding_generator.embedding_dimension
-        self.metrics_data["faiss_index_path"] = self.faiss_manager.index_path
-        self.metrics_data["faiss_index_type"] = type(self.faiss_manager.index).__name__
-        self.metrics_data["faiss_dimension"] = self.faiss_manager.dimension
-        self.metrics_data["database_path"] = self.sqlite_manager.db_path
+        self.metrics_data["faiss_index_type"] = self.faiss_manager.vector_config.index_type
 
     def query_llm(self, query: str, domain_names: Optional[List[str]] = None) -> Dict[str, Any]:
         """
