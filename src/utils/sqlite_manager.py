@@ -3,26 +3,24 @@ import os
 from typing import List, Optional, Dict, Any
 from src.models import DocumentFile, Chunk, Domain
 from src.utils.logger import get_logger
+from src.config.models import SystemConfig
 import datetime
 
 class SQLiteManager:
     """Gerenciador de banco de dados SQLite."""
 
-    TEST_DB_PATH: str = os.path.join("storage", "domains", "test_domain", "test.db")
     CONTROL_SCHEMA_PATH: str = os.path.join("storage", "schemas", "control_schema.sql")
-    CONTROL_DB_PATH: str = os.path.join("storage", "domains", "control.db")
     DOMAIN_SCHEMA_PATH: str = os.path.join("storage", "schemas", "schema.sql")
 
-    def __init__(self, log_domain: str = "utils"):
+    def __init__(self, config: SystemConfig, log_domain: str = "utils"):
+        self.config = config
         self.logger = get_logger(__name__, log_domain=log_domain)
         self.logger.info("Inicializando o SQLiteManager")
-        self.control_db_path = self.CONTROL_DB_PATH
-        self.db_path = self.TEST_DB_PATH
+        self.control_db_path = os.path.join(config.storage_base_path, config.control_db_filename)
+        self.db_path = None
         self.schema_path = self.DOMAIN_SCHEMA_PATH
-        
-        os.makedirs(os.path.dirname(self.db_path), exist_ok=True)
 
-    def create_database(self, control: bool = False, db_path: str = None, schema_path: str = None) -> None:
+    def _create_database(self, control: bool = False, db_path: str = None, schema_path: str = None) -> None:
         # Determina o banco de dados e o schema a ser utilizado
         if control:
             # Seleciona o banco de dados de controle
@@ -31,31 +29,29 @@ class SQLiteManager:
         else:
             # Seleciona o banco de dados de dominio
             if db_path is None:
-                # Fallback to instance db_path if argument is not provided
                 self.logger.error("db_path nao pode ser None quando control for False")
                 raise ValueError("db_path nao pode ser None quando control for False")
-            else:
-                path_to_connect = db_path
+
+            path_to_connect = db_path
             final_schema_path = schema_path if schema_path is not None else self.DOMAIN_SCHEMA_PATH
         
         self.logger.warning(f"Tentando criar o banco de dados em {path_to_connect} usando o schema {final_schema_path}")
 
         try:
-            # Read the determined schema path
             with open(final_schema_path, "r") as f:
                 schema = f.read()
 
             self.logger.debug(f"Arquivo schema lido com sucesso", schema_path=final_schema_path)
 
-            # Verifica se o diretorio existe antes de conectar
             if path_to_connect is None:
                 raise ValueError("db_path não pode ser None quando control for False")
+            
             db_dir = os.path.dirname(path_to_connect)
+
             if db_dir and not os.path.exists(db_dir): 
                 self.logger.info(f"Diretorio do banco de dados nao existe. Criando: {db_dir}")
                 os.makedirs(db_dir, exist_ok=True)
 
-            # Conecta ao banco de dados e executa o schema
             with sqlite3.connect(path_to_connect) as conn:
                 conn.executescript(schema)
                 conn.commit()
@@ -77,15 +73,20 @@ class SQLiteManager:
         if control:
             if not os.path.exists(self.control_db_path):
                 self.logger.info(f"Banco de dados de controle nao encontrado em {self.control_db_path}. Inicializando o banco de dados de controle...")
-                self.create_database(self.control_db_path)
+                self._create_database(self.control_db_path)
+
             self.logger.info(f"Conectando ao banco de dados de controle em: {self.control_db_path}")
             return sqlite3.connect(self.control_db_path)
         
-        self.db_path = db_path if db_path is not None else self.db_path
+        if not db_path:
+            self.logger.error("db_path nao pode ser None quando control for False")
+            raise ValueError("db_path nao pode ser None quando control for False")
+        
+        self.db_path = db_path
 
         if not os.path.exists(self.db_path):
             self.logger.info(f"Banco de dados nao encontrado em {self.db_path}. Inicializando o banco de dados...")
-            self.create_database(db_path=self.db_path)
+            self._create_database(db_path=self.db_path)
         
         self.logger.info(f"Conectando ao banco de dados em: {self.db_path}")
         return sqlite3.connect(self.db_path)
@@ -97,7 +98,7 @@ class SQLiteManager:
         self.logger.info(f"Iniciando uma transacao com o banco de dados")
         conn.execute("PRAGMA foreign_keys = ON")
         conn.execute("BEGIN TRANSACTION")
-            
+
     def insert_document_file(self, file: DocumentFile, conn: sqlite3.Connection) -> None:
         """
         Insere um arquivo de documento no banco de dados.
@@ -137,12 +138,14 @@ class SQLiteManager:
             file_data = cursor.fetchall()
             if file_data:
                 for row in file_data:
-                    file = DocumentFile(
+                    file = DocumentFile( # propriedade 'pages' não é armazenada no banco de dados
                         id=row[0],
-                        name=row[1],
-                        hash=row[2],
+                        hash=row[1],
+                        name=row[2],
                         path=row[3],
-                        total_pages=row[4]
+                        total_pages=row[4],
+                        created_at=row[5],
+                        updated_at=row[6]
                     )
                     all_files.append(file)
 
@@ -197,8 +200,8 @@ class SQLiteManager:
             try:
                     cursor = conn.cursor()
                     cursor.execute(
-                        "INSERT INTO chunks (document_id, page_number, content, chunk_page_index, faiss_index, chunk_start_char_position) VALUES (?, ?, ?, ?, ?, ?)", 
-                        (file_id, chunk.page_number, chunk.content, chunk.chunk_page_index, chunk.faiss_index, chunk.chunk_start_char_position)
+                        "INSERT INTO chunks (document_id, page_number, content, chunk_page_index, chunk_start_char_position) VALUES (?, ?, ?, ?, ?)", 
+                        (file_id, chunk.page_number, chunk.content, chunk.chunk_page_index, chunk.chunk_start_char_position)
                     )
                     chunk.id = cursor.lastrowid
             
@@ -208,7 +211,7 @@ class SQLiteManager:
         
         self.logger.info(f"{len(chunks)} Chunks inseridos com sucesso")
          
-    def get_chunks_content(self, conn: sqlite3.Connection, faiss_indices: List[int]) -> List[str]:
+    def get_chunks(self, conn: sqlite3.Connection, chunk_ids: Optional[List[int]] = None, file_id: Optional[int] = None) -> List[Chunk]:
         """
         Retorna o conteúdo dos chunks associados aos índices faiss fornecidos.
 
@@ -219,26 +222,47 @@ class SQLiteManager:
         Returns:
             chunks_content: List[str], onde cada string contém o conteúdo de um chunk, na ordem dos índices faiss.
         """
-        self.logger.debug(f"Recuperando chunks do banco de dados", faiss_indices=faiss_indices)
+        self.logger.info(f"Recuperando chunks do banco de dados")
         try:
             cursor = conn.cursor()
 
-            order_cases = " ".join([f"WHEN {index} THEN {i}" for i, index in enumerate(faiss_indices)])
-            placeholders = ", ".join(['?'] * len(faiss_indices))
-            query = f"""
-                SELECT chunks.content 
-                FROM chunks 
-                WHERE chunks.faiss_index IN ({placeholders})
-                ORDER BY CASE chunks.faiss_index
-                    {order_cases}
-                END
-            """
-            
-            cursor.execute(query, faiss_indices)
-            chunks_content : List[str] = [row[0] for row in cursor.fetchall()]
+            # Se um file_id for fornecido, recupera todos os chunks associados ao documento
+            if file_id:
+                self.logger.info(f"Recuperando chunks do documento: {file_id} no banco de dados: {self.db_path}")
+                cursor.execute("SELECT * FROM chunks WHERE document_id = ?", (file_id,))
+            elif chunk_ids: 
+                # Se ids forem fornecidos, recupera os chunks associados a eles
+                self.logger.info(f"Recuperando chunks do banco de dados: {self.db_path}")
+                order_cases = " ".join([f"WHEN {index} THEN {i}" for i, index in enumerate(chunk_ids)])
+                placeholders = ", ".join(['?'] * len(chunk_ids))
+                query = f"""
+                    SELECT * 
+                    FROM chunks 
+                    WHERE id IN ({placeholders})
+                    ORDER BY CASE id
+                        {order_cases}
+                    END
+                """
+                cursor.execute(query, chunk_ids)
 
-            self.logger.debug(f"Chunks recuperados com sucesso: {chunks_content}")
-            return chunks_content
+            # Cria objetos Chunk
+            chunks : List[Chunk] = []
+            chunk_data = cursor.fetchall()
+            if chunk_data:
+                for row in chunk_data:
+                    chunk = Chunk(
+                        id=row[0],
+                        document_id=row[1],
+                        page_number=row[2],
+                        chunk_page_index=row[3],
+                        chunk_start_char_position=row[4],
+                        content=row[5],
+                        created_at=row[6]
+                    )
+                    chunks.append(chunk)
+
+            self.logger.info(f"Chunks recuperados com sucesso")
+            return chunks
         
         except sqlite3.Error as e:
             self.logger.error(f"Erro ao recuperar os chunks: {e}")
@@ -309,8 +333,6 @@ class SQLiteManager:
         Atualiza um domínio de conhecimento no banco de dados de controle.
         """      
         self.logger.debug(f"Atualizando dominio de conhecimento no banco de dados: {domain.name}")
-
-        update["updated_at"] = datetime.datetime.now(datetime.timezone.utc).isoformat()
 
         set_parts, params = [], []
         for column, value in update.items():

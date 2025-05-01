@@ -36,7 +36,6 @@ htmlcov/
 # Arquivos temporários
 *.log
 *.tmp
-test_logs/
 logs/
 
 # Arquivos do plantUML
@@ -50,3 +49,4 @@ config-brainstorm.txt
 
 # Databases and faiss index files
 storage/domains/
+storage/control.db
