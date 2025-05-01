@@ -181,9 +181,19 @@ class TestQueryOrchestrator:
         expected_context = "Brasília é a capital.\n\nFica no planalto central."
         
         template = test_app_config.llm.prompt_template 
-        expected_prompt = template.format(context=expected_context, query=query)
+        # expected_prompt = template.format(context=expected_context, query=query)
+        # Mimic the new logic: template + fixed_structure.format(...)
+        # Define the fixed structure string correctly
+        fixed_structure = (
+            "\n\nContexto:\n"
+            "{context}\n"
+            "\nPergunta:\n"
+            "{query}\n"
+            "\nResposta útil:"
+        )
+        expected_prompt = template + fixed_structure.format(context=expected_context, query=query)
         
-        orchestrator.hugging_face_manager.config = test_app_config.llm
+        # Configure the mock hf_manager on the orchestrator to have the config
 
         prompt = orchestrator._prepare_context_prompt(query, chunks)
         
@@ -209,8 +219,18 @@ class TestQueryOrchestrator:
         mocker.patch.object(orchestrator, '_retrieve_documents', return_value=mock_chunks)
         
         expected_context = "Chunk 1"
-        expected_prompt = test_app_config.llm.prompt_template.format(context=expected_context, query=test_query)
-
+        # Calculate expected prompt using the new logic
+        template = test_app_config.llm.prompt_template
+        fixed_structure = (
+            "\n\nContexto:\n"
+            "{context}\n"
+            "\nPergunta:\n"
+            "{query}\n"
+            "\nResposta útil:"
+        )
+        expected_prompt = template + fixed_structure.format(context=expected_context, query=test_query)
+        # expected_prompt = test_app_config.llm.prompt_template.format(context=expected_context, query=test_query)
+        
         mock_answer = "Esta é a resposta gerada pelo modelo."
         orchestrator.hugging_face_manager.generate_answer.return_value = mock_answer
         

@@ -33,16 +33,13 @@ class LLMConfig(BaseModel):
     repetition_penalty: Optional[confloat(ge=1.0)] = 1.0 # type: ignore
     max_retries: conint(ge=0) = 3 # type: ignore
     retry_delay_seconds: PositiveInt = 2
-    prompt_template: str = Field(default="""Use o seguinte contexto para responder a pergunta no final.
-Se você não sabe a resposta, apenas diga que não sabe, não tente inventar uma resposta.
-Mantenha a resposta concisa e diretamente ao ponto da pergunta.
-Forneça a resposta *apenas* com base no contexto fornecido. Não adicione informações externas.
-
-Context:
-{context}
-
-Question: {query}
-Helpful Answer:""")
+    prompt_template: str = Field(default="""
+                            Use o seguinte contexto para responder a pergunta no final.
+                            Se você não sabe a resposta, apenas diga que não sabe, não tente inventar uma resposta.
+                            Mantenha a resposta concisa e diretamente ao ponto da pergunta.
+                            Forneça a resposta *apenas* com base no contexto fornecido. Não adicione informações externas.
+                            """
+                            )
 
 class TextNormalizerConfig(BaseModel):
     """Configuration for TextNormalizer steps."""

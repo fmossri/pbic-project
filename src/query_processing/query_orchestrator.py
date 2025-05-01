@@ -239,7 +239,9 @@ class QueryOrchestrator:
 
         # Formata o prompt usando o template
         try:
-            context_prompt = template.format(context=context_str, query=query)
+            context_and_query = """\n\nContexto:\n{context}\n\nPergunta:\n{query}\n\nResposta útil:"""
+
+            context_prompt = template + context_and_query.format(context=context_str, query=query)
             self.logger.debug("Prompt de contexto preparado com sucesso usando template.")
             return context_prompt
         except KeyError as e:

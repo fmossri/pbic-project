@@ -38,6 +38,9 @@ htmlcov/
 *.tmp
 logs/
 
+# Arquivos de backup
+*.bak
+
 # Arquivos do plantUML
 *.png
 components-diagram.puml
