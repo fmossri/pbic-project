@@ -10,3 +10,10 @@ CREATE TABLE IF NOT EXISTS knowledge_domains (
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
+
+CREATE TRIGGER update_knowledge_domain_updated_at
+    AFTER UPDATE ON knowledge_domains
+    FOR EACH ROW
+    BEGIN
+        UPDATE knowledge_domains SET updated_at = CURRENT_TIMESTAMP WHERE id = NEW.id;
+    END;

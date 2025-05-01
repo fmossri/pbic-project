@@ -13,7 +13,8 @@ CREATE TABLE IF NOT EXISTS document_files (
     path TEXT NOT NULL UNIQUE,
     hash TEXT NOT NULL UNIQUE,
     total_pages INTEGER NOT NULL,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE TABLE IF NOT EXISTS chunks (
@@ -22,10 +23,16 @@ CREATE TABLE IF NOT EXISTS chunks (
     page_number INTEGER NOT NULL,
     chunk_page_index INTEGER NOT NULL,
     chunk_start_char_position INTEGER NOT NULL,
-    faiss_index INTEGER NOT NULL UNIQUE,
     content TEXT NOT NULL UNIQUE,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (document_id) REFERENCES document_files(id)
         ON DELETE CASCADE
         ON UPDATE CASCADE
 );
+
+CREATE TRIGGER update_document_file_updated_at
+    AFTER UPDATE ON document_files
+    FOR EACH ROW
+    BEGIN
+        UPDATE document_files SET updated_at = CURRENT_TIMESTAMP WHERE id = NEW.id;
+    END;
