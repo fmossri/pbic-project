@@ -99,4 +99,19 @@ Context:
 {context}
 
 Question: {query}
-Helpful Answer:""" 
+Helpful Answer:"""
+
+[text_normalizer]
+# Configurações para os passos de normalização de texto
+
+# Aplicar normalização Unicode (NFKC) (ex: "\u00e6" (æ) -> "ae")
+use_unicode_normalization = true
+
+# Converter todo o texto para minúsculas?
+use_lowercase = true
+
+# Remover caracteres especiais (mantendo letras, números, espaços, '.,-)?
+use_remove_special_chars = true
+
+# Remover espaços em branco extras (no início/fim e múltiplos espaços)?
+use_remove_extra_whitespace = true 

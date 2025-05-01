@@ -46,6 +46,12 @@ Context:
 Question: {query}
 Helpful Answer:""")
 
+class TextNormalizerConfig(BaseModel):
+    """Configuration for TextNormalizer steps."""
+    use_unicode_normalization: bool = True
+    use_lowercase: bool = True
+    use_remove_extra_whitespace: bool = True
+
 class AppConfig(BaseModel):
     system: SystemConfig = Field(default_factory=SystemConfig)
     ingestion: IngestionConfig = Field(default_factory=IngestionConfig)
@@ -53,6 +59,7 @@ class AppConfig(BaseModel):
     vector_store: VectorStoreConfig = Field(default_factory=VectorStoreConfig)
     query: QueryConfig = Field(default_factory=QueryConfig)
     llm: LLMConfig = Field(default_factory=LLMConfig)
+    text_normalizer: TextNormalizerConfig = Field(default_factory=TextNormalizerConfig)
 
     class Config:
         # Opcional: Se desejar permitir campos extras no TOML
