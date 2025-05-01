@@ -1,9 +1,13 @@
 import streamlit as st
 import os
+import copy
+
+from pydantic import ValidationError
 
 from src.utils.logger import get_logger
 from gui.streamlit_utils import update_log_levels_callback, get_domain_manager, initialize_logging_session, get_query_orchestrator, load_configuration
-
+from src.config.config_manager import save_config, ConfigurationError, reset_config
+from src.config.models import LLMConfig
 
 st.set_page_config(
     page_title="Query Interface",
@@ -17,6 +21,16 @@ config = load_configuration()
 if config:
     domain_manager = get_domain_manager(config)
     orchestrator = get_query_orchestrator(config)
+else:
+    # Trata o caso onde a configuração falha para carregar early
+    st.error("Failed to load application configuration. Cannot initialize components.")
+    st.stop() # Para a execução do script se a configuração é essencial
+
+# --- Armazena configuração do LLM original para comparação ---
+if 'original_llm_config' not in st.session_state or st.session_state.original_llm_config != config.llm:
+    # Armazena uma cópia profunda para evitar modificações que afetam a configuração original
+    st.session_state.original_llm_config = copy.deepcopy(config.llm)
+    logger.debug("Stored/Updated original_llm_config in session state.")
 
 # --- Inicializa session state ---
 if 'debug_mode' not in st.session_state:
@@ -25,6 +39,9 @@ if "messages" not in st.session_state:
     st.session_state.messages = [] 
 if 'selected_query_domain' not in st.session_state:
     st.session_state.selected_query_domain = "Auto" 
+# Add state for confirmation dialog
+if 'confirming_llm_reset' not in st.session_state:
+    st.session_state.confirming_llm_reset = False
 
 # --- Titulo da Página ---
 st.title("💬 Query Interface")
@@ -45,7 +62,7 @@ try:
 
             # Se o dominio tem um db_path mas nao tem um arquivo DB
             elif domain.db_path:
-                 logger.info(f"Dominio '{domain.name}' listado mas armazenamento nao inicializado em: {domain.db_path}")
+                 logger.debug(f"Dominio '{domain.name}' listado mas armazenamento nao inicializado em: {domain.db_path}")
 
             # Se o dominio nao tem um db_path, declara erro de registro
             else:
@@ -78,10 +95,65 @@ with st.sidebar:
         key="selected_query_domain", # Gera persistência da seleção através dos reruns
         help="Escolha um domínio específico ou 'Auto' para seleção automática com base na query."
     )
+
+    st.divider()
+
+    # --- Config Widgets ---
+    st.header("Configuração de busca")
+    st.caption("Ajustes serão atualizados automaticamente ao enviar uma query.")
+    
+    st.header("Top-K Documentos")
+    query_retrieval_k = st.number_input("Top-K", min_value=1, step=1, value=config.query.retrieval_k, key="sidebar_query_retrieval_k")
+    
+    st.header("Parâmetros do LLM")
+    llm_model_repo_id = st.text_input("Model Repo ID", value=config.llm.model_repo_id, key="sidebar_llm_model_repo_id")
+    llm_prompt_template = st.text_area("Prompt Template", value=config.llm.prompt_template, key="sidebar_llm_prompt_template", height=100)
+    llm_max_new_tokens = st.number_input("Max New Tokens", min_value=1, step=1, value=config.llm.max_new_tokens, key="sidebar_llm_max_new_tokens")
+    llm_temperature = st.slider("Temperature", min_value=0.0, max_value=2.0, step=0.01, value=config.llm.temperature, key="sidebar_llm_temperature")
+    llm_top_p = st.slider("Top P", min_value=0.0, max_value=1.0, step=0.01, value=config.llm.top_p or 0.9, key="sidebar_llm_top_p") 
+    llm_top_k = st.number_input("Top K", min_value=0, step=1, value=config.llm.top_k or 50, key="sidebar_llm_top_k")
+    llm_repetition_penalty = st.slider("Repetition Penalty", min_value=1.0, max_value=2.0, step=0.01, value=config.llm.repetition_penalty or 1.0, key="sidebar_llm_repetition_penalty")
+    # --- Reset button --- 
+    if not st.session_state.confirming_llm_reset:
+        if st.button("Reset LLM Defaults", type="secondary", use_container_width=True, key="trigger_reset_llm_button"):
+            st.session_state.confirming_llm_reset = True
+            st.rerun()
+    
+    # --- Diálogo de Confirmação --- 
+    if st.session_state.confirming_llm_reset:
+        st.warning("**Confirmar Reset?**\nTem certeza que deseja resetar todas as configurações do LLM para os valores padrão? Qualquer alteração será perdida.")
+        col1_confirm, col2_confirm = st.columns(2)
+        with col1_confirm:
+            if st.button("Reset", use_container_width=True, key="confirm_reset_llm"):
+                try:
+                    logger.info("Confirmado: Resetando as configurações padrão do LLM...")
+                    current_full_config = load_configuration() 
+                    if not current_full_config:
+                        st.error("Erro: Não foi possível carregar a configuração completa para reset.")
+                    else:
+                        reset_config(current_full_config, "llm") 
+                        load_configuration.clear()
+                        st.session_state.confirming_llm_reset = False
+                        st.success("Configurações do LLM resetadas para os valores padrão")
+                        st.rerun()
+                except ValueError as e: 
+                    st.error(f"Erro ao resetar as configurações do LLM: {e}")
+                    st.session_state.confirming_llm_reset = False 
+                except ConfigurationError as e:
+                    st.error(f"Erro ao resetar as configurações padrão do LLM: {e}") 
+                    st.session_state.confirming_llm_reset = False 
+                except Exception as e:
+                    st.error(f"Erro inesperado ao resetar as configurações padrão do LLM: {e}")
+                    st.session_state.confirming_llm_reset = False 
+        with col2_confirm:
+            if st.button("Cancel", use_container_width=True, key="cancel_reset_llm"):
+                logger.debug("Reset cancelado pelo usuário.")
+                st.session_state.confirming_llm_reset = False
+                st.rerun()
+    
     st.divider()
     
     # --- Sidebar Debug Toggle --- 
-    st.sidebar.divider()
     logger.info(f"--- Renderizando toggle, debug_mode = {st.session_state.get('debug_mode', 'Nao definido ainda')} ---")
     st.sidebar.toggle(
         "Debug Logging", 
@@ -90,16 +162,11 @@ with st.sidebar:
         help="Enable detailed DEBUG level logging to file and INFO to console.",
         on_change=update_log_levels_callback
     )
-    st.sidebar.divider()
-    # --------------------------
     # ---------------------------------
-    
-    #TODO: Adicionar outras opcoes do sidebar aqui mais tarde (e.g., numero de resultados k)
-
 
 # --- Gerenciamento do historico de chat ---
 if "messages" not in st.session_state:
-    st.session_state.messages = [] # Inicializa o historico de chat
+    st.session_state.messages = []
 
 # --- Exibe o historico de chat ---
 st.write("Chat History:")
@@ -118,7 +185,51 @@ if prompt := st.chat_input("Pergunte aqui..."):
         with st.chat_message("user"):
             st.markdown(prompt)
 
-    # Prepara e exibe a resposta do assistente
+    # --- Salva automaticamente a configuração do LLM se tiver sido alterada --- 
+    try:
+        current_query_config = QueryConfig(retrieval_k=query.retrieval_k)
+        current_llm_config = LLMConfig(
+            model_repo_id=llm_model_repo_id,
+            prompt_template=llm_prompt_template,
+            max_new_tokens=llm_max_new_tokens,
+            temperature=llm_temperature,
+            top_p=llm_top_p,
+            top_k=llm_top_k,
+            repetition_penalty=llm_repetition_penalty,
+            max_retries=config.llm.max_retries, # Não é alterado nessa página
+            retry_delay_seconds=config.llm.retry_delay_seconds, # Não é alterado nessa página
+        )
+
+        if current_llm_config != st.session_state.original_llm_config:
+            logger.info("Parâmetros do LLM alterados no sidebar, salvando configuração automaticamente...")
+            
+            # Usa o objeto de configuração principal carregado no inicio da execução do script
+            if not config: 
+                 st.error("Não é possível salvar as alterações do LLM: Configuração principal não carregada.")
+            else:
+                updated_app_config = config.model_copy(update={'llm': current_llm_config})
+                save_config(updated_app_config)
+                load_configuration.clear() 
+                # Atualiza o estado da session com a nova configuração salva
+                st.session_state.original_llm_config = copy.deepcopy(current_llm_config) 
+                st.toast("Configuração do LLM salva automaticamente!")
+        else:
+            logger.debug("Parâmetros do LLM não alterados, prosseguindo com a query.")
+
+    except ValidationError as e:
+        st.error(f"Erro de validação da configuração do LLM durante o salvamento automático:\n{e}")
+        st.stop()
+
+    except ConfigurationError as e:
+        st.error(f"Erro ao salvar o arquivo de configuração durante o salvamento automático:\n{e}")
+        st.stop()
+
+    except Exception as e:
+        st.error(f"Erro inesperado durante o salvamento automático da configuração do LLM:\n{e}")
+        logger.error("Erro durante o salvamento automático da configuração do LLM", exc_info=True)
+        st.stop()
+        
+    # --- Processa a query --- 
     with chat_container:
         with st.chat_message("assistant"):
             message_placeholder = st.empty()
