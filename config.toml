@@ -1,8 +1,6 @@
 [system]
-log_level = "INFO"
-log_file = "logs/app.log"
-storage_base_path = "storage/domains"
-# default_domain = "" # Opcional: Definir um nome de domínio padrão
+storage_base_path = "storage"
+control_db_filename = "control.db"
 
 [ingestion]
 # Estratégia de chunking: "recursive" ou potencialmente "semantic" depois

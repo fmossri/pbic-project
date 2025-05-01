@@ -4,7 +4,8 @@ from typing import Literal, Optional, Dict, Any
 class SystemConfig(BaseModel):
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] = "INFO"
     log_file: str = "logs/app.log"
-    storage_base_path: str = "storage/domains"
+    storage_base_path: str = "storage"
+    control_db_filename: str = "control.db"
     default_domain: Optional[str] = None
 
 class IngestionConfig(BaseModel):
