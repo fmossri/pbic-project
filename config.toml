@@ -21,11 +21,14 @@ chunk_overlap = 200
 [embedding]
 # Nome do modelo Hugging Face para sentence-transformers. default: "sentence-transformers/all-MiniLM-L6-v2"
 model_name = "sentence-transformers/all-MiniLM-L6-v2"
-# Dispositivo: "cpu" ou "cuda" (certifique-se de que faiss-gpu está instalado para cuda). default: "cpu"
+
+# Dispositivo usado pelo sentence-transformers para gerar embeddings. opções: "cpu" ou "cuda". default: "cpu"
 # Considerar adicionar lógica para detectar cuda automaticamente se disponível
 device = "cpu"
+
 # Tamanho do lote para geração de embeddings. default: 32
 batch_size = 32
+
 # Normalizar embeddings (recomendado para similaridade de cosseno). default: true
 normalize_embeddings = true
 
@@ -33,7 +36,9 @@ normalize_embeddings = true
 # Tipo de índice FAISS: "IndexFlatL2" (simples, busca exata), potencialmente "IndexIDMap" depois
 index_type = "IndexFlatL2"
 # Parâmetros para tipos específicos de índice (ex: nlist para IndexIVFFlat) iriam aqui
-# index_params = { nlist = 100 } # Exemplo
+# index_params = { nlist = 100 }
+# Dispositivo usado pelo FAISS para criar/buscar nos vector_stores. (não implementado)
+# device = "cpu"
 
 [query]
 # Número de chunks relevantes a recuperar do FAISS

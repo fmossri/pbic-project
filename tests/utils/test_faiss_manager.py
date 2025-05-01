@@ -2,185 +2,211 @@ import os
 import pytest
 import numpy as np
 import faiss
+import time
+from pathlib import Path
 
 from src.utils import FaissManager
+from src.config.models import SystemConfig, VectorStoreConfig, QueryConfig
+
+# Define standard embedding dimension for tests
+TEST_DIMENSION = 64 
 
 class TestFaissManager:
     """Test suite for FaissManager class."""
     
-    @pytest.fixture
-    def test_indices_dir(self):
-        """Create a temporary directory for test indices."""
-        # Create a subdirectory within tests/storage/domains/test_domain/vector_store
-        test_dir = os.path.join("tests", "storage", "domains", "test_domain", "vector_store")
-        os.makedirs(test_dir, exist_ok=True)
-        
-        yield test_dir
-        
-        # Cleanup: remove all files in the test directory
-        for file in os.listdir(test_dir):
-            file_path = os.path.join(test_dir, file)
-            if os.path.isfile(file_path):
-                os.unlink(file_path)
-    @pytest.fixture
-    def index_path(self, test_indices_dir):
-        test_index_path = os.path.join(test_indices_dir, f"test_index_{os.getpid()}.faiss")
-        return test_index_path
+    @pytest.fixture(scope="class")
+    def test_dir(self):
+        test_run_dir = Path(f"tests/temp_faiss_{int(time.time() * 1000)}")
+        test_run_dir.mkdir(parents=True, exist_ok=True)
+        print(f"\nCreated test directory: {test_run_dir}")
+        yield test_run_dir
+        print(f"\nCleaning up test directory: {test_run_dir}")
+        for item in test_run_dir.iterdir():
+            if item.is_file():
+                try: item.unlink()
+                except OSError as e: print(f"Error removing file {item}: {e}")
+        try: test_run_dir.rmdir()
+        except OSError as e: print(f"Error removing directory {test_run_dir}: {e}")
 
-    @pytest.fixture
-    def faiss_manager(self, test_indices_dir):
-        """Create a FaissManager instance configured to use the test directory."""
-        # Initialize FaissManager with the test directory
-        # Use a different name to avoid conflicts with other tests
+    @pytest.fixture(scope="function") 
+    def index_path(self, test_dir, request):
+        test_name = request.node.name
+        return str(test_dir / f"{test_name}_{os.getpid()}.faiss")
 
-        manager = FaissManager(
-            log_domain="test_domain"
+    @pytest.fixture(scope="class")
+    def vector_config(self):
+        return VectorStoreConfig(index_type="IndexFlatL2") 
+
+    @pytest.fixture(scope="class")
+    def query_config(self):
+        return QueryConfig(retrieval_k=5)
+
+    @pytest.fixture(scope="function")
+    def faiss_manager(self, vector_config, query_config):
+        """Fixture to create a FaissManager instance."""
+        return FaissManager(
+            vector_config=vector_config, 
+            query_config=query_config,
+            log_domain="test_faiss"
         )
-        manager.index_path = os.path.join(test_indices_dir, f"test_index_{os.getpid()}.faiss")
-        manager.dimension = 384
-        
-        return manager
     
     @pytest.fixture
     def sample_embeddings(self):
-        """Create sample embeddings for testing."""
-        embeddings = np.zeros((5, 384), dtype=np.float32)
-        
-        # Create 5 test embeddings
-        for i in range(5):
-            # Create a normalized random vector
-            vec = np.random.random(384).astype(np.float32)
-            vec = vec / np.linalg.norm(vec)
-            embeddings[i] = vec
-        
+        count = 5
+        embeddings = np.random.random((count, TEST_DIMENSION)).astype(np.float32)
+        faiss.normalize_L2(embeddings)
         return embeddings
-    
-    def test_initialization(self, index_path):
-        """Test FaissManager initialization."""
+
+    @pytest.fixture
+    def sample_ids(self, sample_embeddings):
+        return [1000 + i*10 for i in range(sample_embeddings.shape[0])]
+
+    def test_initialize_index_creates_new(self, faiss_manager, index_path):
+        """Test that _initialize_index creates a new file if none exists."""
+        index_file = Path(index_path)
+        if index_file.exists(): index_file.unlink()
+        assert not index_file.exists()
         
-        # Make sure there's no index file before the test
-        if os.path.exists(index_path):
-            os.unlink(index_path)
+        index = faiss_manager._initialize_index(index_path, TEST_DIMENSION)
         
-        manager = FaissManager(
-            log_domain="test_domain"
-        )
-        manager.dimension = 512
-        manager.index_path = index_path
-        manager._initialize_index()
+        assert index is not None
+        assert isinstance(index, faiss.IndexIDMap) 
+        assert index.d == TEST_DIMENSION
+        assert index.ntotal == 0
+        assert index_file.exists(), "Index file was not created"
+
+    def test_initialize_index_loads_existing(self, faiss_manager, index_path, sample_embeddings, sample_ids):
+        """Test that _initialize_index loads an existing index file."""
+        # 1. Create and save an index manually first (using TEST_DIMENSION)
+        base_index = faiss.IndexFlatL2(TEST_DIMENSION)
+        initial_index = faiss.IndexIDMap(base_index)
+        initial_index.add_with_ids(sample_embeddings, np.array(sample_ids, dtype=np.int64))
+        faiss.write_index(initial_index, index_path)
+        assert Path(index_path).exists()
         
-        # Verify the manager was initialized correctly
-        assert manager.index_path == index_path
-        assert manager.dimension == 512
-        assert manager.index is not None
-        assert isinstance(manager.index, faiss.Index)
-        assert manager.index.d == 512  # Dimension matches
+        # 2. Initialize using the manager - should load (pass correct dimension)
+        loaded_index = faiss_manager._initialize_index(index_path, TEST_DIMENSION)
         
-        # Verify that an index file was created
-        assert os.path.exists(index_path)
-    
-    def test_add_embeddings(self, faiss_manager, sample_embeddings):
-        """Test adding embeddings to the index."""
+        assert loaded_index is not None
+        assert isinstance(loaded_index, faiss.IndexIDMap)
+        assert loaded_index.d == TEST_DIMENSION
+        assert loaded_index.ntotal == len(sample_ids)
+
+    def test_initialize_index_dimension_mismatch(self, faiss_manager, index_path):
+        """Test error handling when loaded index dimension mismatches."""
+        wrong_dim = TEST_DIMENSION + 1
+        # 1. Create and save index with wrong dimension
+        base_index_wrong = faiss.IndexFlatL2(wrong_dim)
+        initial_index_wrong = faiss.IndexIDMap(base_index_wrong)
+        dummy_embed = np.random.random((1, wrong_dim)).astype(np.float32)
+        dummy_id = np.array([1], dtype=np.int64)
+        initial_index_wrong.add_with_ids(dummy_embed, dummy_id)
+        faiss.write_index(initial_index_wrong, index_path)
+
+        # 2. Attempt to initialize with the *correct* dimension - should raise error
+        with pytest.raises(ValueError, match=f"Dimensão do índice carregado \({wrong_dim}\) diferente da esperada \({TEST_DIMENSION}\)"):
+            faiss_manager._initialize_index(index_path, TEST_DIMENSION)
+
+    def test_add_embeddings(self, faiss_manager, index_path, sample_embeddings, sample_ids):
+        """Test adding embeddings with IDs and verify by searching."""
+        index_file = Path(index_path)
+        if index_file.exists(): index_file.unlink()
+        assert not index_file.exists()
+
+        result = faiss_manager.add_embeddings(sample_embeddings, sample_ids, index_path, TEST_DIMENSION)
         
-        # Get the initial count of vectors in the index
-        faiss_manager._initialize_index()
-        initial_count = faiss_manager.index.ntotal
-        original_count = sample_embeddings.shape[0]
+        assert result is None 
+        assert index_file.exists()
+
+        query_vector = sample_embeddings[1] 
+        expected_id = sample_ids[1]
+
+        distances, ids_result = faiss_manager.search_faiss_index(query_vector, index_path, TEST_DIMENSION, k=1)
+
+        assert ids_result.shape == (1, 1)
+        assert distances.shape == (1, 1)
+        assert ids_result[0, 0] == expected_id
+        assert distances[0, 0] < 1e-6 
         
-        # Add the sample embeddings to the index
-        vector_store_path = faiss_manager.index_path
-        embedding_dimension = faiss_manager.dimension
-        faiss_indices = faiss_manager.add_embeddings(sample_embeddings, vector_store_path, embedding_dimension)
+        reloaded_index = faiss_manager._initialize_index(index_path, TEST_DIMENSION)
+        assert reloaded_index.ntotal == len(sample_ids)
+        assert reloaded_index.d == TEST_DIMENSION
+
+    def test_add_embeddings_invalid_ids_type(self, faiss_manager, index_path, sample_embeddings):
+         """Test adding embeddings with invalid ID types."""
+         ids_float = [float(i) for i in range(len(sample_embeddings))]
+         with pytest.raises(TypeError, match="Todos os IDs na lista devem ser inteiros"):
+             faiss_manager.add_embeddings(sample_embeddings, ids_float, index_path, TEST_DIMENSION)
+
+    def test_add_embeddings_invalid_ids_length(self, faiss_manager, index_path, sample_embeddings, sample_ids):
+        """Test adding embeddings with mismatching ID list length."""
+        wrong_ids = sample_ids[:-1] 
+        with pytest.raises(ValueError, match="Número de IDs .* não corresponde"):
+             faiss_manager.add_embeddings(sample_embeddings, wrong_ids, index_path, TEST_DIMENSION)
+             
+    def test_add_embeddings_invalid_embedding_dim(self, faiss_manager, index_path, sample_ids):
+         """Test adding embeddings with wrong dimension."""
+         wrong_embeddings = np.random.random((len(sample_ids), TEST_DIMENSION + 1)).astype(np.float32)
+         with pytest.raises(ValueError, match="Embeddings inválidos"):
+             faiss_manager.add_embeddings(wrong_embeddings, sample_ids, index_path, TEST_DIMENSION)
+
+    def test_search_faiss_index(self, faiss_manager, index_path, sample_embeddings, sample_ids):
+        """Test searching the index and getting correct IDs."""
+        faiss_manager.add_embeddings(sample_embeddings, sample_ids, index_path, TEST_DIMENSION)
         
-        # Verify that the vectors were added to the index
-        assert faiss_manager.index.ntotal == initial_count + original_count
+        query_vector = sample_embeddings[2].reshape(1, -1)
+        k = 3
+        distances, ids_result = faiss_manager.search_faiss_index(query_vector, index_path, TEST_DIMENSION, k=k)
         
-        # Verify that the returned faiss_indices has the correct length
-        assert len(faiss_indices) == original_count
+        assert distances.shape == (1, k)
+        assert ids_result.shape == (1, k)
+        assert ids_result.dtype == np.int64
+        assert ids_result[0, 0] == sample_ids[2] 
+        assert distances[0, 0] < 1e-6 
+        assert all(found_id in sample_ids for found_id in ids_result[0])
+
+    def test_search_empty_index(self, faiss_manager, index_path):
+        """Test searching an empty index."""
+        index = faiss_manager._initialize_index(index_path, TEST_DIMENSION)
+        assert index.ntotal == 0
         
-        # Verify indices are sequential starting from initial_count
-        for i, index in enumerate(faiss_indices):
-            assert index == initial_count + i
-    
-    def test_index_persistence(self, test_indices_dir):
-        """Test that the index is persisted to disk."""
-        # Create a unique index path
-        test_index_path = os.path.join(test_indices_dir, f"persistence_test_{os.getpid()}.faiss")
+        query_vector = np.random.random((1, TEST_DIMENSION)).astype(np.float32)
+        distances, ids_result = faiss_manager.search_faiss_index(query_vector, index_path, TEST_DIMENSION, k=5)
         
-        # Create a manager and add some vectors
-        manager1 = FaissManager(
-            log_domain="test_domain"
-        )
-        manager1.index_path = test_index_path
-        manager1.dimension = 384
-        # Create and add a test embedding
-        vec = np.random.random(384).astype(np.float32)
-        vec = vec / np.linalg.norm(vec)
-        vec_array = np.reshape(vec, (1, 384))
+        assert distances.shape == (1, 0) 
+        assert ids_result.shape == (1, 0)
+
+    def test_search_k_greater_than_ntotal(self, faiss_manager, index_path, sample_embeddings, sample_ids):
+        """Test searching with k larger than the number of items in the index."""
+        num_to_add = 3
+        assert num_to_add < faiss_manager.query_config.retrieval_k
         
-        manager1.add_embeddings(vec_array, test_index_path, 384)
+        faiss_manager.add_embeddings(sample_embeddings[:num_to_add], sample_ids[:num_to_add], index_path, TEST_DIMENSION)
         
-        # Create a new manager that should load the existing index
-        manager2 = FaissManager(
-            log_domain="test_domain"
-        )
-        manager2.index_path = test_index_path
-        manager2.dimension = 384
-        manager2._initialize_index()
-        # Verify that the second manager has the same vector count
-        assert manager2.index.ntotal == 1
-        
-        # Verify the loaded index contains the vector
-        # Extract the vector for similarity check
-        encoded_vec = vec.reshape(1, -1)
-        distances, indices = manager2.index.search(encoded_vec, 1)
-        
-        # The most similar vector should be itself
-        assert indices[0][0] == 0
-        assert distances[0][0] < 1e-5  # Should be very close to 0
-    
-    def test_multiple_adds(self, faiss_manager, sample_embeddings):
-        """Test adding embeddings in multiple batches."""
-        # Initialize index explicitly
-        faiss_manager._initialize_index()
-        
-        # Split the sample embeddings into two batches
-        batch1 = sample_embeddings[:2]
-        batch2 = sample_embeddings[2:]
-        
-        # Add the first batch
-        vector_store_path = faiss_manager.index_path
-        embedding_dimension = faiss_manager.dimension
-        faiss_indices1 = faiss_manager.add_embeddings(batch1, vector_store_path, embedding_dimension)
-        
-        # Verify vectors were added to the index
-        assert faiss_manager.index.ntotal == batch1.shape[0]
-        
-        # Add the second batch
-        faiss_indices2 = faiss_manager.add_embeddings(batch2, vector_store_path, embedding_dimension)
-        
-        # Verify that all vectors were added
-        assert faiss_manager.index.ntotal == batch1.shape[0] + batch2.shape[0]
-        
-        # Verify the returned indices are correct
-        assert len(faiss_indices1) == batch1.shape[0]
-        assert len(faiss_indices2) == batch2.shape[0]
-        assert faiss_indices2[0] == batch1.shape[0]  # Second batch should start after first batch
-    
-    def test_search_faiss_index(self, faiss_manager, sample_embeddings):
-        """Test searching for similar vectors."""
-        # Initialize index explicitly
-        faiss_manager._initialize_index()
-        
-        # Add sample embeddings to the index
-        vector_store_path = faiss_manager.index_path
-        embedding_dimension = faiss_manager.dimension
-        faiss_manager.add_embeddings(sample_embeddings, vector_store_path, embedding_dimension)
-        
-        # Search for a vector (use the first one from the sample set)
         query_vector = sample_embeddings[0].reshape(1, -1)
-        distances, indices = faiss_manager.search_faiss_index(query_vector, vector_store_path=vector_store_path, k=1)
+        distances, ids_result = faiss_manager.search_faiss_index(query_vector, index_path, TEST_DIMENSION)
         
-        # The most similar vector should be itself
-        assert indices[0][0] == 0
-        assert distances[0][0] < 1e-5  # Should be very close to 0
+        assert distances.shape == (1, num_to_add)
+        assert ids_result.shape == (1, num_to_add)
+        assert ids_result[0, 0] == sample_ids[0] 
+        assert all(found_id in sample_ids[:num_to_add] for found_id in ids_result[0])
+
+    def test_persistence_with_idmap(self, faiss_manager, index_path, sample_embeddings, sample_ids):
+         """Test saving and loading an IndexIDMap correctly."""
+         # 1. Add data - pass dimension
+         faiss_manager.add_embeddings(sample_embeddings, sample_ids, index_path, TEST_DIMENSION)
+         
+         # 2. Create new manager (no system_config needed)
+         manager2 = FaissManager(
+             vector_config=faiss_manager.vector_config, 
+             query_config=faiss_manager.query_config,
+             log_domain="test_faiss_load"
+         )
+         
+         # 3. Search - pass dimension
+         query_vector = sample_embeddings[1].reshape(1, -1)
+         distances, ids_result = manager2.search_faiss_index(query_vector, index_path, TEST_DIMENSION, k=1)
+         
+         assert ids_result.shape == (1, 1)
+         assert ids_result[0, 0] == sample_ids[1] 
+         assert distances[0, 0] < 1e-6
