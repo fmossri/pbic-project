@@ -2,8 +2,7 @@ import streamlit as st
 import os
 
 from src.utils.logger import get_logger
-from src.query_processing import QueryOrchestrator 
-from gui.streamlit_utils import update_log_levels_callback, get_domain_manager, initialize_logging_session
+from gui.streamlit_utils import update_log_levels_callback, get_domain_manager, initialize_logging_session, get_query_orchestrator, load_configuration
 
 
 st.set_page_config(
@@ -14,17 +13,10 @@ st.set_page_config(
 initialize_logging_session()
 logger = get_logger(__name__, log_domain="gui")
 
-@st.cache_resource
-def get_query_orchestrator():
-    logger.info("Creating QueryOrchestrator instance (cached)")
-    try:
-        return QueryOrchestrator()
-    except Exception as e:
-        logger.error(f"Failed to create QueryOrchestrator instance: {e}", exc_info=True)
-        raise SystemExit(f"Failed to initialize QueryOrchestrator: {e}. Check logs.")
-
-domain_manager = get_domain_manager()
-orchestrator = get_query_orchestrator()
+config = load_configuration()
+if config:
+    domain_manager = get_domain_manager(config)
+    orchestrator = get_query_orchestrator(config)
 
 # --- Inicializa session state ---
 if 'debug_mode' not in st.session_state:

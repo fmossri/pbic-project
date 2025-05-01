@@ -1,6 +1,6 @@
 CREATE TABLE IF NOT EXISTS knowledge_domains (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    name TEXT NOT NULL UNIQUE,
+    name TEXT NOT NULL UNIQUE COLLATE NOCASE,
     description TEXT NOT NULL,
     keywords TEXT NOT NULL,
     total_documents INTEGER NOT NULL,

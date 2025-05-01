@@ -25,7 +25,7 @@ class QueryConfig(BaseModel):
     # rerank_strategy: Literal["none"] = "none" # Adicionar depois
 
 class LLMConfig(BaseModel):
-    model_repo_id: str = "mistralai/Mistral-7B-Instruct-v0.1"
+    model_repo_id: str = "HuggingFaceH4/zephyr-7b-beta"
     max_new_tokens: PositiveInt = 1000
     temperature: confloat(ge=0.0, le=2.0) = 0.7 # type: ignore
     top_p: Optional[confloat(ge=0.0, le=1.0)] = 0.9 # type: ignore

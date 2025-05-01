@@ -3,7 +3,7 @@ import pandas as pd
 import traceback 
 
 from src.utils.logger import get_logger
-from gui.streamlit_utils import update_log_levels_callback, get_domain_manager, initialize_logging_session
+from gui.streamlit_utils import update_log_levels_callback, get_domain_manager, initialize_logging_session, load_configuration
 
 
 st.set_page_config(
@@ -14,7 +14,9 @@ st.set_page_config(
 initialize_logging_session()
 
 logger = get_logger(__name__, log_domain="gui")
-domain_manager = get_domain_manager()
+config = load_configuration()
+if config:
+    domain_manager = get_domain_manager(config)
 
 # --- Inicializa o estado da sessão (se não existir) ---
 if 'debug_mode' not in st.session_state:
