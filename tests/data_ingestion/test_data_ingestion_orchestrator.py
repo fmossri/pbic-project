@@ -6,6 +6,8 @@ from unittest.mock import patch, MagicMock
 from src.data_ingestion import DataIngestionOrchestrator
 from src.models import DocumentFile, Domain
 from langchain.schema import Document
+# Import necessary config models
+from src.config.models import AppConfig, SystemConfig, IngestionConfig, EmbeddingConfig, VectorStoreConfig, QueryConfig, TextNormalizerConfig, LLMConfig
 from .test_docs.generate_test_pdfs import create_test_pdf
 
 class TestDataIngestionOrchestrator:
@@ -15,11 +17,18 @@ class TestDataIngestionOrchestrator:
     test_docs_dir = os.path.join(os.path.dirname(__file__), "test_docs")
     test_pdfs_dir = os.path.join(test_docs_dir, "test_pdfs")
     empty_dir = os.path.join(test_docs_dir, "empty_dir")
-    indices_dir = os.path.join("storage", "domains", "test_domain", "vector_store")
+    test_storage_base = os.path.join("tests", "test_storage") # Define a base for test storage
+    test_domain_dir = os.path.join(test_storage_base, "domains", "test_domain")
+    indices_dir = os.path.join(test_domain_dir, "vector_store") # Corrected path based on base
     
-    # Test-specific control database path
-    test_control_db_dir = os.path.join("tests", "storage", "test_control")
-    test_control_db_path = os.path.join(test_control_db_dir, "test_control.db")
+    # Test-specific control database path using the test storage base
+    test_control_db_dir = os.path.join(test_storage_base, "control") # Directory for control DB
+    test_control_db_filename = "test_control.db"
+    test_control_db_path = os.path.join(test_control_db_dir, test_control_db_filename) # Full path
+
+    # Domain paths using test base
+    test_domain_db_path = os.path.join(test_domain_dir, "test_domain.db")
+    test_domain_vector_store_path = os.path.join(indices_dir, "test_domain.faiss")
 
     @pytest.fixture(scope="class", autouse=True)
     def setup_class(self, request):
@@ -28,17 +37,17 @@ class TestDataIngestionOrchestrator:
         os.makedirs(self.test_pdfs_dir, exist_ok=True)
         os.makedirs(self.empty_dir, exist_ok=True)
         os.makedirs(self.indices_dir, exist_ok=True)
-        os.makedirs(self.test_control_db_dir, exist_ok=True)
+        os.makedirs(self.test_control_db_dir, exist_ok=True) # Use control DB dir
 
         # Create test PDFs only once
         create_test_pdf()
         
-        # Patch the SQLiteManager.CONTROL_DB_PATH at the class level
-        self.original_control_db_path = patch('src.utils.sqlite_manager.SQLiteManager.CONTROL_DB_PATH', self.test_control_db_path).start()
+        # REMOVED: Patch for SQLiteManager.CONTROL_DB_PATH
+        # self.original_control_db_path = patch('src.utils.sqlite_manager.SQLiteManager.CONTROL_DB_PATH', self.test_control_db_path).start()
         
         yield
         
-        # Stop the patcher
+        # Stop any remaining patches (though we removed the main one)
         patch.stopall()
         
         # Clean up after all tests have completed
@@ -48,15 +57,9 @@ class TestDataIngestionOrchestrator:
         if os.path.exists(self.empty_dir):
             shutil.rmtree(self.empty_dir)
             
-        if os.path.exists(self.indices_dir):
-            for file in os.listdir(self.indices_dir):
-                file_path = os.path.join(self.indices_dir, file)
-                if os.path.isfile(file_path) and file.endswith(".faiss"):
-                    os.unlink(file_path)
-                    
-        # Clean up the test control database
-        if os.path.exists(self.test_control_db_path):
-            os.unlink(self.test_control_db_path)
+        # Clean up the entire test storage base directory
+        if os.path.exists(self.test_storage_base):
+             shutil.rmtree(self.test_storage_base)
 
     @pytest.fixture(autouse=True)
     def setup(self, mocker):
@@ -94,6 +97,22 @@ class TestDataIngestionOrchestrator:
         yield
     
     @pytest.fixture
+    def test_app_config(self) -> AppConfig:
+        """Creates an AppConfig instance pointing to test directories."""
+        return AppConfig(
+            system=SystemConfig(
+                storage_base_path=self.test_storage_base, # Use test base path
+                control_db_filename=self.test_control_db_filename # Use test filename
+            ),
+            ingestion=IngestionConfig(chunk_size=500, chunk_overlap=50), # Example test values
+            embedding=EmbeddingConfig(model_name="paraphrase-MiniLM-L3-v2"), # Different model for testing?
+            vector_store=VectorStoreConfig(),
+            query=QueryConfig(),
+            llm=LLMConfig(), # Provide a default LLMConfig instance
+            text_normalizer=TextNormalizerConfig()
+        )
+
+    @pytest.fixture
     def domain_fixture(self, mocker, request):
         """Fixture para criar um domínio de teste com dimensão de embedding opcional."""
         # Get initial dimension from test parameter, default to 384 if not provided
@@ -106,8 +125,8 @@ class TestDataIngestionOrchestrator:
             description="Test domain description",
             keywords="test,domain,keywords",
             total_documents=0, # Default or initial value
-            db_path="storage/domains/test_domain/test_domain.db", # Example path
-            vector_store_path="storage/domains/test_domain/vector_store/test_domain.faiss", # Example path
+            db_path=self.test_domain_db_path, # Use test path
+            vector_store_path=self.test_domain_vector_store_path, # Use test path
             embeddings_dimension=initial_dimension # Use parameter here
             # created_at is Optional[datetime]=None by default in model
         )
@@ -123,33 +142,13 @@ class TestDataIngestionOrchestrator:
         yield domain, mock_get_domain, mock_update_domain
     
     @pytest.fixture
-    def orchestrator(self):
-        """Create a pre-configured orchestrator with mocks for faster testing"""
-        # Create the orchestrator
-        orch = DataIngestionOrchestrator()
-        
-        # Verify the control_db_path is set to our test path
-        assert orch.sqlite_manager.control_db_path == self.test_control_db_path
-        
-        # Mock heavy initialization of components to speed up tests
-        orch.document_processor = MagicMock()
-        orch.document_processor.process_document.side_effect = lambda file: file
-        
-        # Mock normalizer to avoid text processing overhead
-        orch.text_normalizer = MagicMock()
-        orch.text_normalizer.normalize.return_value = ["normalized text"]
-        
-        # Make sure embedding generator returns proper numpy arrays, not MagicMocks
-        orch.embedding_generator = MagicMock()
-        orch.embedding_generator.embedding_dimension = 384
-        orch.embedding_generator.generate_embeddings.return_value = np.array([[0.1] * 384], dtype=np.float32)
-        
-        # Set test paths
-        test_db_path = os.path.join("storage", "domains", "test_domain", "test.db")
-        test_index_path = os.path.join(self.indices_dir, "test_index.faiss")
-        orch.sqlite_manager.db_path = test_db_path
-        orch.faiss_manager.index_path = test_index_path
-        
+    def configured_orchestrator(self, test_app_config):
+        """Creates an orchestrator instance initialized with the test configuration."""
+        # Instantiate with the test config - real dependencies will be created
+        # but configured for testing (e.g., test paths, embedding model if changed).
+        # Mocking of external calls (like HF model download or DB writes)
+        # should happen in specific tests or the `mocked_managers` fixture.
+        orch = DataIngestionOrchestrator(config=test_app_config)
         return orch
     
     @pytest.fixture
@@ -214,21 +213,28 @@ class TestDataIngestionOrchestrator:
         # Return the dictionary of mocks for tests to use if needed
         return mocks
             
-    def test_initialization(self, orchestrator):
-        """Testa a inicialização do orquestrador."""
-        assert orchestrator is not None
-        assert orchestrator.document_processor is not None
-        assert orchestrator.text_chunker is not None
-        assert orchestrator.text_normalizer is not None
-        assert orchestrator.embedding_generator is not None
-        assert orchestrator.sqlite_manager is not None
-        assert orchestrator.faiss_manager is not None
-        assert isinstance(orchestrator.document_hashes, dict)
+    def test_initialization(self, configured_orchestrator):
+        """Testa a inicialização do orquestrador com configuração."""
+        orch = configured_orchestrator # Use the configured orchestrator
+        assert orch is not None
+        assert orch.config is not None # Check if config was stored
+        # Check if components were initialized (assuming they are not None after init)
+        assert orch.document_processor is not None
+        assert orch.text_chunker is not None
+        assert orch.text_normalizer is not None
+        assert orch.embedding_generator is not None
+        assert orch.sqlite_manager is not None
+        assert orch.faiss_manager is not None
+        # Check if configuration values were applied (example)
+        assert orch.text_chunker.config.chunk_size == 500 # From test_app_config
+        assert orch.embedding_generator.config.model_name == "paraphrase-MiniLM-L3-v2" # From test_app_config
+        assert orch.sqlite_manager.config.storage_base_path == self.test_storage_base # From test_app_config
         
-    def test_list_pdf_files(self, orchestrator):
+    def test_list_pdf_files(self, configured_orchestrator):
         """Testa a listagem de arquivos PDF usando os.scandir."""
+        orch = configured_orchestrator # Use the configured orchestrator
         # Testa listagem de PDFs válidos
-        pdf_files = orchestrator._list_pdf_files(self.test_pdfs_dir)
+        pdf_files = orch._list_pdf_files(self.test_pdfs_dir)
         assert isinstance(pdf_files, list)
         assert len(pdf_files) > 0
         
@@ -244,8 +250,9 @@ class TestDataIngestionOrchestrator:
         filenames = [file.name for file in pdf_files]
         assert set(filenames) == actual_pdfs
         
-    def test_is_duplicate(self, orchestrator):
+    def test_is_duplicate(self, configured_orchestrator):
         """Testa o método de detecção de duplicatas."""
+        orch = configured_orchestrator # Use the configured orchestrator
         mock_conn = MagicMock()
         
         # Mock cursor and fetchone for database check
@@ -253,35 +260,36 @@ class TestDataIngestionOrchestrator:
         mock_conn.execute.return_value = mock_cursor
         
         # Case 1: Empty hash dictionary and no DB match
-        orchestrator.document_hashes = {}
+        orch.document_hashes = {}
         mock_cursor.fetchone.return_value = None  # No match in DB
-        assert orchestrator._is_duplicate("some_hash", mock_conn) is False
+        assert orch._is_duplicate("some_hash", mock_conn) is False
         mock_conn.execute.assert_called_with("SELECT * FROM document_files WHERE hash = ?", ("some_hash",))
 
         # Case 2: Hash exists in the dictionary
         test_hash = "existing_hash_123"
-        orchestrator.document_hashes = {"file1.pdf": test_hash, "file2.pdf": "another_hash"}
-        assert orchestrator._is_duplicate(test_hash, mock_conn) is True
+        orch.document_hashes = {"file1.pdf": test_hash, "file2.pdf": "another_hash"}
+        assert orch._is_duplicate(test_hash, mock_conn) is True
         # Should return True before DB check due to in-memory match
 
         # Case 3: Hash does not exist in dictionary but exists in DB
-        orchestrator.document_hashes = {}
+        orch.document_hashes = {}
         mock_cursor.fetchone.return_value = (1, "db_match_hash")  # Match found in DB
-        assert orchestrator._is_duplicate("db_match_hash", mock_conn) is True
+        assert orch._is_duplicate("db_match_hash", mock_conn) is True
         mock_conn.execute.assert_called_with("SELECT * FROM document_files WHERE hash = ?", ("db_match_hash",))
 
         # Case 4: Hash does not exist in dictionary or DB
         mock_cursor.fetchone.return_value = None  # No match in DB
-        assert orchestrator._is_duplicate("new_hash_456", mock_conn) is False
+        assert orch._is_duplicate("new_hash_456", mock_conn) is False
 
         # Case 5: Check with None or empty hash
-        assert orchestrator._is_duplicate(None, mock_conn) is False
-        assert orchestrator._is_duplicate("", mock_conn) is False
+        assert orch._is_duplicate(None, mock_conn) is False
+        assert orch._is_duplicate("", mock_conn) is False
 
     def test_process_directory_with_valid_pdfs(
-        self, orchestrator, mocked_managers, mocker, domain_fixture
+        self, configured_orchestrator, mocked_managers, mocker, domain_fixture
     ):
         """Testa o processamento de um diretório com PDFs válidos (patching methods)."""
+        orch = configured_orchestrator # Use the configured orchestrator
         # domain_fixture provides domain with dimension=384 by default
         initial_domain, mock_get_domain, mock_update_domain = domain_fixture # Unpack 3 values
 
@@ -293,11 +301,11 @@ class TestDataIngestionOrchestrator:
 
         # Mock document processor
         def mock_process_document(file):
-            file.hash = "test_hash_123"
-            file.pages = [Document(page_content="Test content", metadata={"page": 1})]
+            file.hash = f"test_hash_{file.name}" # Give unique hash based on name
+            file.pages = [Document(page_content=f"Content for {file.name}", metadata={"page": 1})]
             file.total_pages = 1
             return file
-        orchestrator.document_processor.process_document.side_effect = mock_process_document
+        mocker.patch.object(orch.document_processor, 'process_document', side_effect=mock_process_document)
         
         # Mock _is_duplicate to return True for the second file only
         # The test_pdfs_dir contains two files: "test_document.pdf" and "duplicate_document.pdf"
@@ -305,17 +313,24 @@ class TestDataIngestionOrchestrator:
         def mock_is_duplicate_func(document_hash, conn):
             nonlocal calls
             calls += 1
-            # First file is unique, second file is duplicate
+            # Assume 'duplicate_document.pdf' leads to the second call
             return calls > 1
             
         mock_is_duplicate = mocker.patch.object(
-            DataIngestionOrchestrator, 
+            orch, # Patch the method on the instance
             '_is_duplicate', 
             side_effect=mock_is_duplicate_func
         )
 
+        # Mock _find_original_document needed for duplicate case log/metrics
+        def mock_find_original(hash_value, conn):
+             if calls > 1: # Corresponds to the duplicate call
+                 return DocumentFile(id=1, hash="test_hash_test_document.pdf", name="test_document.pdf", path="/fake/path", total_pages=1)
+             return None
+        mocker.patch.object(orch, '_find_original_document', side_effect=mock_find_original)
+
         # Execute the method
-        orchestrator.process_directory(self.test_pdfs_dir, domain_name="test_domain")
+        orch.process_directory(self.test_pdfs_dir, domain_name="test_domain")
 
         # Verify calls to databases
         # At least 3 calls: initial control DB, domain DB for each file, final control DB for update
@@ -359,8 +374,9 @@ class TestDataIngestionOrchestrator:
         assert call_args_docs_update.args[1] == self.mock_control_conn, "Incorrect connection for total_docs update"
         assert call_args_docs_update.args[2] == {"total_documents": 1}, "Incorrect update dict for total_docs"
 
-    def test_duplicate_handling(self, orchestrator, mocked_managers, mocker, domain_fixture):
+    def test_duplicate_handling(self, configured_orchestrator, mocked_managers, mocker, domain_fixture):
         """Testa o tratamento de arquivos duplicados."""
+        orch = configured_orchestrator # Use the configured orchestrator
         # Reset mocks
         self.mock_conn.reset_mock()
         
@@ -372,13 +388,14 @@ class TestDataIngestionOrchestrator:
         unique_filename = "test_document.pdf"
         duplicate_filename = "duplicate_document.pdf"
  
-        # Pre-load the hash for the file we want to be treated as duplicate
-        orchestrator.document_hashes = {duplicate_filename: duplicate_hash}
- 
+        # Pre-load the hash *in the database mock* instead of the instance dictionary
+        # (Orchestrator clears its internal dict per run)
+        # We'll control this via the _is_duplicate mock primarily.
+
         # --- Mock Document Processor Conditionally ---
         original_files = { # Use actual filenames
             unique_filename: unique_hash,
-            duplicate_filename: duplicate_hash, # This hash already exists
+            duplicate_filename: duplicate_hash, # This hash will trigger duplicate logic
         }
         def mock_process_document_conditional(file):
             # Look up the desired hash based on actual filename
@@ -386,15 +403,15 @@ class TestDataIngestionOrchestrator:
             file.pages = [Document(page_content="Content", metadata={"page": 1})] # Minimal data
             file.total_pages = 1
             return file
-        orchestrator.document_processor.process_document.side_effect = mock_process_document_conditional
- 
+        mocker.patch.object(orch.document_processor, 'process_document', side_effect=mock_process_document_conditional)
+
         # --- Mock _is_duplicate method conditionally ---
         def mock_is_duplicate_conditional(hash_value, conn):
             # Return True only for the duplicate hash
             return hash_value == duplicate_hash
  
         mocker.patch.object(
-            orchestrator, 
+            orch, 
             '_is_duplicate', 
             side_effect=mock_is_duplicate_conditional
         )
@@ -413,13 +430,13 @@ class TestDataIngestionOrchestrator:
             return None
  
         mocker.patch.object(
-            orchestrator, 
+            orch, 
             '_find_original_document', 
             side_effect=mock_find_original_document
         )
  
         # --- Execute Test ---
-        result = orchestrator.process_directory(self.test_pdfs_dir, domain_name="test_domain")
+        result = orch.process_directory(self.test_pdfs_dir, domain_name="test_domain")
  
         # --- Verify Results ---
         assert 'duplicate_files' in result
@@ -439,11 +456,12 @@ class TestDataIngestionOrchestrator:
         # Rollback happened for duplicate, commit for unique file
         assert self.mock_conn.commit.call_count >= 1
 
-    def test_invalid_directory(self, orchestrator):
+    def test_invalid_directory(self, configured_orchestrator):
         """Testa o tratamento de diretórios inválidos."""
+        orch = configured_orchestrator # Use the configured orchestrator
         # Test with non-existent directory
         with pytest.raises(FileNotFoundError):
-            orchestrator.process_directory("/nonexistent/directory", domain_name="test_domain")
+            orch.process_directory("/nonexistent/directory", domain_name="test_domain")
         
         # Test with a file path instead of a directory
         test_file = os.path.join(self.test_pdfs_dir, "test_document.pdf")
@@ -451,25 +469,27 @@ class TestDataIngestionOrchestrator:
             f.write("dummy content")
             
         with pytest.raises(NotADirectoryError):
-            orchestrator.process_directory(test_file, domain_name="test_domain")
+            orch.process_directory(test_file, domain_name="test_domain")
 
-    def test_empty_directory(self, orchestrator, domain_fixture):
+    def test_empty_directory(self, configured_orchestrator, domain_fixture):
         """Testa o tratamento de diretórios vazios."""
+        orch = configured_orchestrator # Use the configured orchestrator
         # Test with empty directory
-        with pytest.raises(ValueError):
-            orchestrator.process_directory(self.empty_dir, domain_name="test_domain")
+        with pytest.raises(ValueError, match="Nenhum arquivo PDF encontrado"): # Match specific error
+            orch.process_directory(self.empty_dir, domain_name="test_domain")
 
     @pytest.mark.parametrize("domain_fixture", [0], indirect=True)
     def test_process_directory_updates_embedding_dimension(
-        self, orchestrator, mocked_managers, mocker, domain_fixture
+        self, configured_orchestrator, mocked_managers, mocker, domain_fixture
     ):
         """
         Testa se process_directory atualiza embeddings_dimension se for 0.
         """
+        orch = configured_orchestrator # Use the configured orchestrator
         # domain_fixture now provides the domain with embeddings_dimension=0
         initial_domain, mock_get_domain, mock_update_domain = domain_fixture
         # Get expected dimension from the orchestrator's generator instance
-        expected_final_dimension = orchestrator.embedding_generator.embedding_dimension
+        expected_final_dimension = orch.embedding_generator.embedding_dimension
 
         # Reset mocks used within the test
         self.mock_control_conn.reset_mock()
@@ -481,13 +501,13 @@ class TestDataIngestionOrchestrator:
             file.pages = [Document(page_content="Test content dim update", metadata={"page": 1})]
             file.total_pages = 1
             return file
-        orchestrator.document_processor.process_document.side_effect = mock_process_document
+        mocker.patch.object(orch.document_processor, 'process_document', side_effect=mock_process_document)
 
         # Mock _is_duplicate to always return False for this test
-        mocker.patch.object(DataIngestionOrchestrator,'_is_duplicate', return_value=False)
+        mocker.patch.object(orch,'_is_duplicate', return_value=False)
 
         # --- Execute ---
-        orchestrator.process_directory(self.test_pdfs_dir, domain_name="test_domain")
+        orch.process_directory(self.test_pdfs_dir, domain_name="test_domain")
 
         # --- Assertions ---
         # Check that get_domain was called initially
@@ -498,14 +518,16 @@ class TestDataIngestionOrchestrator:
 
         # Check the *first* call to update_domain (for embedding dimension)
         # Ensure call_args_list is not empty before accessing index 0
-        assert mock_update_domain.call_args_list, "update_domain was not called"
-        call_args_dim_update = mock_update_domain.call_args_list[0]
-        # Verify using the signature: update_domain(domain_object, conn, update_dict)
-        assert call_args_dim_update.args[0] == initial_domain, "First call: Incorrect domain object"
-        assert call_args_dim_update.args[1] == self.mock_control_conn, "First call: Incorrect connection object"
-        assert call_args_dim_update.args[2] == {"embeddings_dimension": expected_final_dimension}, f"First call: Incorrect update dict, expected dim {expected_final_dimension}"
+        assert len(mock_update_domain.call_args_list) >= 1, "update_domain should have been called at least once"
+        first_call_args = mock_update_domain.call_args_list[0].args
+        assert first_call_args[0].id == initial_domain.id, "Incorrect domain object ID for dimension update"
+        assert first_call_args[1] == self.mock_control_conn, "Incorrect connection for dimension update"
+        assert first_call_args[2] == {"embeddings_dimension": expected_final_dimension}, "Incorrect update dict for embedding dimension"
 
-        # Verify control DB committed at least once (for the dimension update)
-        # The second commit for total_docs might happen, but we don't assert it here.
-        assert self.mock_control_conn.commit.call_count >= 1, f"Expected at least 1 commit on control DB for dimension update, got {self.mock_control_conn.commit.call_count}"
+        # Check if the second call (for total_documents) also happened
+        assert len(mock_update_domain.call_args_list) >= 2, "Expected update_domain call for total_documents as well"
+        second_call_args = mock_update_domain.call_args_list[1].args
+        assert second_call_args[0].id == initial_domain.id, "Incorrect domain object ID for total_docs update"
+        assert second_call_args[1] == self.mock_control_conn, "Incorrect connection for total_docs update"
+        assert second_call_args[2] == {"total_documents": len(os.listdir(self.test_pdfs_dir))}, "Incorrect update dict for total_docs" # Should process all files
 

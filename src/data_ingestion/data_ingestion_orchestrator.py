@@ -8,13 +8,13 @@ from src.utils import TextNormalizer, EmbeddingGenerator, FaissManager, SQLiteMa
 from src.utils.logger import get_logger
 from .document_processor import DocumentProcessor
 from .text_chunker import TextChunker
-
+from src.config.models import AppConfig
 class DataIngestionOrchestrator:
     """Componente principal para gerenciar o processamento de arquivos PDF."""
 
     DEFAULT_LOG_DOMAIN = "Ingestao de dados"
     
-    def __init__(self, chunk_size: int = 800, overlap: int = 160):
+    def __init__(self, config: AppConfig):
         """
         Inicializa o orquestrador com os componentes necessários.
         
@@ -28,12 +28,13 @@ class DataIngestionOrchestrator:
         self.logger.info("Inicializando o DataIngestionOrchestrator")
         
         self.metrics_data = {}
+        self.config = config
         self.document_processor = DocumentProcessor(log_domain=self.DEFAULT_LOG_DOMAIN)
-        self.text_chunker = TextChunker(chunk_size, overlap, log_domain=self.DEFAULT_LOG_DOMAIN)
-        self.text_normalizer = TextNormalizer(log_domain=self.DEFAULT_LOG_DOMAIN)
-        self.embedding_generator = EmbeddingGenerator(log_domain=self.DEFAULT_LOG_DOMAIN)
-        self.sqlite_manager = SQLiteManager(log_domain=self.DEFAULT_LOG_DOMAIN)
-        self.faiss_manager = FaissManager(log_domain=self.DEFAULT_LOG_DOMAIN)
+        self.text_chunker = TextChunker(config.ingestion, log_domain=self.DEFAULT_LOG_DOMAIN)
+        self.text_normalizer = TextNormalizer(config.text_normalizer, log_domain=self.DEFAULT_LOG_DOMAIN)
+        self.embedding_generator = EmbeddingGenerator(config.embedding, log_domain=self.DEFAULT_LOG_DOMAIN)
+        self.sqlite_manager = SQLiteManager(config.system, log_domain=self.DEFAULT_LOG_DOMAIN)
+        self.faiss_manager = FaissManager(config.vector_store, config.query, log_domain=self.DEFAULT_LOG_DOMAIN)
         self.document_hashes: Dict[str, str] = {}
         
     def _find_original_document(self, duplicate_hash: str, conn: sqlite3.Connection) -> DocumentFile:
@@ -119,14 +120,13 @@ class DataIngestionOrchestrator:
         self.metrics_data["process"] = "Ingestão de dados"
         self.metrics_data["start_time"] = start_time
         self.metrics_data["text_chunker"] = type(self.text_chunker.splitter).__name__
-        self.metrics_data["chunk_size"] = self.text_chunker.chunk_size
-        self.metrics_data["chunk_overlap"] = self.text_chunker.overlap
-        self.metrics_data["embedding_model"] = self.embedding_generator.model_name
-        self.metrics_data["embedding_dimension"] = self.embedding_generator.embedding_dimension
-        self.metrics_data["faiss_index_path"] = self.faiss_manager.index_path
-        self.metrics_data["faiss_index_type"] = type(self.faiss_manager.index).__name__
-        self.metrics_data["faiss_dimension"] = self.faiss_manager.dimension
-        self.metrics_data["database_path"] = self.sqlite_manager.db_path
+        self.metrics_data["chunk_size"] = self.text_chunker.config.chunk_size
+        self.metrics_data["chunk_overlap"] = self.text_chunker.config.chunk_overlap
+        self.metrics_data["embedding_model"] = self.embedding_generator.config.model_name
+        self.metrics_data["embedding_dimension"] = None
+        self.metrics_data["faiss_index_path"] = None
+        self.metrics_data["faiss_index_type"] = self.faiss_manager.vector_config.index_type
+        self.metrics_data["database_path"] = None
         self.metrics_data["processed_files"] = 0
         self.metrics_data["processed_pages"] = 0
         self.metrics_data["processed_chunks"] = 0
@@ -206,10 +206,19 @@ class DataIngestionOrchestrator:
             try:
                 self.sqlite_manager.begin(conn)
                 [domain] = self.sqlite_manager.get_domain(conn, domain_name)
+
+                if not domain:
+                    self.logger.error(f"Domínio de conhecimento não encontrado: {domain_name}")
+                    raise ValueError(f"Domínio de conhecimento não encontrado: {domain_name}")
+                
                 #Antes da primeira ingestão, a dimensão dos embeddings é 0. Define a dimensão dos embeddings do domínio
                 if domain.embeddings_dimension == 0:
                     domain.embeddings_dimension = self.embedding_generator.embedding_dimension
                     self.sqlite_manager.update_domain(domain, conn, {"embeddings_dimension": domain.embeddings_dimension})
+                
+                self.metrics_data["database_path"] = domain.db_path
+                self.metrics_data["embedding_dimension"] = domain.embeddings_dimension
+                self.metrics_data["faiss_index_path"] = domain.vector_store_path
                 conn.commit()
             except Exception as e:
                 self.logger.error(f"Erro ao obter o domínio de conhecimento: {e}")
@@ -232,7 +241,6 @@ class DataIngestionOrchestrator:
                 file_counter += 1
                 file_metrics["filename"] = file.name
                 file_metrics["file_path"] = file.path
-                
                 
                 self.logger.info(f"Processando arquivos: {file_counter}/{len(pdf_files)}")
                 self.logger.info(f"Iniciando o processamento do arquivo: {file.name}", file_path=file.path)
@@ -326,6 +334,10 @@ class DataIngestionOrchestrator:
                     file_metrics["total_chunks"] = len(document_chunks)
                     total_chunk_size += sum(len(chunk.content) for chunk in document_chunks)
 
+                    #Insere os chunks no banco de dados
+                    chunk_ids = self.sqlite_manager.insert_chunks(document_chunks, file.id, conn)
+                    file_metrics["chunks_inserted"] = True
+
                     # Normaliza os chunks
                     chunks_content = [chunk.content for chunk in document_chunks]
                     normalized_chunks = self.text_normalizer.normalize(chunks_content)
@@ -344,16 +356,8 @@ class DataIngestionOrchestrator:
 
                     file_metrics["total_embeddings"] = len(embedding_vectors)
                     #Adiciona os embeddings ao índice FAISS, recebendo os índices dos embeddings em ordem
-                    faiss_indices = self.faiss_manager.add_embeddings(embedding_vectors, domain.vector_store_path, domain.embeddings_dimension)
+                    self.faiss_manager.add_embeddings(embedding_vectors, chunk_ids, domain.vector_store_path, domain.embeddings_dimension)
                     file_metrics["embeddings_added"] = True
-
-                    #Adiciona os índices faiss aos chunks
-                    for i, chunk in enumerate(document_chunks):
-                        chunk.faiss_index = faiss_indices[i]
-
-                    #Insere os chunks no banco de dados
-                    self.sqlite_manager.insert_chunks(document_chunks, file.id, conn)
-                    file_metrics["chunks_inserted"] = True
                     
                     self.logger.info(f"Salvando alteracoes no banco de dados", file_path=file.path)
                     #Salva as alterações no banco de dados

@@ -11,8 +11,8 @@ class DocumentFile(BaseModel):
     path : str
     total_pages : int
     pages : List[Document] = []
-    created_at : Optional[datetime.datetime]
-    updated_at : Optional[datetime.datetime]
+    created_at : Optional[datetime.datetime] = None
+    updated_at : Optional[datetime.datetime] = None
     
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
