@@ -21,7 +21,7 @@ class QueryOrchestrator:
         self.metrics_data = {}
         self.text_normalizer = TextNormalizer(config=config.text_normalizer, log_domain=self.DEFAULT_LOG_DOMAIN)
         self.embedding_generator = EmbeddingGenerator(config=config.embedding, log_domain=self.DEFAULT_LOG_DOMAIN)
-        self.faiss_manager = FaissManager(config=config.vector_store, query_config=config.query, log_domain=self.DEFAULT_LOG_DOMAIN)
+        self.faiss_manager = FaissManager(vector_config=config.vector_store, query_config=config.query, log_domain=self.DEFAULT_LOG_DOMAIN)
         self.sqlite_manager = SQLiteManager(config=config.system, log_domain=self.DEFAULT_LOG_DOMAIN)
         self.hugging_face_manager = HuggingFaceManager(config=config.llm, log_domain=self.DEFAULT_LOG_DOMAIN)
 
@@ -145,7 +145,7 @@ class QueryOrchestrator:
             self.logger.error(f"Erro durante a selecao automatica do dominio: {str(e)}", exc_info=True) 
             raise ValueError(f"Falha ao selecionar dominio automaticamente: {str(e)}") from e
         
-    def _retrieve_documents(self, query_embedding: np.ndarray, domain: Domain) -> List[str]:
+    def _retrieve_documents(self, query_embedding: np.ndarray, domains: List[Domain]) -> List[Chunk]:
         """
         Recupera os chunks de conteúdo relevantes para a query usando o FaissManager.
 
@@ -155,33 +155,55 @@ class QueryOrchestrator:
         Returns:
             List[str]: Uma lista de chunks de conteúdo relevantes.
         """
-        self.logger.info("Recuperando os chunks de conteudo relevantes", domain=domain.name)
+        if not domains:
+            self.logger.error("Nenhum dominio selecionado")
+            raise ValueError("Nenhum dominio selecionado")
+        
         if query_embedding is None or query_embedding.size == 0:
             self.logger.error("Vetor de embedding vazio ou invalido")
             raise ValueError("Vetor de embedding vazio ou inválido")
         
-        try:
-            self.logger.debug(f"Procurando o indice FAISS em: {domain.vector_store_path}")
+        self.logger.info("Iniciando recuperação dos chunks")
 
-            _, ids = self.faiss_manager.search_faiss_index(
-                query_embedding=query_embedding, 
-                index_path=domain.vector_store_path,
-                dimension=domain.embeddings_dimension,
-            )
-            flat_ids = ids.flatten().tolist()
-            self.logger.debug(f"Valor de retorno da busca no indice FAISS", flat_ids=flat_ids)
-            self.metrics_data["knn_chunk_ids"] = len(flat_ids)
-            
-            self.logger.debug(f"Procurando chunks no banco de dados: {domain.db_path} para os ids: {flat_ids}")
-            with self.sqlite_manager.get_connection(db_path=domain.db_path) as conn:
-                chunks_content = self.sqlite_manager.get_chunks(conn, flat_ids)
-    
-                self.logger.debug(f"Valor de retorno da busca no banco de dados: {len(chunks_content)} chunks.", chunks_content=chunks_content)
-    
-                self.metrics_data["chunks_content"] = len(chunks_content)
-            self.logger.info("Chunks de conteudo recuperados com sucesso")
-            return chunks_content
+        chunks: List[Chunk] = []
         
+        try:
+            for domain in domains:
+                self.logger.debug("Recuperando os chunks do dominio", domain=domain.name)
+                
+            
+                try:
+                    self.logger.debug(f"Procurando o indice FAISS em: {domain.vector_store_path}")
+
+                    _, ids = self.faiss_manager.search_faiss_index(
+                        query_embedding=query_embedding, 
+                        index_path=domain.vector_store_path,
+                        dimension=domain.embeddings_dimension,
+                    )
+                    flat_ids = ids.flatten().tolist()
+                    self.logger.debug(f"Valor de retorno da busca no indice FAISS", flat_ids=flat_ids)
+                    self.metrics_data["knn_chunk_ids"] = len(flat_ids)
+                    
+                    self.logger.debug(f"Procurando chunks no banco de dados: {domain.db_path} para os ids: {flat_ids}")
+                    with self.sqlite_manager.get_connection(db_path=domain.db_path) as conn:
+                        domain_chunks = self.sqlite_manager.get_chunks(conn, flat_ids)
+            
+                        self.logger.debug(f"Valor de retorno da busca no banco de dados: {len(domain_chunks)} chunks.", chunks_content=[chunk.content for chunk in domain_chunks])
+            
+                        self.metrics_data["retrieved_chunks"] += len(domain_chunks)
+                    self.logger.info("Chunks de conteudo recuperados com sucesso")
+                    if domain_chunks: 
+                        chunks.extend(domain_chunks)
+                    else:
+                        self.logger.warning(f"Nenhum chunk retornado pelo get_chunks para o dominio {domain.name} com ids {flat_ids}")
+            
+                
+                except Exception as e:
+                    self.logger.error(f"Erro ao recuperar chunks de conteudo para o dominio {domain.name}: {str(e)}")
+                    continue
+
+            return chunks
+
         except Exception as e:
             self.logger.error(f"Erro ao recuperar chunks de conteudo: {str(e)}")
             raise e
@@ -207,12 +229,9 @@ class QueryOrchestrator:
             raise ValueError("Query vazia ou inválida")
         
         if not chunks_content:
-            # Considerar se isso deve ser um erro ou apenas retornar uma resposta indicando que não há contexto.
-            # Por enquanto, mantendo como erro conforme lógica anterior.
             self.logger.error("Erro ao preparar o prompt de contexto: Lista de chunks vazia ou invalida")
             raise ValueError("Lista de chunks vazia ou inválida")
         
-        # Extrai o conteúdo de cada chunk e junta em uma única string
         context_str = "\n\n".join([chunk.content for chunk in chunks_content])
         
         # Obtém o template da configuração do LLM
@@ -227,12 +246,11 @@ class QueryOrchestrator:
             self.logger.error(
                 f"Erro ao formatar o prompt template: Placeholder {e} está faltando no template.", 
                 template=template,
-                placeholders_available=['context', 'query'] # Placeholders esperados
+                placeholders_available=['context', 'query']
             )
-            # Re-levanta o erro para indicar um problema de configuração do template
+
             raise ValueError(f"Erro ao formatar o prompt template: Placeholder {e} faltando no template configurado.") from e
         except Exception as e:
-            # Captura outros erros de formatação potenciais
             self.logger.error(
                 f"Erro inesperado ao formatar o prompt template: {e}", 
                 template=template,
@@ -254,6 +272,7 @@ class QueryOrchestrator:
         self.metrics_data["embedding_model"] = self.embedding_generator.config.model_name
         self.metrics_data["embedding_dimension"] = self.embedding_generator.embedding_dimension
         self.metrics_data["faiss_index_type"] = self.faiss_manager.vector_config.index_type
+        self.metrics_data["retrieved_chunks"] = 0
 
     def query_llm(self, query: str, domain_names: Optional[List[str]] = None) -> Dict[str, Any]:
         """
@@ -283,20 +302,17 @@ class QueryOrchestrator:
 
             query_embedding = self._process_query(query)
 
-            chunks_content = []
-            for domain in selected_domains:
-                domain_chunks = self._retrieve_documents(query_embedding, domain)
-                chunks_content.extend(domain_chunks)
+            chunks = self._retrieve_documents(query_embedding, selected_domains)
 
-            if not chunks_content:
+            if not chunks:
                 self.logger.error("Nenhum chunk de conteudo recuperado")
 
                 self.metrics_data["success"] = False
                 raise ValueError("Nenhum chunk de conteúdo recuperado")
             
-            self.logger.debug(f"Chunks recuperados para contexto ({len(chunks_content)} total):", context_chunks=chunks_content)
+            self.logger.debug(f"Chunks recuperados para contexto ({len(chunks)} total)")
 
-            context_prompt = self._prepare_context_prompt(query, chunks_content)
+            context_prompt = self._prepare_context_prompt(query, chunks)
             self.logger.debug("Prompt final sendo enviado ao LLM:", final_prompt=context_prompt)
 
             answer = self.hugging_face_manager.generate_answer(query, context_prompt)

@@ -108,37 +108,62 @@ class TestQueryOrchestrator:
         assert "Erro ao gerar o embedding da query" in str(exc_info.value)
     
     def test_retrieve_documents(self, orchestrator, mocker): # Pass orchestrator fixture
-        """Testa a recuperação de documentos."""
+        """Testa a recuperação de documentos de múltiplos domínios."""
         mock_embedding = np.array([[0.1] * 384], dtype=np.float32)
-        mock_domain = Domain(
-            id=1, name="domain1", description="d", keywords="k", 
+        mock_domain1 = Domain(
+            id=1, name="domain1", description="d1", keywords="k1", 
             db_path="path/to/domain1.db", vector_store_path="path/to/domain1.faiss",
-            embeddings_dimension=384 # Match mock dimension
+            embeddings_dimension=384 
         )
+        mock_domain2 = Domain(
+            id=2, name="domain2", description="d2", keywords="k2", 
+            db_path="path/to/domain2.db", vector_store_path="path/to/domain2.faiss",
+            embeddings_dimension=384 
+        )
+        domains_to_search = [mock_domain1, mock_domain2]
         
-        # Configure mocks on the fixture instance
-        orchestrator.faiss_manager.search_faiss_index.return_value = (np.array([[0.8]]), np.array([[101]])) # Return mock distances and IDs
+        mock_faiss_results = [
+            (np.array([[0.8]]), np.array([[101]])), 
+            (np.array([[0.9]]), np.array([[202]]))  
+        ]
+        orchestrator.faiss_manager.search_faiss_index.side_effect = mock_faiss_results
+        
         mock_conn = MagicMock()
         orchestrator.sqlite_manager.get_connection.return_value.__enter__.return_value = mock_conn
-        mock_chunks = [Chunk(id=101, document_id=1, page_number=1, chunk_page_index=0, chunk_start_char_position=0, content="Chunk 101")]
-        orchestrator.sqlite_manager.get_chunks.return_value = mock_chunks # Mock get_chunks
         
-        # Call the method
-        result = orchestrator._retrieve_documents(mock_embedding, mock_domain)
-        
-        # Verify calls
-        orchestrator.faiss_manager.search_faiss_index.assert_called_once_with(
-            query_embedding=mock_embedding, 
-            index_path=mock_domain.vector_store_path,
-            dimension=mock_domain.embeddings_dimension,
-        )
-        # Check get_chunks call (note: arg name is chunk_ids)
-        orchestrator.sqlite_manager.get_chunks.assert_called_once_with(mock_conn, [101]) # Check with positional argument
-        
-        # Verify result
-        assert result == mock_chunks
+        mock_db_chunks = [
+            [Chunk(id=101, document_id=1, page_number=1, chunk_page_index=0, chunk_start_char_position=0, content="Chunk 101 from Domain 1")], 
+            [Chunk(id=202, document_id=2, page_number=1, chunk_page_index=0, chunk_start_char_position=0, content="Chunk 202 from Domain 2")] 
+        ]
+        orchestrator.sqlite_manager.get_chunks.side_effect = mock_db_chunks
+
+        expected_chunks = mock_db_chunks[0] + mock_db_chunks[1]
     
-    def test_retrieve_documents_empty_embedding(self, orchestrator): # Pass orchestrator fixture
+        # Initialize metrics data required by the method
+        orchestrator.metrics_data = {"retrieved_chunks": 0}
+
+        result = orchestrator._retrieve_documents(mock_embedding, domains_to_search)
+        
+        assert orchestrator.faiss_manager.search_faiss_index.call_count == 2
+        orchestrator.faiss_manager.search_faiss_index.assert_any_call(
+            query_embedding=mock_embedding, 
+            index_path=mock_domain1.vector_store_path,
+            dimension=mock_domain1.embeddings_dimension,
+        )
+        orchestrator.faiss_manager.search_faiss_index.assert_any_call(
+            query_embedding=mock_embedding, 
+            index_path=mock_domain2.vector_store_path,
+            dimension=mock_domain2.embeddings_dimension,
+        )
+
+        assert orchestrator.sqlite_manager.get_chunks.call_count == 2
+        orchestrator.sqlite_manager.get_chunks.assert_any_call(mock_conn, [101]) 
+        orchestrator.sqlite_manager.get_chunks.assert_any_call(mock_conn, [202]) 
+        
+        assert result == expected_chunks
+        assert len(result) == 2
+    
+    def test_retrieve_documents_empty_embedding(self, orchestrator): 
         """Testa a recuperação de documentos com embedding vazio."""
         mock_domain = Domain(id=1, name="d", description="d", keywords="k", db_path="p", vector_store_path="p", embeddings_dimension=1) 
         
@@ -146,21 +171,18 @@ class TestQueryOrchestrator:
             orchestrator._retrieve_documents(None, mock_domain)
         assert "Vetor de embedding vazio ou inválido" in str(exc_info.value)
     
-    def test_prepare_context_prompt(self, orchestrator, test_app_config): # Pass orchestrator fixture
+    def test_prepare_context_prompt(self, orchestrator, test_app_config): 
         """Testa a preparação do prompt de contexto usando o template."""
         query = "Qual é a capital?"
-        # Use Chunk objects
         chunks = [
             Chunk(id=1, document_id=1, page_number=1, chunk_page_index=0, chunk_start_char_position=0, content="Brasília é a capital."),
             Chunk(id=2, document_id=1, page_number=2, chunk_page_index=0, chunk_start_char_position=0, content="Fica no planalto central.")
         ]
         expected_context = "Brasília é a capital.\n\nFica no planalto central."
         
-        # Get the template from the config used by the orchestrator
         template = test_app_config.llm.prompt_template 
         expected_prompt = template.format(context=expected_context, query=query)
         
-        # Configure the mock hf_manager on the orchestrator to have the config
         orchestrator.hugging_face_manager.config = test_app_config.llm
 
         prompt = orchestrator._prepare_context_prompt(query, chunks)
@@ -170,11 +192,10 @@ class TestQueryOrchestrator:
         assert "Brasília é a capital." in prompt
         assert "Fica no planalto central." in prompt
         
-    def test_query_llm(self, orchestrator, mocker, test_app_config): # Pass orchestrator fixture
+    def test_query_llm(self, orchestrator, mocker, test_app_config): 
         """Testa o fluxo completo de processamento de query."""
         test_query = "Teste de query"
         
-        # Mock internal method calls on the orchestrator instance
         mock_embedding = np.array([[0.1] * 384], dtype=np.float32)
         mocker.patch.object(orchestrator, '_process_query', return_value=mock_embedding)
         
@@ -189,51 +210,39 @@ class TestQueryOrchestrator:
         
         expected_context = "Chunk 1"
         expected_prompt = test_app_config.llm.prompt_template.format(context=expected_context, query=test_query)
-        # We don't need to mock _prepare_context_prompt if we trust its implementation based on the previous test
-        # mocker.patch.object(orchestrator, '_prepare_context_prompt', return_value=expected_prompt)
-        
-        # Mock the final call to the HF manager
+
         mock_answer = "Esta é a resposta gerada pelo modelo."
         orchestrator.hugging_face_manager.generate_answer.return_value = mock_answer
         
-        # Call the method
         result = orchestrator.query_llm(test_query)
         
-        # Verify internal calls (mocks on orchestrator object)
         orchestrator._select_domains.assert_called_once_with(test_query, None)
         orchestrator._process_query.assert_called_once_with(test_query)
-        orchestrator._retrieve_documents.assert_called_once_with(mock_embedding, mock_domain)
-        # orchestrator._prepare_context_prompt.assert_called_once_with(test_query, mock_chunks)
+        orchestrator._retrieve_documents.assert_called_once_with(mock_embedding, [mock_domain])
         
-        # Verify the call to the external dependency
         orchestrator.hugging_face_manager.generate_answer.assert_called_once_with(test_query, expected_prompt)
         
-        # Verify result is a dictionary with expected content
         assert isinstance(result, dict)
         assert result["answer"] == mock_answer
         assert result["question"] == test_query
         assert result["success"] == True
     
-    def test_query_llm_empty_query(self, orchestrator): # Pass orchestrator fixture
+    def test_query_llm_empty_query(self, orchestrator): 
         """Testa o comportamento com uma query vazia no fluxo completo."""
         with pytest.raises(ValueError) as exc_info:
             orchestrator.query_llm("")
         assert "Query vazia ou inválida" in str(exc_info.value)
     
-    def test_query_llm_error_handling(self, orchestrator, mocker): # Pass orchestrator fixture
+    def test_query_llm_error_handling(self, orchestrator, mocker):
         """Testa o tratamento de erros no fluxo completo."""
         test_query = "Teste de query"
         error_message = "Erro de teste"
         
-        # Mock an internal method to raise an exception
         mocker.patch.object(orchestrator, '_select_domains', side_effect=Exception(error_message))
         
-        # Test that the exception is propagated
         with pytest.raises(Exception) as exc_info:
             orchestrator.query_llm(test_query)
             
-        # Check if the raised exception contains the original message
         assert error_message in str(exc_info.value)
             
-        # Verify that the metrics data captures the failure
         assert orchestrator.metrics_data["success"] == False 
