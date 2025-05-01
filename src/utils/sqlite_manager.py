@@ -186,7 +186,7 @@ class SQLiteManager:
             self.logger.error(f"Erro ao deletar o arquivo de documento: {e}")
             raise e
         
-    def insert_chunks(self, chunks: List[Chunk], file_id: int, conn: sqlite3.Connection) -> None:
+    def insert_chunks(self, chunks: List[Chunk], file_id: int, conn: sqlite3.Connection) -> List[int]:
         """
         Insere um chunk no banco de dados.
         Args:
@@ -195,6 +195,7 @@ class SQLiteManager:
             conn: Conexão com o banco de dados SQLite.
         """
         self.logger.debug(f"Inserindo objetos Chunk no banco de dados: {self.db_path}")
+        inserted_ids: List[int] = []
         for chunk in chunks:
 
             try:
@@ -204,6 +205,9 @@ class SQLiteManager:
                         (file_id, chunk.page_number, chunk.content, chunk.chunk_page_index, chunk.chunk_start_char_position)
                     )
                     chunk.id = cursor.lastrowid
+                    inserted_ids.append(chunk.id)
+
+                    return inserted_ids
             
             except sqlite3.Error as e:
                 self.logger.error(f"Erro ao inserir chunks: {e}")
