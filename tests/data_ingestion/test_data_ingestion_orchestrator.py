@@ -522,7 +522,12 @@ class TestDataIngestionOrchestrator:
         first_call_args = mock_update_domain.call_args_list[0].args
         assert first_call_args[0].id == initial_domain.id, "Incorrect domain object ID for dimension update"
         assert first_call_args[1] == self.mock_control_conn, "Incorrect connection for dimension update"
-        assert first_call_args[2] == {"embeddings_dimension": expected_final_dimension}, "Incorrect update dict for embedding dimension"
+        # Expect both dimension and model name in the update dict
+        expected_update_dict = {
+            "embeddings_dimension": expected_final_dimension,
+            "embeddings_model": orch.embedding_generator.config.model_name
+        }
+        assert first_call_args[2] == expected_update_dict, "Incorrect update dict for embedding dimension/model"
 
         # Check if the second call (for total_documents) also happened
         assert len(mock_update_domain.call_args_list) >= 2, "Expected update_domain call for total_documents as well"

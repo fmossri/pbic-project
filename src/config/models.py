@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field, PositiveInt, conint, confloat
+from pydantic import BaseModel, Field, PositiveInt, conint, confloat, ConfigDict
 from typing import Literal, Optional, Dict, Any
 
 class SystemConfig(BaseModel):
@@ -59,8 +59,9 @@ class AppConfig(BaseModel):
     llm: LLMConfig = Field(default_factory=LLMConfig)
     text_normalizer: TextNormalizerConfig = Field(default_factory=TextNormalizerConfig)
 
-    class Config:
+    model_config = ConfigDict(
         # Opcional: Se desejar permitir campos extras no TOML
         # que não estão definidos nos modelos (útil durante o desenvolvimento)
         # extra = 'ignore'
-        pass 
+        # Add any other settings from the old Config class here
+    ) 

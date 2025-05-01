@@ -207,14 +207,13 @@ class SQLiteManager:
                     chunk.id = cursor.lastrowid
                     inserted_ids.append(chunk.id)
 
-                    return inserted_ids
-            
             except sqlite3.Error as e:
                 self.logger.error(f"Erro ao inserir chunks: {e}")
                 raise e
+            
+        self.logger.info(f"{len(inserted_ids)} Chunks inseridos com sucesso") 
+        return inserted_ids
         
-        self.logger.info(f"{len(chunks)} Chunks inseridos com sucesso")
-         
     def get_chunks(self, conn: sqlite3.Connection, chunk_ids: Optional[List[int]] = None, file_id: Optional[int] = None) -> List[Chunk]:
         """
         Retorna o conteúdo dos chunks associados aos índices faiss fornecidos.
@@ -288,8 +287,8 @@ class SQLiteManager:
                               domain_name=domain.name, 
                               domain_description=domain.description, 
                               domain_keywords=domain.keywords, 
-                              domain_db_path=domain.db_path, 
                               domain_vector_store_path=domain.vector_store_path,
+                              domain_db_path=domain.db_path,
                               domain_embeddings_dimension=domain.embeddings_dimension)
         except sqlite3.Error as e:
             self.logger.error(f"Erro ao inserir o domínio de conhecimento: {e}")
@@ -319,9 +318,10 @@ class SQLiteManager:
                         total_documents=row[4],
                         vector_store_path=row[5],
                         db_path=row[6],
-                        embeddings_dimension=row[7],
-                        created_at=row[8],
-                        updated_at=row[9]
+                        embeddings_model=row[7],
+                        embeddings_dimension=row[8],
+                        created_at=row[9],
+                        updated_at=row[10]
                     )
                     all_domains.append(domain)
                 return all_domains

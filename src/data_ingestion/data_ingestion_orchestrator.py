@@ -211,10 +211,21 @@ class DataIngestionOrchestrator:
                     self.logger.error(f"Domínio de conhecimento não encontrado: {domain_name}")
                     raise ValueError(f"Domínio de conhecimento não encontrado: {domain_name}")
                 
-                #Antes da primeira ingestão, a dimensão dos embeddings é 0. Define a dimensão dos embeddings do domínio
+                #Antes da primeira ingestão, a dimensão dos embeddings é 0. Define o modelo e a dimensão dos embeddings do domínio
                 if domain.embeddings_dimension == 0:
-                    domain.embeddings_dimension = self.embedding_generator.embedding_dimension
-                    self.sqlite_manager.update_domain(domain, conn, {"embeddings_dimension": domain.embeddings_dimension})
+                    # Obter o NOME do modelo da configuração
+                    embedding_model_name = self.embedding_generator.config.model_name
+                    embedding_dimension = self.embedding_generator.embedding_dimension
+                    
+                    # Atualizar o objeto domain localmente (se necessário para lógica subsequente)
+                    domain.embeddings_model = embedding_model_name
+                    domain.embeddings_dimension = embedding_dimension
+                    
+                    # Usar o NOME do modelo no dicionário de atualização
+                    self.sqlite_manager.update_domain(domain, conn, {
+                        "embeddings_dimension": embedding_dimension, 
+                        "embeddings_model": embedding_model_name
+                    })
                 
                 self.metrics_data["database_path"] = domain.db_path
                 self.metrics_data["embedding_dimension"] = domain.embeddings_dimension

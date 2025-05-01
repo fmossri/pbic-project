@@ -45,6 +45,9 @@ Este sistema implementa um pipeline RAG (Retrieval-Augmented Generation) para pr
 │   ├── 3_Query_Interface.py
 │   └── 4_Configuration.py # (Placeholder/Em desenvolvimento)
 ├── src/
+│   ├── config/
+│   │   ├── config_manager.py
+│   │   ├── models.py
 │   ├── data_ingestion/     # Lógica de ingestão de documentos
 │   │   ├── __init__.py
 │   │   ├── data_ingestion_orchestrator.py
@@ -68,8 +71,8 @@ Este sistema implementa um pipeline RAG (Retrieval-Augmented Generation) para pr
 │   │   ├── sqlite_manager.py
 │   │   └── text_normalizer.py
 ├── storage/
+│   ├── control.db      # Banco de dados de controle (registros de domínio)
 │   ├── domains/            # Armazenamento de dados por domínio
-│   │   ├── control.db      # Banco de dados de controle (registros de domínio)
 │   │   └── [domain_name]/  # Diretório para cada domínio criado
 │   │       ├── [domain_name].db
 │   │       └── vector_store/
