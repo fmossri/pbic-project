@@ -25,7 +25,7 @@ class QueryOrchestrator:
         self.sqlite_manager = SQLiteManager(config=config.system, log_domain=self.DEFAULT_LOG_DOMAIN)
         self.hugging_face_manager = HuggingFaceManager(config=config.llm, log_domain=self.DEFAULT_LOG_DOMAIN)
 
-    def _process_query(self, query: str) -> np.ndarray:
+    def _process_query(self, query: str, domain: Domain) -> np.ndarray:
         """
         Processa a query e retorna o embedding gerado.
 
@@ -36,6 +36,12 @@ class QueryOrchestrator:
             np.ndarray: O embedding gerado.
         """
         self.logger.info("Iniciando o tratamento da query")
+
+        if not self.embedding_generator.config.model_name == domain.embeddings_model:
+            self.embedding_generator.config.model_name = domain.embeddings_model
+            self.logger.info("Reconfigurando o gerador de embeddings")
+            self.embedding_generator = EmbeddingGenerator(config=self.embedding_generator.config, log_domain=self.DEFAULT_LOG_DOMAIN)
+
         if not query:
             self.logger.error("Query vazia ou invalida")
             raise ValueError("Query vazia ou inválida")
@@ -145,7 +151,7 @@ class QueryOrchestrator:
             self.logger.error(f"Erro durante a selecao automatica do dominio: {str(e)}", exc_info=True) 
             raise ValueError(f"Falha ao selecionar dominio automaticamente: {str(e)}") from e
         
-    def _retrieve_documents(self, query_embedding: np.ndarray, domains: List[Domain]) -> List[Chunk]:
+    def _retrieve_documents(self, query_embedding: np.ndarray, domain: Domain) -> List[Chunk]:
         """
         Recupera os chunks de conteúdo relevantes para a query usando o FaissManager.
 
@@ -155,7 +161,7 @@ class QueryOrchestrator:
         Returns:
             List[str]: Uma lista de chunks de conteúdo relevantes.
         """
-        if not domains:
+        if not domain:
             self.logger.error("Nenhum dominio selecionado")
             raise ValueError("Nenhum dominio selecionado")
         
@@ -164,48 +170,35 @@ class QueryOrchestrator:
             raise ValueError("Vetor de embedding vazio ou inválido")
         
         self.logger.info("Iniciando recuperação dos chunks")
-
-        chunks: List[Chunk] = []
         
         try:
-            for domain in domains:
-                self.logger.debug("Recuperando os chunks do dominio", domain=domain.name)
-                
+            self.logger.debug("Recuperando os chunks do dominio", domain=domain.name)
             
-                try:
-                    self.logger.debug(f"Procurando o indice FAISS em: {domain.vector_store_path}")
+            self.logger.debug(f"Procurando o indice FAISS em: {domain.vector_store_path}")
 
-                    _, ids = self.faiss_manager.search_faiss_index(
-                        query_embedding=query_embedding, 
-                        index_path=domain.vector_store_path,
-                        dimension=domain.embeddings_dimension,
-                    )
-                    flat_ids = ids.flatten().tolist()
-                    self.logger.debug(f"Valor de retorno da busca no indice FAISS", flat_ids=flat_ids)
-                    self.metrics_data["knn_chunk_ids"] = len(flat_ids)
+            _, ids = self.faiss_manager.search_faiss_index(
+                query_embedding=query_embedding, 
+                index_path=domain.vector_store_path,
+                dimension=domain.embeddings_dimension,
+                )
+            flat_ids = ids.flatten().tolist()
+            self.logger.debug(f"Valor de retorno da busca no indice FAISS", flat_ids=flat_ids)
+            self.metrics_data["knn_chunk_ids"] = len(flat_ids)
                     
-                    self.logger.debug(f"Procurando chunks no banco de dados: {domain.db_path} para os ids: {flat_ids}")
-                    with self.sqlite_manager.get_connection(db_path=domain.db_path) as conn:
-                        domain_chunks = self.sqlite_manager.get_chunks(conn, flat_ids)
+            self.logger.debug(f"Procurando chunks no banco de dados: {domain.db_path} para os ids: {flat_ids}")
+            with self.sqlite_manager.get_connection(db_path=domain.db_path) as conn:
+                chunks = self.sqlite_manager.get_chunks(conn, flat_ids)
             
-                        self.logger.debug(f"Valor de retorno da busca no banco de dados: {len(domain_chunks)} chunks.", chunks_content=[chunk.content for chunk in domain_chunks])
+                self.logger.debug(f"Valor de retorno da busca no banco de dados: {len(chunks)} chunks.", chunks_content=[chunk.content for chunk in chunks])
             
-                        self.metrics_data["retrieved_chunks"] += len(domain_chunks)
-                    self.logger.info("Chunks de conteudo recuperados com sucesso")
-                    if domain_chunks: 
-                        chunks.extend(domain_chunks)
-                    else:
-                        self.logger.warning(f"Nenhum chunk retornado pelo get_chunks para o dominio {domain.name} com ids {flat_ids}")
-            
-                
-                except Exception as e:
-                    self.logger.error(f"Erro ao recuperar chunks de conteudo para o dominio {domain.name}: {str(e)}")
-                    continue
+                self.metrics_data["retrieved_chunks"] += len(chunks)
 
+            self.logger.info("Chunks de conteudo recuperados com sucesso")
+            
             return chunks
 
         except Exception as e:
-            self.logger.error(f"Erro ao recuperar chunks de conteudo: {str(e)}")
+            self.logger.error(f"Erro ao recuperar chunks de conteudo: para o dominio {domain.name}: {str(e)}")
             raise e
     
     def _prepare_context_prompt(self, query: str, chunks_content: List[Chunk]) -> str:
@@ -302,9 +295,12 @@ class QueryOrchestrator:
             selected_domain_names_log = [d.name for d in selected_domains] if selected_domains else []
             self.logger.debug(f"Dominios selecionados para recuperacao: {selected_domain_names_log}")
 
-            query_embedding = self._process_query(query)
+            chunks = []
+            for domain in selected_domains:
+                query_embedding = self._process_query(query, domain)
 
-            chunks = self._retrieve_documents(query_embedding, selected_domains)
+                domain_chunks = self._retrieve_documents(query_embedding, domain)
+                chunks.extend(domain_chunks)
 
             if not chunks:
                 self.logger.error("Nenhum chunk de conteudo recuperado")
