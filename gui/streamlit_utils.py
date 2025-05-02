@@ -51,7 +51,7 @@ def get_domain_manager(_config: AppConfig) -> Optional[DomainManager]:
         logger.error("Não é possível criar DomainManager: Objeto de configuração é None.")
         return None 
     try:
-        return DomainManager(config=_config.system, sqlite_manager=sqlite_manager)
+        return DomainManager(config=_config, sqlite_manager=sqlite_manager)
     except Exception as e:
         logger.error(f"Erro ao criar instancia do DomainManager: {e}", exc_info=True)
         st.error(f"Erro ao inicializar o DomainManager: {e}")
