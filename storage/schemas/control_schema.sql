@@ -6,8 +6,9 @@ CREATE TABLE IF NOT EXISTS knowledge_domains (
     total_documents INTEGER NOT NULL,
     vector_store_path TEXT NOT NULL UNIQUE,
     db_path TEXT NOT NULL UNIQUE,
-    embeddings_model TEXT,
+    embeddings_model TEXT NOT NULL,
     embeddings_dimension INTEGER NOT NULL,
+    faiss_index_type TEXT NOT NULL,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
