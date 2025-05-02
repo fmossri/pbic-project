@@ -86,15 +86,11 @@ retry_delay_seconds = 2
 
 # --- Template do Prompt --- 
 # Define a estrutura do prompt enviado ao LLM, incluindo contexto e query.
-# Default: (Ver modelo LLMConfig em models.py) !!! Não remover Context:{context} Question: {query} Helpful Answer:
-# Usar um motor de template como Jinja2 depois se necessário
-prompt_template = """"Use o seguinte contexto para responder a pergunta no final.\nSe você não sabe a resposta, apenas diga que não sabe, não tente inventar uma resposta.\nMantenha a resposta concisa e diretamente ao ponto da pergunta.\nForneça a resposta *apenas* com base no contexto fornecido. Não adicione informações externas."
-
-Context:
-{context}
-
-Question: {query}
-Helpful Answer:"""
+# Default: (Ver modelo LLMConfig em models.py)
+prompt_template = """Use o seguinte contexto para responder a pergunta no final.
+Se você não sabe a resposta, apenas diga que não sabe, não tente inventar uma resposta.
+Mantenha a resposta concisa e diretamente ao ponto da pergunta.
+Forneça a resposta *apenas* com base no contexto fornecido. Não adicione informações externas."""
 
 [text_normalizer]
 # Configurações para os passos de normalização de texto
