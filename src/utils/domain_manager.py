@@ -4,32 +4,43 @@ from typing import Dict, Any, List, Tuple
 from src.utils.sqlite_manager import SQLiteManager
 from src.utils.logger import get_logger
 from src.models import Domain, DocumentFile
-from src.config.models import SystemConfig
+from src.config.models import AppConfig
 
 class DomainManager:
 
-    def __init__(self, config: SystemConfig, sqlite_manager: SQLiteManager, log_domain: str = "utils"):
+    def __init__(self, config: AppConfig, sqlite_manager: SQLiteManager, log_domain: str = "utils"):
         self.config = config
         self.sqlite_manager = sqlite_manager
-        self.storage_base_path = config.storage_base_path
+        self.storage_base_path = config.system.storage_base_path
 
         self.logger = get_logger(__name__, log_domain)
         self.logger.info("Inicializando DomainManager")
 
-    def create_domain(self, domain_name: str, domain_description: str, domain_keywords: str) -> None:
+    def create_domain(self, new_domain_data: Dict[str, Any]) -> None:
         """
         Adiciona um novo domínio de conhecimento ao banco de dados.
 
         Args:
-            domain_name (str): Nome do domínio de conhecimento.
-            domain_description (str): Descrição do domínio de conhecimento.
-            domain_keywords (str): Palavras-chave do domínio de conhecimento, separadas por virgulas.
+            new_domain_data (Dict[str, Any]): Dicionário contendo os dados do novo domínio de conhecimento. Deve conter os seguintes campos:
+                - name: Nome do domínio de conhecimento.
+                - description: Descrição do domínio de conhecimento.
+                - keywords: Palavras-chave do domínio de conhecimento, separadas por virgulas.
+                - embedding_model: Modelo de embedding a ser utilizado.
+                - faiss_index_type: Tipo de índice Faiss a ser utilizado.
         """
-        if not isinstance(domain_name, str) or not isinstance(domain_description, str) or not isinstance(domain_keywords, str):
+        if not isinstance(new_domain_data["name"], str) or not isinstance(new_domain_data["description"], str) or not isinstance(new_domain_data["keywords"], str):
             self.logger.error("Nome, descrição e palavras-chave devem ser strings")
             raise ValueError("Nome, descrição e palavras-chave devem ser strings")
+        
+        if not new_domain_data["embeddings_model"] in self.config.embedding.embedding_options:
+            self.logger.error("Modelo de embedding invalido", model=new_domain_data["embeddings_model"])
+            raise ValueError("Modelo de embedding invalido")
+        
+        if not new_domain_data["faiss_index_type"] in self.config.vector_store.vector_store_options:
+            self.logger.error("Tipo de indice Faiss invalido", index_type=new_domain_data["faiss_index_type"])
+            raise ValueError("Tipo de indice Faiss invalido")
 
-        treated_domain_name = domain_name.lower().replace(" ", "_")
+        treated_domain_name = new_domain_data["name"].lower().replace(" ", "_")
 
         # Cria os diretórios e os arquivos do domínio
         domain_root_path = os.path.join(self.storage_base_path, "domains", treated_domain_name)
@@ -37,9 +48,11 @@ class DomainManager:
         vector_store_path = os.path.join(domain_root_path, "vector_store", f"{treated_domain_name}.faiss")
 
         domain_data = {
-            "name": domain_name,
-            "description": domain_description,
-            "keywords": domain_keywords,
+            "name": new_domain_data["name"],
+            "description": new_domain_data["description"],
+            "keywords": new_domain_data["keywords"],
+            "embeddings_model": new_domain_data["embeddings_model"],
+            "faiss_index_type": new_domain_data["faiss_index_type"],
             "db_path": domain_db_path,
             "vector_store_path": vector_store_path,
         }
@@ -51,17 +64,17 @@ class DomainManager:
                 self.sqlite_manager.begin(conn)
 
                 # Verifica se o domain já existe
-                existing_domain = self.sqlite_manager.get_domain(conn, domain_name)    
+                existing_domain = self.sqlite_manager.get_domain(conn, domain_data["name"])    
                 if existing_domain:
-                    self.logger.error("Dominio ja existe", domain_name=domain_name)
+                    self.logger.error("Dominio ja existe", domain_name=domain_data["name"])
                     conn.rollback()
-                    raise ValueError(f"Domínio já existe: {domain_name}")
+                    raise ValueError(f"Domínio já existe: {domain_data['name']}")
 
                 # Cria o domínio e insere no banco de dados
                 domain = Domain(**domain_data)
                 self.sqlite_manager.insert_domain(domain, conn)
                 conn.commit()
-                self.logger.info("Dominio de conhecimento adicionado com sucesso", domain_name=domain_name)
+                self.logger.info("Dominio de conhecimento adicionado com sucesso", domain_name=domain_data["name"])
 
         except Exception as e:
             self.logger.error(f"Erro ao adicionar novo domínio de conhecimento: {e}", exc_info=True)

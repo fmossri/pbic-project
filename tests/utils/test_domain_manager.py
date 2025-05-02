@@ -3,7 +3,7 @@ from unittest.mock import MagicMock, ANY, patch, call
 from src.utils.domain_manager import DomainManager
 from src.utils.sqlite_manager import SQLiteManager
 from src.models import Domain
-from src.config.models import SystemConfig # Import SystemConfig
+from src.config.models import SystemConfig, EmbeddingConfig, VectorStoreConfig, AppConfig
 import os
 import shutil
 import sqlite3 # Import for type hinting mock connection
@@ -18,6 +18,8 @@ def create_dummy_domain(id=1, name="test_domain", base_path="storage") -> Domain
         name=name,
         description=f"{name} description",
         keywords=f"{name}, keywords",
+        embeddings_model="sentence-transformers/all-MiniLM-L6-v2",
+        faiss_index_type="IndexFlatL2",
         db_path=db_path,
         vector_store_path=vs_path
     )
@@ -49,9 +51,18 @@ class TestDomainManager:
         test_storage_path = str(tmp_path / "test_storage")
         # Create the base directory for tests that might need it
         os.makedirs(test_storage_path, exist_ok=True)
-        return SystemConfig(
-            storage_base_path=test_storage_path,
-            control_db_filename="control_test.db" # Use a distinct name for clarity
+
+        return AppConfig(
+            system=SystemConfig(
+                storage_base_path=test_storage_path,
+                control_db_filename="control_test.db" # Use a distinct name for clarity
+            ),
+            embedding=EmbeddingConfig(
+                model_name="sentence-transformers/all-MiniLM-L6-v2",
+            ),
+            vector_store=VectorStoreConfig(
+                index_type="IndexFlatL2"
+            )
         )
 
     @pytest.fixture
@@ -78,7 +89,7 @@ class TestDomainManager:
         """Test the initialization attributes of DomainManager via fixture."""
         assert domain_manager.config == test_config
         assert domain_manager.sqlite_manager == mock_sqlite_manager
-        assert domain_manager.storage_base_path == test_config.storage_base_path
+        assert domain_manager.storage_base_path == test_config.system.storage_base_path
         assert domain_manager.logger == mock_logger
         # Check logger was called during init (now happens before reset)
         mock_logger.info.assert_called_with("Inicializando DomainManager")
@@ -86,82 +97,106 @@ class TestDomainManager:
     # --- create_domain Tests ---
     def test_create_domain_success(self, domain_manager, test_config, mock_sqlite_manager, mock_logger):
         """Test successful creation of a new domain using configured paths."""
-        domain_name = "New Domain Name"
-        description = "New description"
-        keywords = "new, keywords"
-        domain_name_fs = "new_domain_name" # Lowercase and underscored
+        
+        domain_data = {
+            "name": "New Domain Name",
+            "description": "New description",
+            "keywords": "new, keywords",
+            "embeddings_model": "sentence-transformers/all-MiniLM-L6-v2",
+            "faiss_index_type": "IndexFlatL2"
+        }
 
         # Mock DB interactions (domain doesn't exist)
         mock_conn = mock_sqlite_manager.get_connection.return_value.__enter__.return_value
         mock_sqlite_manager.get_domain.return_value = None 
 
         # Call the method
-        domain_manager.create_domain(domain_name, description, keywords)
+        domain_manager.create_domain(domain_data)
 
         # Assertions
         mock_sqlite_manager.get_connection.assert_called_once_with(control=True)
         mock_sqlite_manager.begin.assert_called_once_with(mock_conn)
-        mock_sqlite_manager.get_domain.assert_called_once_with(mock_conn, domain_name)
+        mock_sqlite_manager.get_domain.assert_called_once_with(mock_conn, domain_data["name"])
         mock_sqlite_manager.insert_domain.assert_called_once_with(ANY, mock_conn)
 
         # Check the details of the Domain object passed to insert_domain
         call_args = mock_sqlite_manager.insert_domain.call_args
         inserted_domain = call_args[0][0]
         assert isinstance(inserted_domain, Domain)
-        assert inserted_domain.name == domain_name
-        assert inserted_domain.description == description
-        assert inserted_domain.keywords == keywords
+        assert inserted_domain.name == domain_data["name"]
+        assert inserted_domain.description == domain_data["description"]
+        assert inserted_domain.keywords == domain_data["keywords"]
         # Check constructed paths based on test_config.storage_base_path
-        expected_db_path = os.path.join(test_config.storage_base_path, "domains", domain_name_fs, f"{domain_name_fs}.db")
-        expected_vs_path = os.path.join(test_config.storage_base_path, "domains", domain_name_fs, "vector_store", f"{domain_name_fs}.faiss")
+        expected_db_path = os.path.join(test_config.system.storage_base_path, "domains", domain_data["name"].lower().replace(" ", "_"), f"{domain_data['name'].lower().replace(' ', '_')}.db")
+        expected_vs_path = os.path.join(test_config.system.storage_base_path, "domains", domain_data["name"].lower().replace(" ", "_"), "vector_store", f"{domain_data['name'].lower().replace(' ', '_')}.faiss")
         assert inserted_domain.db_path == expected_db_path
         assert inserted_domain.vector_store_path == expected_vs_path
 
         mock_conn.commit.assert_called_once()
         mock_conn.rollback.assert_not_called()
-        mock_logger.info.assert_any_call("Dominio de conhecimento adicionado com sucesso", domain_name=domain_name)
+        mock_logger.info.assert_any_call("Dominio de conhecimento adicionado com sucesso", domain_name=domain_data["name"])
         # Check log for adding domain contains the constructed paths
         mock_logger.info.assert_any_call("Adicionando novo domínio de conhecimento", 
-                                        name=domain_name, description=description, keywords=keywords,
-                                        db_path=expected_db_path, vector_store_path=expected_vs_path)
+                                        name=domain_data["name"], description=domain_data["description"], keywords=domain_data["keywords"], embeddings_model=domain_data["embeddings_model"],
+                                        faiss_index_type=domain_data["faiss_index_type"], db_path=expected_db_path, vector_store_path=expected_vs_path)
 
     def test_create_domain_already_exists(self, domain_manager, test_config, mock_sqlite_manager, mock_logger):
         """Test attempting to create a domain that already exists."""
-        domain_name = "existing_domain"
-        description = "Existing description"
-        keywords = "existing, keywords"
+        
+        domain_data = {
+            "name": "existing_domain",
+            "description": "Existing description",
+            "keywords": "existing, keywords",
+            "embeddings_model": "sentence-transformers/all-MiniLM-L6-v2",
+            "faiss_index_type": "IndexFlatL2"
+        }
 
         mock_conn = mock_sqlite_manager.get_connection.return_value.__enter__.return_value
-        existing_domain_obj = create_dummy_domain(id=1, name=domain_name, base_path=test_config.storage_base_path)
+        existing_domain_obj = create_dummy_domain(id=1, name=domain_data["name"], base_path=test_config.system.storage_base_path)
         mock_sqlite_manager.get_domain.return_value = [existing_domain_obj] # Domain exists
 
-        with pytest.raises(ValueError, match=f"Domínio já existe: {domain_name}"):
-            domain_manager.create_domain(domain_name, description, keywords)
+        with pytest.raises(ValueError, match=f"Domínio já existe: {domain_data['name']}"):
+            domain_manager.create_domain(domain_data)
 
         mock_sqlite_manager.get_connection.assert_called_once_with(control=True)
         mock_sqlite_manager.begin.assert_called_once_with(mock_conn)
-        mock_sqlite_manager.get_domain.assert_called_once_with(mock_conn, domain_name)
+        mock_sqlite_manager.get_domain.assert_called_once_with(mock_conn, domain_data["name"])
         mock_sqlite_manager.insert_domain.assert_not_called()
         mock_conn.rollback.assert_called_once()
         mock_conn.commit.assert_not_called()
-        mock_logger.error.assert_any_call("Dominio ja existe", domain_name=domain_name)
+        mock_logger.error.assert_any_call("Dominio ja existe", domain_name=domain_data["name"])
 
     def test_create_domain_invalid_args(self, domain_manager):
         """Test create_domain with non-string arguments."""
         with pytest.raises(ValueError, match="Nome, descrição e palavras-chave devem ser strings"):
-            domain_manager.create_domain(123, "desc", "key")
+            args = {
+                "name": 123,
+                "description": "desc",
+                "keywords": "key"
+            }
+            domain_manager.create_domain(args)
         with pytest.raises(ValueError, match="Nome, descrição e palavras-chave devem ser strings"):
-            domain_manager.create_domain("name", None, "key")
+            args = {
+                "name": "name",
+                "description": None,
+                "keywords": "key"
+            }
+            domain_manager.create_domain(args)
         with pytest.raises(ValueError, match="Nome, descrição e palavras-chave devem ser strings"):
-            domain_manager.create_domain("name", "desc", ["key"])
+            args = {
+                "name": "name",
+                "description": "desc",
+                "keywords": ["key"]
+            }
+            domain_manager.create_domain(args)
 
     # --- remove_domain_registry_and_files Tests ---
     def test_remove_domain_success(self, domain_manager, test_config, mock_sqlite_manager, mock_logger, mocker):
         """Test successful removal of an existing domain and its directory."""
         domain_name = "domain to remove"
         domain_name_fs = "domain_to_remove"
-        existing_domain_obj = create_dummy_domain(id=5, name=domain_name, base_path=test_config.storage_base_path)
-        expected_domain_dir = os.path.join(test_config.storage_base_path, "domains", domain_name_fs)
+        existing_domain_obj = create_dummy_domain(id=5, name=domain_name, base_path=test_config.system.storage_base_path)
+        expected_domain_dir = os.path.join(test_config.system.storage_base_path, "domains", domain_name_fs)
 
         mock_conn = mock_sqlite_manager.get_connection.return_value.__enter__.return_value
         mock_sqlite_manager.get_domain.return_value = [existing_domain_obj] # Domain exists
@@ -186,8 +221,8 @@ class TestDomainManager:
         """Test removal of a domain when its directory doesn't exist."""
         domain_name = "domain no dir"
         domain_name_fs = "domain_no_dir"
-        existing_domain_obj = create_dummy_domain(id=6, name=domain_name, base_path=test_config.storage_base_path)
-        expected_domain_dir = os.path.join(test_config.storage_base_path, "domains", domain_name_fs)
+        existing_domain_obj = create_dummy_domain(id=6, name=domain_name, base_path=test_config.system.storage_base_path)
+        expected_domain_dir = os.path.join(test_config.system.storage_base_path, "domains", domain_name_fs)
 
         mock_conn = mock_sqlite_manager.get_connection.return_value.__enter__.return_value
         mock_sqlite_manager.get_domain.return_value = [existing_domain_obj]
@@ -235,7 +270,7 @@ class TestDomainManager:
     def test_update_domain_details_success_no_rename(self, domain_manager, test_config, mock_sqlite_manager, mock_logger):
         """Test successful update of domain details without renaming."""
         domain_name = "domain_to_update"
-        existing_domain_obj = create_dummy_domain(id=10, name=domain_name, base_path=test_config.storage_base_path)
+        existing_domain_obj = create_dummy_domain(id=10, name=domain_name, base_path=test_config.system.storage_base_path)
         updates = {
             "description": "Updated Description",
             "keywords": "updated, keywords"
@@ -261,7 +296,7 @@ class TestDomainManager:
         """Test successful update including renaming the domain and its paths."""
         old_name = "Old Domain Name"
         new_name = "New Domain Name"
-        base_path = test_config.storage_base_path
+        base_path = test_config.system.storage_base_path
         updates = {"name": new_name, "description": "Desc after rename"}
         existing_domain_obj = create_dummy_domain(id=11, name=old_name, base_path=base_path)
         mock_conn = mock_sqlite_manager.get_connection.return_value.__enter__.return_value
@@ -328,7 +363,7 @@ class TestDomainManager:
         """Test updating domain name when the new name already exists."""
         old_name = "Original Exists Test"
         new_name = "Taken Name Test"
-        base_path = test_config.storage_base_path
+        base_path = test_config.system.storage_base_path
         updates = {"name": new_name}
 
         original_domain_obj = create_dummy_domain(id=20, name=old_name, base_path=base_path)
@@ -359,7 +394,7 @@ class TestDomainManager:
 
     def test_update_domain_details_no_change(self, domain_manager, test_config, mock_sqlite_manager, mock_logger):
         domain_name = "no_change_domain"
-        existing_domain_obj = create_dummy_domain(id=11, name=domain_name, base_path=test_config.storage_base_path)
+        existing_domain_obj = create_dummy_domain(id=11, name=domain_name, base_path=test_config.system.storage_base_path)
         updates = {
             "description": existing_domain_obj.description, 
             "keywords": existing_domain_obj.keywords     
@@ -381,7 +416,7 @@ class TestDomainManager:
 
     def test_update_domain_details_invalid_field(self, domain_manager, test_config, mock_sqlite_manager, mock_logger):
         domain_name = "invalid_field_domain"
-        existing_domain_obj = create_dummy_domain(id=12, name=domain_name, base_path=test_config.storage_base_path)
+        existing_domain_obj = create_dummy_domain(id=12, name=domain_name, base_path=test_config.system.storage_base_path)
         updates = {
             "db_path": "/new/path.db", 
             "id": 999 
@@ -408,7 +443,7 @@ class TestDomainManager:
         new_name = "new rename name"
         old_name_fs = "old_rename_name"
         new_name_fs = "new_rename_name"
-        base_path = test_config.storage_base_path
+        base_path = test_config.system.storage_base_path
 
         # Create dummy old structure
         old_dir = tmp_path / "test_storage" / "domains" / old_name_fs
@@ -445,7 +480,7 @@ class TestDomainManager:
         new_name = "new dir name"
         old_name_fs = "dir_not_exist"
         new_name_fs = "new_dir_name"
-        base_path = test_config.storage_base_path
+        base_path = test_config.system.storage_base_path
 
         # Expected paths 
         new_dir = os.path.join(base_path, "domains", new_name_fs)
@@ -466,7 +501,7 @@ class TestDomainManager:
         new_name = "new target exist"
         old_name_fs = "old_target_exist"
         new_name_fs = "new_target_exist"
-        base_path = test_config.storage_base_path
+        base_path = test_config.system.storage_base_path
 
         # Create dummy old and *target* directories
         old_dir = tmp_path / "test_storage" / "domains" / old_name_fs
@@ -483,7 +518,7 @@ class TestDomainManager:
         new_name = "new os error"
         old_name_fs = "os_error_domain"
         new_name_fs = "new_os_error"
-        base_path = test_config.storage_base_path
+        base_path = test_config.system.storage_base_path
         old_dir = tmp_path / "test_storage" / "domains" / old_name_fs
         new_dir = tmp_path / "test_storage" / "domains" / new_name_fs 
         old_dir.mkdir(parents=True)
@@ -499,8 +534,8 @@ class TestDomainManager:
 
     # --- list_domains Tests ---
     def test_list_domains_success(self, domain_manager, test_config, mock_sqlite_manager):
-        domain1 = create_dummy_domain(id=1, name="Domain Alpha", base_path=test_config.storage_base_path)
-        domain2 = create_dummy_domain(id=2, name="Domain Beta", base_path=test_config.storage_base_path)
+        domain1 = create_dummy_domain(id=1, name="Domain Alpha", base_path=test_config.system.storage_base_path)
+        domain2 = create_dummy_domain(id=2, name="Domain Beta", base_path=test_config.system.storage_base_path)
         mock_conn = mock_sqlite_manager.get_connection.return_value.__enter__.return_value
         mock_sqlite_manager.get_domain.return_value = [domain1, domain2]
 
@@ -523,7 +558,7 @@ class TestDomainManager:
     # --- list_domain_documents Tests ---
     def test_list_domain_documents_success(self, domain_manager, test_config, mock_sqlite_manager):
         domain_name = "docs domain"
-        domain = create_dummy_domain(id=3, name=domain_name, base_path=test_config.storage_base_path)
+        domain = create_dummy_domain(id=3, name=domain_name, base_path=test_config.system.storage_base_path)
         doc1 = MagicMock() 
         doc2 = MagicMock()
         expected_docs = [doc1, doc2]
@@ -566,7 +601,7 @@ class TestDomainManager:
 
     def test_list_domain_documents_db_not_found(self, domain_manager, test_config, mock_sqlite_manager):
         domain_name = "no db domain"
-        domain = create_dummy_domain(id=4, name=domain_name, base_path=test_config.storage_base_path)
+        domain = create_dummy_domain(id=4, name=domain_name, base_path=test_config.system.storage_base_path)
 
         mock_control_conn = MagicMock(spec=sqlite3.Connection)
         mock_sqlite_manager.get_connection.return_value.__enter__.return_value = mock_control_conn
@@ -583,7 +618,7 @@ class TestDomainManager:
 
     def test_list_domain_documents_no_documents(self, domain_manager, test_config, mock_sqlite_manager):
         domain_name = "empty domain"
-        domain = create_dummy_domain(id=7, name=domain_name, base_path=test_config.storage_base_path)
+        domain = create_dummy_domain(id=7, name=domain_name, base_path=test_config.system.storage_base_path)
 
         mock_control_conn = MagicMock(spec=sqlite3.Connection)
         mock_domain_conn = MagicMock(spec=sqlite3.Connection)
