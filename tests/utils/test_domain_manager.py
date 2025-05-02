@@ -11,8 +11,8 @@ import sqlite3 # Import for type hinting mock connection
 # Helper function to create a dummy Domain object
 def create_dummy_domain(id=1, name="test_domain", base_path="storage") -> Domain:
     name_fs = name.lower().replace(" ", "_")
-    db_path = os.path.join(base_path, "domains", name_fs, f"{name_fs}.db")
-    vs_path = os.path.join(base_path, "domains", name_fs, "vector_store", f"{name_fs}.faiss")
+    db_path = os.path.join(base_path, name_fs, f"{name_fs}.db")
+    vs_path = os.path.join(base_path, name_fs, "vector_store", f"{name_fs}.faiss")
     return Domain(
         id=id,
         name=name,
@@ -127,8 +127,8 @@ class TestDomainManager:
         assert inserted_domain.description == domain_data["description"]
         assert inserted_domain.keywords == domain_data["keywords"]
         # Check constructed paths based on test_config.storage_base_path
-        expected_db_path = os.path.join(test_config.system.storage_base_path, "domains", domain_data["name"].lower().replace(" ", "_"), f"{domain_data['name'].lower().replace(' ', '_')}.db")
-        expected_vs_path = os.path.join(test_config.system.storage_base_path, "domains", domain_data["name"].lower().replace(" ", "_"), "vector_store", f"{domain_data['name'].lower().replace(' ', '_')}.faiss")
+        expected_db_path = os.path.join(test_config.system.storage_base_path, domain_data["name"].lower().replace(" ", "_"), f"{domain_data['name'].lower().replace(' ', '_')}.db")
+        expected_vs_path = os.path.join(test_config.system.storage_base_path, domain_data["name"].lower().replace(" ", "_"), "vector_store", f"{domain_data['name'].lower().replace(' ', '_')}.faiss")
         assert inserted_domain.db_path == expected_db_path
         assert inserted_domain.vector_store_path == expected_vs_path
 
@@ -196,7 +196,7 @@ class TestDomainManager:
         domain_name = "domain to remove"
         domain_name_fs = "domain_to_remove"
         existing_domain_obj = create_dummy_domain(id=5, name=domain_name, base_path=test_config.system.storage_base_path)
-        expected_domain_dir = os.path.join(test_config.system.storage_base_path, "domains", domain_name_fs)
+        expected_domain_dir = os.path.join(test_config.system.storage_base_path, domain_name_fs)
 
         mock_conn = mock_sqlite_manager.get_connection.return_value.__enter__.return_value
         mock_sqlite_manager.get_domain.return_value = [existing_domain_obj] # Domain exists
@@ -222,7 +222,7 @@ class TestDomainManager:
         domain_name = "domain no dir"
         domain_name_fs = "domain_no_dir"
         existing_domain_obj = create_dummy_domain(id=6, name=domain_name, base_path=test_config.system.storage_base_path)
-        expected_domain_dir = os.path.join(test_config.system.storage_base_path, "domains", domain_name_fs)
+        expected_domain_dir = os.path.join(test_config.system.storage_base_path, domain_name_fs)
 
         mock_conn = mock_sqlite_manager.get_connection.return_value.__enter__.return_value
         mock_sqlite_manager.get_domain.return_value = [existing_domain_obj]
@@ -305,7 +305,7 @@ class TestDomainManager:
             None
         ]
         new_name_fs = new_name.lower().replace(" ", "_")
-        new_dir = os.path.join(base_path, "domains", new_name_fs)
+        new_dir = os.path.join(base_path, new_name_fs)
         expected_new_db_path = os.path.join(new_dir, f"{new_name_fs}.db")
         expected_new_vs_path = os.path.join(new_dir, "vector_store", f"{new_name_fs}.faiss")
         mock_rename_paths = mocker.patch.object(domain_manager, '_rename_domain_paths', return_value=(expected_new_db_path, expected_new_vs_path))
@@ -446,7 +446,7 @@ class TestDomainManager:
         base_path = test_config.system.storage_base_path
 
         # Create dummy old structure
-        old_dir = tmp_path / "test_storage" / "domains" / old_name_fs
+        old_dir = tmp_path / "test_storage" / old_name_fs
         old_db_file = old_dir / f"{old_name_fs}.db"
         old_vs_dir = old_dir / "vector_store"
         old_vs_file = old_vs_dir / f"{old_name_fs}.faiss"
@@ -459,7 +459,7 @@ class TestDomainManager:
         assert old_vs_file.is_file()
 
         # Expected new paths
-        new_dir = tmp_path / "test_storage" / "domains" / new_name_fs
+        new_dir = tmp_path / "test_storage" / new_name_fs
         expected_new_db_path = str(new_dir / f"{new_name_fs}.db")
         expected_new_vs_path = str(new_dir / "vector_store" / f"{new_name_fs}.faiss")
 
@@ -483,7 +483,7 @@ class TestDomainManager:
         base_path = test_config.system.storage_base_path
 
         # Expected paths 
-        new_dir = os.path.join(base_path, "domains", new_name_fs)
+        new_dir = os.path.join(base_path, new_name_fs)
         expected_new_db_path = os.path.join(new_dir, f"{new_name_fs}.db")
         expected_new_vs_path = os.path.join(new_dir, "vector_store", f"{new_name_fs}.faiss")
 
@@ -493,7 +493,7 @@ class TestDomainManager:
         # Assert returned paths 
         assert result_db_path == expected_new_db_path
         assert result_vs_path == expected_new_vs_path
-        assert not os.path.exists(os.path.join(base_path, "domains", old_name_fs))
+        assert not os.path.exists(os.path.join(base_path, old_name_fs))
         assert not os.path.exists(new_dir)
 
     def test_rename_domain_paths_target_exists(self, domain_manager, test_config, tmp_path):
@@ -504,8 +504,8 @@ class TestDomainManager:
         base_path = test_config.system.storage_base_path
 
         # Create dummy old and *target* directories
-        old_dir = tmp_path / "test_storage" / "domains" / old_name_fs
-        new_dir = tmp_path / "test_storage" / "domains" / new_name_fs
+        old_dir = tmp_path / "test_storage" / old_name_fs
+        new_dir = tmp_path / "test_storage" / new_name_fs
         os.makedirs(old_dir)
         os.makedirs(new_dir)
 
@@ -519,8 +519,8 @@ class TestDomainManager:
         old_name_fs = "os_error_domain"
         new_name_fs = "new_os_error"
         base_path = test_config.system.storage_base_path
-        old_dir = tmp_path / "test_storage" / "domains" / old_name_fs
-        new_dir = tmp_path / "test_storage" / "domains" / new_name_fs 
+        old_dir = tmp_path / "test_storage" / old_name_fs
+        new_dir = tmp_path / "test_storage" / new_name_fs 
         old_dir.mkdir(parents=True)
         mock_rename = mocker.patch('src.utils.domain_manager.os.rename', side_effect=OSError("Disk full"))
         

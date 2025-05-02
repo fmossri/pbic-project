@@ -2,7 +2,7 @@ from pydantic import BaseModel, Field, PositiveInt, conint, confloat, ConfigDict
 from typing import Literal, Optional, Dict, Any
 
 class SystemConfig(BaseModel):
-    storage_base_path: str = "storage"
+    storage_base_path: str = "storage/domains"
     control_db_filename: str = "control.db"
 
 class IngestionConfig(BaseModel):
@@ -10,16 +10,37 @@ class IngestionConfig(BaseModel):
     chunk_size: PositiveInt = 1000
     chunk_overlap: conint(ge=0) = 200 # type: ignore
 
+    @property
+    def chunk_strategy_options(self):
+        return self.model_fields['chunk_strategy'].annotation.__args__
+
 class EmbeddingConfig(BaseModel):
-    model_name: str = "sentence-transformers/all-MiniLM-L6-v2"
+    model_name: Literal[
+        "sentence-transformers/all-MiniLM-L6-v2", 
+        "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2", 
+        "sentence-transformers/all-mpnet-base-v2", 
+        "intfloat/e5-large-v2"
+        ] = "sentence-transformers/all-MiniLM-L6-v2"
     device: Literal["cpu", "cuda"] = "cpu"
     batch_size: PositiveInt = 32
     normalize_embeddings: bool = True
 
-class VectorStoreConfig(BaseModel):
-    index_type: Literal["IndexFlatL2"] = "IndexFlatL2" # Adicionar "IndexIDMap" depois
-    index_params: Optional[Dict[str, Any]] = None
+    @property
+    def embedding_options(self):
+        return self.model_fields['model_name'].annotation.__args__
+    
+    @property
+    def device_options(self):
+        return self.model_fields['device'].annotation.__args__
 
+class VectorStoreConfig(BaseModel):
+    index_type: Literal["IndexFlatL2"] = "IndexFlatL2" # IndexFlatL2 possui um IndexIDMap wrapper
+    index_params: Optional[Dict[str, Any]] = None
+    
+    @property
+    def vector_store_options(self):
+        return self.model_fields['index_type'].annotation.__args__
+        
 class QueryConfig(BaseModel):
     retrieval_k: PositiveInt = 5
     # rerank_strategy: Literal["none"] = "none" # Adicionar depois

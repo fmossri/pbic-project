@@ -43,7 +43,7 @@ class DomainManager:
         treated_domain_name = new_domain_data["name"].lower().replace(" ", "_")
 
         # Cria os diretórios e os arquivos do domínio
-        domain_root_path = os.path.join(self.storage_base_path, "domains", treated_domain_name)
+        domain_root_path = os.path.join(self.storage_base_path, treated_domain_name)
         domain_db_path = os.path.join(domain_root_path, f"{treated_domain_name}.db")
         vector_store_path = os.path.join(domain_root_path, "vector_store", f"{treated_domain_name}.faiss")
 
@@ -100,7 +100,7 @@ class DomainManager:
 
                 # Remove o diretório e os arquivos do domínio
                 treated_domain_name = domain.name.lower().replace(" ", "_")
-                domain_dir = os.path.join(self.storage_base_path, "domains", treated_domain_name)
+                domain_dir = os.path.join(self.storage_base_path, treated_domain_name)
                 if os.path.isdir(domain_dir):
                     shutil.rmtree(domain_dir)
                     self.logger.info("Diretorio e arquivos do dominio removidos com sucesso", domain_directory=domain_dir)
@@ -188,8 +188,8 @@ class DomainManager:
 
         old_name_fs = old_name.lower().replace(" ", "_")
         new_name_fs = new_name.lower().replace(" ", "_")
-        old_dir = os.path.join(self.storage_base_path, "domains", f"{old_name_fs}")
-        new_dir = os.path.join(self.storage_base_path, "domains", f"{new_name_fs}")
+        old_dir = os.path.join(self.storage_base_path, f"{old_name_fs}")
+        new_dir = os.path.join(self.storage_base_path, f"{new_name_fs}")
         old_db_path = os.path.join(f"{old_dir}", f"{old_name_fs}.db")
         new_db_path = os.path.join(f"{new_dir}", f"{new_name_fs}.db")
         old_faiss_path = os.path.join(f"{old_dir}", "vector_store", f"{old_name_fs}.faiss")

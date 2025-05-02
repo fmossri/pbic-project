@@ -1,5 +1,5 @@
 [system]
-storage_base_path = "storage"
+storage_base_path = "storage/domains"
 control_db_filename = "control.db"
 
 [ingestion]
@@ -73,7 +73,7 @@ top_k = 50
 # Penaliza tokens que apareceram recentemente para reduzir repetições.
 # Valores > 1.0 aplicam penalidade. 1.0 = sem penalidade.
 # Default: 1.1
-repetition_penalty = 1.1
+repetition_penalty = 1.4
 
 # --- Parâmetros de Retry --- 
 # Número máximo de tentativas de chamada à API em caso de falha.
@@ -87,10 +87,7 @@ retry_delay_seconds = 2
 # --- Template do Prompt --- 
 # Define a estrutura do prompt enviado ao LLM, incluindo contexto e query.
 # Default: (Ver modelo LLMConfig em models.py)
-prompt_template = """Use o seguinte contexto para responder a pergunta no final.
-Se você não sabe a resposta, apenas diga que não sabe, não tente inventar uma resposta.
-Mantenha a resposta concisa e diretamente ao ponto da pergunta.
-Forneça a resposta *apenas* com base no contexto fornecido. Não adicione informações externas."""
+prompt_template = "Use o seguinte contexto para responder a pergunta no final.\nSe você não sabe a resposta, apenas diga que não sabe, não tente inventar uma resposta.\nMantenha a resposta concisa e diretamente ao ponto da pergunta.\nForneça a resposta *apenas* com base no contexto fornecido. Não adicione informações externas.\n"
 
 [text_normalizer]
 # Configurações para os passos de normalização de texto
@@ -102,7 +99,6 @@ use_unicode_normalization = true
 use_lowercase = true
 
 # Remover caracteres especiais (mantendo letras, números, espaços, '.,-)?
-use_remove_special_chars = true
 
 # Remover espaços em branco extras (no início/fim e múltiplos espaços)?
 use_remove_extra_whitespace = true 
