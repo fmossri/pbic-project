@@ -1,24 +1,16 @@
 import pytest
-from pathlib import Path
-import toml # For reading back saved files in tests
-import sys
+import tomlkit
 
-# Import the module itself to modify its global variable
-import src.config.config_manager as config_manager_module
+from typing import Optional, Dict
+from pydantic import BaseModel
 
-# Conditionally import the correct reader based on Python version
-if sys.version_info < (3, 11):
-    import tomli
-else:
-    import tomllib as tomli
-
+from src.config.config_manager import ConfigManager, ConfigurationError, _section_name_to_model
 from src.config.models import AppConfig
-from src.config.config_manager import load_config, get_config, save_config, ConfigurationError, _config_path
 
-# --- Helper Data ---
+# --- Dados Auxiliares ---
 
 def get_valid_config_dict():
-    """Returns a dictionary representing a valid AppConfig structure."""
+    """Retorna um dicionário representando uma estrutura AppConfig válida."""
     return {
         "system": {
             "storage_base_path": "data/test_storage",
@@ -59,138 +51,340 @@ def get_valid_config_dict():
         }
     }
 
-# --- Test Class ---
+# --- Classe de Teste para Métodos de Instância ConfigManager ---
 
 class TestConfigManager:
 
-    # Reset cache before each test
-    @pytest.fixture(autouse=True)
-    def reset_cache(self):
-        global _cached_config
-        _cached_config = None
+    @pytest.fixture
+    def manager(self, tmp_path) -> ConfigManager:
+        """Fornece uma instância ConfigManager isolada para um diretório temporário."""
+        config_file = tmp_path / "test_config.toml"
+        return ConfigManager(config_path=config_file)
+    
 
-    # --- Tests for load_config ---
+    @pytest.fixture
+    def tomlkit_manager(self, tmp_path) -> ConfigManager:
+        """Fornece uma instância ConfigManager isolada para um diretório temporário
+           com conteúdo inicial tipo AppConfig, incluindo comentários."""
+        config_file = tmp_path / "update_test.toml"
+        initial_content = '''\
+# Comentário principal config
+[system] # Comentário seção system
+storage_base_path = "data/original" # Comentário path
+control_db_filename = "control.db"
 
-    def test_load_config_success(self, tmp_path):
-        """Test successfully loading a valid config file."""
-        config_file = tmp_path / "valid_config.toml"
+[embedding]
+model_name = "original-emb-model" 
+# Comentário device
+device = "cuda"
+
+[llm]
+temperature = 0.7 # Temp inicial
+# top_p está inicialmente ausente/None
+'''
+        config_file.write_text(initial_content, encoding="utf-8")
+        return ConfigManager(config_path=config_file)
+
+
+    # --- Testes para load_config ---
+
+    def test_load_config_success(self, manager: ConfigManager):
+        """Testa carregar com sucesso um arquivo de configuração válido."""
+        config_file = manager.config_path # Usa o path do manager
         valid_data = get_valid_config_dict()
         with open(config_file, "w", encoding="utf-8") as f:
-            toml.dump(valid_data, f)
+            tomlkit.dump(valid_data, f)
 
-        loaded_config = load_config(config_file)
+        loaded_config = manager.load_config()
         assert isinstance(loaded_config, AppConfig)
         assert loaded_config.system.storage_base_path == "data/test_storage"
         assert loaded_config.embedding.model_name == "test-model"
         assert loaded_config.text_normalizer.use_lowercase is True
 
-    def test_load_config_file_not_found(self, tmp_path):
-        """Test loading when the config file doesn't exist."""
-        non_existent_file = tmp_path / "not_a_config.toml"
-        with pytest.raises(ConfigurationError, match="Arquivo de configuração não encontrado"):
-            load_config(non_existent_file)
-
-    def test_load_config_invalid_toml(self, tmp_path):
-        """Test loading a file with invalid TOML syntax."""
-        config_file = tmp_path / "invalid_syntax.toml"
-        config_file.write_text("this is not valid toml syntax [") # Invalid TOML
-
-        with pytest.raises(ConfigurationError, match="Erro ao analisar o arquivo"):
-            load_config(config_file)
-
-    def test_load_config_validation_error_invalid_type_in_subsection(self, tmp_path):
-        """Test loading a config with an invalid type in a subsection."""
-        config_file = tmp_path / "invalid_type_sub.toml"
-        invalid_data = get_valid_config_dict()
-        invalid_data["system"]["storage_base_path"] = 12345 # Invalid type (int instead of str)
-        
-        with open(config_file, "w", encoding="utf-8") as f:
-            toml.dump(invalid_data, f)
-
-        with pytest.raises(ConfigurationError, match="Falha na validação"):
-            load_config(config_file)
-
-    def test_load_config_validation_error_wrong_type(self, tmp_path):
-        """Test loading a config with a field of the wrong type."""
-        config_file = tmp_path / "wrong_type.toml"
-        invalid_data = get_valid_config_dict()
-        invalid_data["ingestion"]["chunk_size"] = "not-an-integer" # Wrong type
-        with open(config_file, "w", encoding="utf-8") as f:
-            toml.dump(invalid_data, f)
-
-        with pytest.raises(ConfigurationError, match="Falha na validação"):
-            load_config(config_file)
-
-    # --- Tests for get_config ---
-
-    def test_get_config_calls_load_config(self, tmp_path, mocker):
-        """Test that get_config simply calls load_config."""
-        config_file = tmp_path / "get_config_test.toml"
-        valid_data = get_valid_config_dict()
-        with open(config_file, "w", encoding="utf-8") as f:
-            toml.dump(valid_data, f)
-        
-        mock_load = mocker.patch("src.config.config_manager.load_config", wraps=load_config)
-        
-        # Override the default path to use our temp file
-        original_path = config_manager_module._config_path
-        try:
-            config_manager_module._config_path = config_file
-            config_obj = get_config()
-            mock_load.assert_called_once()
-            assert isinstance(config_obj, AppConfig)
-        finally:
-             config_manager_module._config_path = original_path
-
-    # --- Tests for save_config ---
-
-    def test_save_config_success(self, tmp_path):
-        """Test successfully saving a valid AppConfig object."""
-        config_file = tmp_path / "save_config.toml"
-        valid_dict = get_valid_config_dict()
-        config_to_save = AppConfig(**valid_dict)
-
-        save_config(config_to_save, config_file)
-
-        # Verify file content
+        # Verifica o conteúdo do arquivo
         assert config_file.is_file()
-        # with open(config_file, \"rb\") as f: # Use reading mode consistent with loader
-        #     saved_data = tomli.load(f) 
-        
-        # Load the saved file back into an AppConfig object
-        reloaded_config = load_config(config_file)
-        
-        # Compare the AppConfig objects directly (uses Pydantic's __eq__)
-        # assert saved_data == config_to_save.model_dump(mode='python')
-        assert reloaded_config == config_to_save
-        
-        # Spot check a nested value on the reloaded object
-        # assert saved_data['llm']['temperature'] == 0.7
+
+        reloaded_config = manager.load_config()
+        assert reloaded_config == loaded_config
         assert reloaded_config.llm.temperature == 0.7
 
-    def test_save_config_type_error(self, tmp_path):
-        """Test calling save_config with a non-AppConfig object."""
-        config_file = tmp_path / "save_type_error.toml"
-        not_an_appconfig = {"system": {"log_level": "INFO"}} # Just a dict
+    def test_load_config_file_not_found(self, manager: ConfigManager):
+        """Testa carregar quando o arquivo de configuração não existe."""
+        # O manager é inicializado com um path inexistente do tmp_path
+        assert not manager.config_path.exists()
+        with pytest.raises(ConfigurationError, match="Arquivo de configuração não encontrado"):
+            manager.load_config()
 
-        with pytest.raises(TypeError, match="não é uma instância de AppConfig"):
-            save_config(not_an_appconfig, config_file)
+    def test_load_config_invalid_toml(self, manager: ConfigManager):
+        """Testa carregar um arquivo com sintaxe TOML inválida."""
+        config_file = manager.config_path
+        config_file.write_text("isso não é uma sintaxe toml válida [") # TOML Inválido
 
-    def test_save_config_io_error(self, tmp_path, mocker):
-        """Test save_config when an IOError occurs during file writing."""
-        config_file = tmp_path / "save_io_error.toml"
+        with pytest.raises(ConfigurationError, match="Erro ao analisar o arquivo"):
+            manager.load_config()
+
+    def test_load_config_validation_error_invalid_type_in_subsection(self, manager: ConfigManager):
+        """Testa carregar uma configuração com um tipo inválido em uma subseção."""
+        config_file = manager.config_path
+        invalid_data = get_valid_config_dict()
+        invalid_data["system"]["storage_base_path"] = 12345 # Tipo inválido
+        
+        with open(config_file, "w", encoding="utf-8") as f:
+            tomlkit.dump(invalid_data, f)
+
+        with pytest.raises(ConfigurationError, match="Falha na validação"):
+            manager.load_config()
+
+    def test_load_config_validation_error_wrong_type(self, manager: ConfigManager):
+        """Testa carregar uma configuração com um campo do tipo errado."""
+        config_file = manager.config_path
+        invalid_data = get_valid_config_dict()
+        invalid_data["ingestion"]["chunk_size"] = "não-é-inteiro" # Tipo errado
+        with open(config_file, "w", encoding="utf-8") as f:
+            tomlkit.dump(invalid_data, f)
+
+        with pytest.raises(ConfigurationError, match="Falha na validação"):
+            manager.load_config()
+
+    # --- Testes para get_config ---
+
+    def test_get_config_calls_load_config(self, manager: ConfigManager, mocker):
+        """Testa que manager.get_config chama manager.load_config."""
+        # Espiona o método load_config da instância
+        mock_load = mocker.spy(manager, "load_config")
+        
+        try:
+            # Garante que o arquivo existe para que load_config não levante FileNotFoundError
+            config_file = manager.config_path
+            valid_data = get_valid_config_dict()
+            with open(config_file, "w", encoding="utf-8") as f:
+                tomlkit.dump(valid_data, f)
+                
+            manager.get_config() 
+            mock_load.assert_called_once_with() 
+        except Exception as e:
+            pytest.fail(f"get_config ou asserção do mock falhou inesperadamente: {e}")
+
+    # --- Testes para save_config ---
+
+    def test_save_config_success(self, manager: ConfigManager):
+        """Testa salvar com sucesso um objeto AppConfig válido e recarregá-lo."""
+        config_file = manager.config_path
         valid_dict = get_valid_config_dict()
         config_to_save = AppConfig(**valid_dict)
 
-        # Mock the built-in open function to raise IOError
-        mock_open = mocker.patch("builtins.open", side_effect=IOError("Disk full"))
+        # Salva usando a instância do manager (opera em manager.config_path)
+        # Garante que o arquivo existe antes de salvar, já que save_config agora exige isso.
+        config_file.touch() 
+        manager.save_config(config_to_save)
 
-        with pytest.raises(ConfigurationError, match="Erro de I/O ao salvar"):
-            save_config(config_to_save, config_file)
+        # Verifica o conteúdo do arquivo
+        assert config_file.is_file()
 
-        # Ensure mock_open was actually called with the correct path (optional check)
-        # Note: Need to handle how builtins.open is used (binary vs text)
-        # For toml.dump (text mode):
-        # mock_open.assert_called_once_with(config_file, "w", encoding="utf-8")
+        saved_content_raw = config_file.read_text(encoding="utf-8")
+        expected_line = 'storage_base_path = "data/test_storage"'
+        assert expected_line in saved_content_raw, f"Conteúdo do arquivo não contém '{expected_line}'"
 
-    # --- (Tests for get_config and save_config will be added next) --- 
+        # Recarrega usando a mesma instância do manager
+        reloaded_config = manager.load_config()
+        
+        assert isinstance(reloaded_config, AppConfig)
+        assert reloaded_config.llm.temperature == config_to_save.llm.temperature
+        assert reloaded_config.system.storage_base_path == config_to_save.system.storage_base_path
+
+    def test_save_config_preserves_comments_and_updates_values(self, manager: ConfigManager):
+        """Testa que salvar a config atualiza valores enquanto preserva comentários."""
+        config_file = manager.config_path
+        initial_content = '''\
+[system]
+storage_base_path = "data/original_storage" # Mantenha este comentário
+control_db_filename = "control_orig.db" 
+
+[embedding] # Comentário seção
+# Comentário modelo
+model_name = "original-model"
+device = "cuda"
+'''
+        config_file.write_text(initial_content, encoding="utf-8")
+
+        loaded_config = manager.load_config()
+
+        loaded_config.system.storage_base_path = "data/MODIFIED_storage"
+        loaded_config.embedding.device = "cpu"
+        loaded_config.embedding.batch_size = 64
+
+        manager.save_config(loaded_config)
+
+        saved_content = config_file.read_text(encoding="utf-8")
+
+        assert "# Mantenha este comentário" in saved_content
+        assert "# Comentário seção" in saved_content
+        assert "# Comentário modelo" in saved_content
+        assert 'storage_base_path = "data/MODIFIED_storage"' in saved_content 
+        assert 'control_db_filename = "control_orig.db"' in saved_content 
+        assert 'model_name = "original-model"' in saved_content 
+        assert 'device = "cpu"' in saved_content 
+        assert 'batch_size = 64' in saved_content 
+
+    def test_save_config_type_error(self, manager: ConfigManager):
+        """Testa chamar save_config com um objeto que não é AppConfig."""
+        not_an_appconfig = {"system": {"log_level": "INFO"}} 
+        with pytest.raises(TypeError, match="não é uma instância de AppConfig"):
+            manager.save_config(not_an_appconfig)
+
+    def test_save_config_io_error(self, manager: ConfigManager, mocker):
+        """Testa save_config quando ocorre um IOError durante a escrita/dump final."""
+        # Garante que o arquivo existe primeiro, para que a verificação inicial em save_config passe.
+        manager.config_path.touch()
+        
+        config_to_save = AppConfig(**get_valid_config_dict())
+
+        mock_dump = mocker.patch("src.config.config_manager.tomlkit.dump", side_effect=IOError("Disco cheio"))
+        
+        # O match espera o erro levantado durante a tentativa de escrita.
+        with pytest.raises(ConfigurationError, match="Erro de I/O ou TOMLKit ao salvar"):
+            manager.save_config(config_to_save)
+        
+        # Verifica que o mock foi chamado
+        mock_dump.assert_called_once()
+
+    # --- Testes para reset_config ---
+
+    def test_reset_config_section_success_and_preserves_comments(self, manager: ConfigManager):
+        """Testa que resetar uma seção a atualiza para os padrões e preserva comentários."""
+        config_file = manager.config_path
+        initial_content = '''\
+[system]
+# Comentário system
+storage_base_path = "data/custom_storage" 
+control_db_filename = "custom.db"
+
+[llm] # Comentário seção LLM
+# Prompt customizado
+prompt_template = "My custom prompt: {context}"
+temperature = 0.99 # Temp customizada
+'''
+        config_file.write_text(initial_content, encoding="utf-8")
+
+        initial_config = manager.load_config()
+        assert initial_config.llm.temperature == 0.99
+
+        # Reseta a seção 'llm' usando a instância do manager
+        manager.reset_config(initial_config, 'llm')
+        
+        # Recarrega e verifica o conteúdo do arquivo
+        saved_content = config_file.read_text(encoding="utf-8")
+        reloaded_config_after_reset = manager.load_config()
+        
+        assert "# Comentário system" in saved_content
+        assert "# Comentário seção LLM" in saved_content
+        assert "# Prompt customizado" in saved_content
+        assert 'storage_base_path = "data/custom_storage"' in saved_content
+        
+        default_llm_config = _section_name_to_model['llm']() # Obtém instância padrão
+        assert reloaded_config_after_reset.llm.temperature == default_llm_config.temperature
+        # Verifica a representação string para robustez
+        assert f'temperature = {default_llm_config.temperature}' in saved_content or f'temperature = {default_llm_config.temperature:.1f}' in saved_content
+        # Modifica asserção para comparar com novas linhas escapadas como salvas pelo tomlkit
+        expected_prompt_line = f'prompt_template = "{default_llm_config.prompt_template}"'.replace('\n', '\\n')
+        assert expected_prompt_line in saved_content
+
+    def test_reset_config_invalid_section(self, manager: ConfigManager):
+        """Testa reset_config com um nome de seção inválido."""
+        config_file = manager.config_path
+        valid_dict = get_valid_config_dict()
+        config_obj = AppConfig(**valid_dict)
+        config_file.write_text(tomlkit.dumps(valid_dict)) # Precisa de um arquivo para a chamada potencial de save
+
+        with pytest.raises(ValueError, match="Nome de seção inválido para reset"):
+            manager.reset_config(config_obj, 'invalid_section_name')
+
+    def test_reset_config_invalid_config_type(self, manager: ConfigManager):
+        """Testa reset_config com um tipo de objeto de configuração inválido."""
+        not_an_appconfig = {"test": 1}
+        # Nenhum arquivo necessário, deve falhar na verificação de tipo antes de salvar
+        with pytest.raises(TypeError, match="não é uma instância de AppConfig"):
+            manager.reset_config(not_an_appconfig, 'llm')
+
+
+    def test_get_default_config_path_method(self, manager: ConfigManager):
+        """Testa o método de instância get_default_config_path."""
+        assert manager.get_default_config_path() == manager.config_path
+
+    def test_get_backup_config_path_method(self, manager: ConfigManager):
+        """Testa o método de instância get_backup_config_path."""
+        expected_path = manager.config_path.with_suffix('.bak')
+        assert manager.get_backup_config_path() == expected_path
+
+    def test_restore_config_from_backup_success(self, manager: ConfigManager):
+        """Testa restaurar com sucesso de um arquivo de backup usando o manager."""
+        config_file = manager.config_path
+        backup_file = manager.get_backup_config_path()
+
+        config_content = "value = 1"
+        backup_content = "value = 0 # Conteúdo backup" 
+
+        config_file.write_text(config_content)
+        backup_file.write_text(backup_content)
+
+        assert config_file.read_text() == config_content
+
+        # Realiza a restauração usando a instância do manager
+        restored = manager.restore_config_from_backup()
+
+        assert restored is True
+        assert config_file.read_text() == backup_content
+
+    def test_restore_config_from_backup_no_backup_file(self, manager: ConfigManager):
+        """Testa restaurar quando o arquivo de backup não existe usando o manager."""
+        config_file = manager.config_path
+        backup_file = manager.get_backup_config_path()
+
+        config_content = "value = 1"
+        config_file.write_text(config_content)
+
+        assert not backup_file.exists()
+
+        restored = manager.restore_config_from_backup()
+
+        assert restored is False
+        assert config_file.read_text() == config_content
+
+    def test_update_scalar_value_preserves_comments(self, tomlkit_manager: ConfigManager):
+        """Testa que atualizar um escalar existente preserva comentários ao redor."""
+        config = tomlkit_manager.load_config()
+        config.system.storage_base_path = "data/UPDATED" 
+        tomlkit_manager.save_config(config)
+        
+        doc_str = tomlkit_manager.config_path.read_text()
+        assert 'storage_base_path = "data/UPDATED"' in doc_str
+        assert "# Comentário path" in doc_str
+        assert "# Comentário seção system" in doc_str
+        assert 'control_db_filename = "control.db"' in doc_str
+
+    def test_add_optional_scalar_key(self, tomlkit_manager: ConfigManager):
+        """Testa adicionar/atualizar uma chave escalar que tem um padrão Pydantic
+           mas pode estar ausente no arquivo TOML inicial."""
+        config = tomlkit_manager.load_config()
+        
+        # Verifica que Pydantic carregou o valor padrão mesmo se ausente no arquivo inicial
+        assert config.llm.top_p == 0.9 
+        
+        # Agora muda o valor do padrão
+        config.llm.top_p = 0.88 
+        tomlkit_manager.save_config(config)
+        
+        doc_str = tomlkit_manager.config_path.read_text()
+        assert "top_p = 0.88" in doc_str
+        assert 'temperature = 0.7' in doc_str
+
+    def test_update_nested_scalar_value_preserves_comments(self, tomlkit_manager: ConfigManager):
+        """Testa que atualizar um escalar em uma seção aninhada preserva comentários."""
+        config = tomlkit_manager.load_config()
+        config.embedding.device = "cpu"
+        tomlkit_manager.save_config(config)
+        
+        doc_str = tomlkit_manager.config_path.read_text()
+        assert 'device = "cpu"' in doc_str
+        assert "# Comentário device" in doc_str
+        assert 'model_name = "original-emb-model"' in doc_str
