@@ -276,12 +276,26 @@ class SQLiteManager:
         Insere um domínio de conhecimento no banco de dados de controle.
         """
         self.logger.info(f"Inserindo dominio de conhecimento no banco de dados: {domain.name}")
+
+
+        params = []
+        field_names_list = []
+        field_cont = 0
+        for field, value in domain.model_dump().items():
+            if value is not None:
+                field_cont += 1
+                field_names_list.append(f"{field}")
+                params.append(value)
+        placeholders = ", ".join("?" * field_cont)
+
+        field_names = ", ".join(field_names_list)
+        query = f"INSERT INTO knowledge_domains ({field_names}) VALUES ({placeholders})"
+
+
         try:
             cursor = conn.cursor()
-            cursor.execute(
-                "INSERT INTO knowledge_domains (name, description, keywords, total_documents, db_path, vector_store_path, embeddings_dimension) VALUES (?, ?, ?, ?, ?, ?, ?)",
-                (domain.name, domain.description, domain.keywords, domain.total_documents, domain.db_path, domain.vector_store_path, domain.embeddings_dimension)
-            )
+            cursor.execute(query, params)
+            conn.commit()
 
             self.logger.debug("Domínio do conhecimento inserido com sucesso", 
                               domain_name=domain.name, 
@@ -320,8 +334,9 @@ class SQLiteManager:
                         db_path=row[6],
                         embeddings_model=row[7],
                         embeddings_dimension=row[8],
-                        created_at=row[9],
-                        updated_at=row[10]
+                        faiss_index_type=row[9],
+                        created_at=row[10],
+                        updated_at=row[11]
                     )
                     all_domains.append(domain)
                 return all_domains

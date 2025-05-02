@@ -91,7 +91,7 @@ class TestSQLiteManager:
     @pytest.fixture
     def sample_domain(self, test_config, sample_domain_db_path):
         """Create a sample Domain object for testing"""
-        domain_name = "test_domain_sample" 
+        domain_name = "test_domain_sample"
         domain_root = os.path.dirname(sample_domain_db_path)
         domain_name_fs = os.path.basename(domain_root)
         vector_store_path = os.path.join(domain_root, "vector_store", f"{domain_name_fs}.faiss")
@@ -103,7 +103,9 @@ class TestSQLiteManager:
             total_documents=0,
             db_path=sample_domain_db_path,
             vector_store_path=vector_store_path,
-            embeddings_dimension=0
+            embeddings_model="test_embedding_model",
+            embeddings_dimension=384,
+            faiss_index_type="IndexFlatL2"
         )
 
     def test_initialization(self, test_config):
@@ -361,7 +363,9 @@ class TestSQLiteManager:
             name=domain_name2, description="Another desc", keywords="another", total_documents=5,
             db_path=os.path.join(domain_root2, f"{domain_name2}.db"),
             vector_store_path=os.path.join(domain_root2, "vector_store", f"{domain_name2}.faiss"),
-            embeddings_dimension=384
+            embeddings_model="An embeddings model",
+            embeddings_dimension=384,
+            faiss_index_type="An index type"
         )
 
         with self.manager.get_connection(control=True) as conn:
