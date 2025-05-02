@@ -5,9 +5,16 @@ import copy
 from pydantic import ValidationError
 
 from src.utils.logger import get_logger
-from gui.streamlit_utils import update_log_levels_callback, get_domain_manager, initialize_logging_session, get_query_orchestrator, load_configuration
-from src.config.config_manager import save_config, ConfigurationError, reset_config
-from src.config.models import LLMConfig
+from gui.streamlit_utils import (
+    update_log_levels_callback, 
+    get_domain_manager, 
+    initialize_logging_session, 
+    get_query_orchestrator, 
+    load_configuration,
+    get_config_manager
+)
+from src.config.config_manager import ConfigurationError
+from src.config.models import LLMConfig, QueryConfig
 
 st.set_page_config(
     page_title="Query Interface",
@@ -18,6 +25,8 @@ initialize_logging_session()
 logger = get_logger(__name__, log_domain="gui")
 
 config = load_configuration()
+manager = get_config_manager()
+
 if config:
     domain_manager = get_domain_manager(config)
     orchestrator = get_query_orchestrator(config)
@@ -84,6 +93,18 @@ except Exception as e:
 
 # --- Sidebar de seleção de dominio ---
 with st.sidebar:
+
+        
+    # --- Sidebar Debug Toggle --- 
+    logger.info(f"--- Renderizando toggle, debug_mode = {st.session_state.get('debug_mode', 'Nao definido ainda')} ---")
+    st.sidebar.toggle(
+        "Debug Logging", 
+        key="debug_mode",
+        value=st.session_state.get('debug_mode', False),
+        help="Enable detailed DEBUG level logging to file and INFO to console.",
+        on_change=update_log_levels_callback
+    )
+    st.sidebar.divider()
     st.header("Opções de busca")
     # Usa session state para manter o registro do dominio selecionado
     if 'selected_query_domain' not in st.session_state:
@@ -131,7 +152,7 @@ with st.sidebar:
                     if not current_full_config:
                         st.error("Erro: Não foi possível carregar a configuração completa para reset.")
                     else:
-                        reset_config(current_full_config, "llm") 
+                        manager.reset_config(current_full_config, "llm") 
                         load_configuration.clear()
                         st.session_state.confirming_llm_reset = False
                         st.success("Configurações do LLM resetadas para os valores padrão")
@@ -152,17 +173,7 @@ with st.sidebar:
                 st.rerun()
     
     st.divider()
-    
-    # --- Sidebar Debug Toggle --- 
-    logger.info(f"--- Renderizando toggle, debug_mode = {st.session_state.get('debug_mode', 'Nao definido ainda')} ---")
-    st.sidebar.toggle(
-        "Debug Logging", 
-        key="debug_mode",
-        value=st.session_state.get('debug_mode', False),
-        help="Enable detailed DEBUG level logging to file and INFO to console.",
-        on_change=update_log_levels_callback
-    )
-    # ---------------------------------
+
 
 # --- Gerenciamento do historico de chat ---
 if "messages" not in st.session_state:
@@ -187,7 +198,7 @@ if prompt := st.chat_input("Pergunte aqui..."):
 
     # --- Salva automaticamente a configuração do LLM se tiver sido alterada --- 
     try:
-        current_query_config = QueryConfig(retrieval_k=query.retrieval_k)
+        current_query_config = QueryConfig(retrieval_k=config.query.retrieval_k)
         current_llm_config = LLMConfig(
             model_repo_id=llm_model_repo_id,
             prompt_template=llm_prompt_template,
@@ -208,7 +219,7 @@ if prompt := st.chat_input("Pergunte aqui..."):
                  st.error("Não é possível salvar as alterações do LLM: Configuração principal não carregada.")
             else:
                 updated_app_config = config.model_copy(update={'llm': current_llm_config})
-                save_config(updated_app_config)
+                manager.save_config(updated_app_config)
                 load_configuration.clear() 
                 # Atualiza o estado da session com a nova configuração salva
                 st.session_state.original_llm_config = copy.deepcopy(current_llm_config) 

@@ -76,7 +76,6 @@ if 'debug_mode' not in st.session_state:
 st.title("📥 Ingestão de Dados") 
 
 # --- Sidebar Debug Toggle --- 
-st.sidebar.divider()
 logger.info(f"--- DEBUG Data Ingestion: Rendering toggle, state is {st.session_state.get('debug_mode', 'Not Set Yet')} ---")
 st.sidebar.toggle(
     "Debug Logging", 
