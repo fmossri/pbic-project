@@ -22,7 +22,7 @@ def get_valid_config_dict():
             "chunk_overlap": 200
         },
         "embedding": {
-            "model_name": "test-model",
+            "model_name": "sentence-transformers/all-MiniLM-L6-v2",
             "device": "cpu",
             "batch_size": 32,
             "normalize_embeddings": True
@@ -74,7 +74,7 @@ storage_base_path = "data/original" # Comentário path
 control_db_filename = "control.db"
 
 [embedding]
-model_name = "original-emb-model" 
+model_name = "sentence-transformers/all-MiniLM-L6-v2" 
 # Comentário device
 device = "cuda"
 
@@ -98,7 +98,7 @@ temperature = 0.7 # Temp inicial
         loaded_config = manager.load_config()
         assert isinstance(loaded_config, AppConfig)
         assert loaded_config.system.storage_base_path == "data/test_storage"
-        assert loaded_config.embedding.model_name == "test-model"
+        assert loaded_config.embedding.model_name == "sentence-transformers/all-MiniLM-L6-v2"
         assert loaded_config.text_normalizer.use_lowercase is True
 
         # Verifica o conteúdo do arquivo
@@ -202,7 +202,7 @@ control_db_filename = "control_orig.db"
 
 [embedding] # Comentário seção
 # Comentário modelo
-model_name = "original-model"
+model_name = "sentence-transformers/all-MiniLM-L6-v2"
 device = "cuda"
 '''
         config_file.write_text(initial_content, encoding="utf-8")
@@ -222,7 +222,7 @@ device = "cuda"
         assert "# Comentário modelo" in saved_content
         assert 'storage_base_path = "data/MODIFIED_storage"' in saved_content 
         assert 'control_db_filename = "control_orig.db"' in saved_content 
-        assert 'model_name = "original-model"' in saved_content 
+        assert 'model_name = "sentence-transformers/all-MiniLM-L6-v2"' in saved_content 
         assert 'device = "cpu"' in saved_content 
         assert 'batch_size = 64' in saved_content 
 
@@ -270,7 +270,7 @@ temperature = 0.99 # Temp customizada
         assert initial_config.llm.temperature == 0.99
 
         # Reseta a seção 'llm' usando a instância do manager
-        manager.reset_config(initial_config, 'llm')
+        manager.reset_config(initial_config, ['llm'])
         
         # Recarrega e verifica o conteúdo do arquivo
         saved_content = config_file.read_text(encoding="utf-8")
@@ -387,4 +387,4 @@ temperature = 0.99 # Temp customizada
         doc_str = tomlkit_manager.config_path.read_text()
         assert 'device = "cpu"' in doc_str
         assert "# Comentário device" in doc_str
-        assert 'model_name = "original-emb-model"' in doc_str
+        assert 'model_name = "sentence-transformers/all-MiniLM-L6-v2"' in doc_str

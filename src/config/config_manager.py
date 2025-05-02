@@ -1,7 +1,7 @@
 import sys
 from pathlib import Path
 import shutil 
-
+from typing import Optional, List
 import tomlkit
 from tomlkit.items import Table, Item
 
@@ -207,14 +207,14 @@ class ConfigManager:
             logger.error(msg, exc_info=True)
             raise ConfigurationError(msg) from e
 
-    def reset_config(self, config: AppConfig, section_name: str) -> None:
+    def reset_config(self, config: AppConfig, section_names: Optional[List[str]] = None) -> None:
         """
         Reseta uma seção específica do objeto AppConfig para seus valores padrão
         e salva a configuração resultante no arquivo de configuração gerenciado.
 
         Args:
             config: O objeto AppConfig atual (usado como base para o reset).
-            section_name: O nome do atributo em AppConfig a ser resetado (e.g., 'llm', 'embedding').
+            section_names: Os nomes dos atributos em AppConfig a serem resetados (e.g., 'llm', 'embedding').
 
         Raises:
             ValueError: Se o nome da seção for inválido.
@@ -226,27 +226,32 @@ class ConfigManager:
             logger.error(msg)
             raise TypeError(msg)
 
-        if section_name not in _section_name_to_model:
-            msg = f"Nome de seção inválido para reset: '{section_name}'. Válidos: {list(_section_name_to_model.keys())}"
-            logger.error(msg)
-            raise ValueError(msg)
+        if section_names is None:
+            section_names = list(_section_name_to_model.keys())
 
-        try:
-            logger.info(f"Resetando a seção '{section_name}' da configuração para os padrões.")
-            ModelClass = _section_name_to_model[section_name]
-            default_section_instance = ModelClass()
-            current_config_copy = config.model_copy(deep=True)
-            updated_config = current_config_copy.model_copy(update={section_name: default_section_instance})
-            
-            logger.info(f"Salvando configuração com a seção '{section_name}' resetada para {self.config_path}...")
-            self.save_config(updated_config) 
-            
-        except ConfigurationError:
-            raise
-        except Exception as e:
-            msg = f"Erro inesperado ao resetar e salvar a seção '{section_name}' da configuração: {e}"
-            logger.error(msg, exc_info=True)
-            raise ConfigurationError(msg) from e
+        for section_name in section_names:
+
+            if section_name not in _section_name_to_model:
+                msg = f"Nome de seção inválido para reset: '{section_name}'. Válidos: {list(_section_name_to_model.keys())}"
+                logger.error(msg)
+                raise ValueError(msg)
+
+            try:
+                logger.info(f"Resetando a seção '{section_name}' da configuração para os padrões.")
+                ModelClass = _section_name_to_model[section_name]
+                default_section_instance = ModelClass()
+                current_config_copy = config.model_copy(deep=True)
+                updated_config = current_config_copy.model_copy(update={section_name: default_section_instance})
+                
+                logger.info(f"Salvando configuração com a seção '{section_name}' resetada para {self.config_path}...")
+                self.save_config(updated_config) 
+                
+            except ConfigurationError:
+                raise
+            except Exception as e:
+                msg = f"Erro inesperado ao resetar e salvar a seção '{section_name}' da configuração: {e}"
+                logger.error(msg, exc_info=True)
+                raise ConfigurationError(msg) from e
 
     def get_default_config_path(self) -> Path:
         """Retorna o caminho para o arquivo de configuração gerenciado por esta instância."""
