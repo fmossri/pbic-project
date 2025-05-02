@@ -13,20 +13,17 @@ from .test_docs.generate_test_pdfs import create_test_pdf
 class TestDataIngestionOrchestrator:
     """Suite de testes para a classe DataIngestionOrchestrator."""
 
-    # Class-level fixture to create test paths only once
     test_docs_dir = os.path.join(os.path.dirname(__file__), "test_docs")
     test_pdfs_dir = os.path.join(test_docs_dir, "test_pdfs")
     empty_dir = os.path.join(test_docs_dir, "empty_dir")
-    test_storage_base = os.path.join("tests", "test_storage") # Define a base for test storage
+    test_storage_base = os.path.join("tests", "test_storage")
     test_domain_dir = os.path.join(test_storage_base, "domains", "test_domain")
-    indices_dir = os.path.join(test_domain_dir, "vector_store") # Corrected path based on base
+    indices_dir = os.path.join(test_domain_dir, "vector_store")
     
-    # Test-specific control database path using the test storage base
-    test_control_db_dir = os.path.join(test_storage_base, "control") # Directory for control DB
+    test_control_db_dir = os.path.join(test_storage_base, "control")
     test_control_db_filename = "test_control.db"
-    test_control_db_path = os.path.join(test_control_db_dir, test_control_db_filename) # Full path
+    test_control_db_path = os.path.join(test_control_db_dir, test_control_db_filename)
 
-    # Domain paths using test base
     test_domain_db_path = os.path.join(test_domain_dir, "test_domain.db")
     test_domain_vector_store_path = os.path.join(indices_dir, "test_domain.faiss")
 
@@ -37,17 +34,13 @@ class TestDataIngestionOrchestrator:
         os.makedirs(self.test_pdfs_dir, exist_ok=True)
         os.makedirs(self.empty_dir, exist_ok=True)
         os.makedirs(self.indices_dir, exist_ok=True)
-        os.makedirs(self.test_control_db_dir, exist_ok=True) # Use control DB dir
+        os.makedirs(self.test_control_db_dir, exist_ok=True)
 
         # Create test PDFs only once
         create_test_pdf()
-        
-        # REMOVED: Patch for SQLiteManager.CONTROL_DB_PATH
-        # self.original_control_db_path = patch('src.utils.sqlite_manager.SQLiteManager.CONTROL_DB_PATH', self.test_control_db_path).start()
-        
+      
         yield
         
-        # Stop any remaining patches (though we removed the main one)
         patch.stopall()
         
         # Clean up after all tests have completed
@@ -101,44 +94,39 @@ class TestDataIngestionOrchestrator:
         """Creates an AppConfig instance pointing to test directories."""
         return AppConfig(
             system=SystemConfig(
-                storage_base_path=self.test_storage_base, # Use test base path
-                control_db_filename=self.test_control_db_filename # Use test filename
+                storage_base_path=self.test_storage_base,
+                control_db_filename=self.test_control_db_filename
             ),
-            ingestion=IngestionConfig(chunk_size=500, chunk_overlap=50), # Example test values
-            embedding=EmbeddingConfig(model_name="paraphrase-MiniLM-L3-v2"), # Different model for testing?
+            ingestion=IngestionConfig(chunk_size=500, chunk_overlap=50),
+            embedding=EmbeddingConfig(model_name="sentence-transformers/all-MiniLM-L6-v2"),
             vector_store=VectorStoreConfig(),
             query=QueryConfig(),
-            llm=LLMConfig(), # Provide a default LLMConfig instance
+            llm=LLMConfig(),
             text_normalizer=TextNormalizerConfig()
         )
 
     @pytest.fixture
     def domain_fixture(self, mocker, request):
         """Fixture para criar um domínio de teste com dimensão de embedding opcional."""
-        # Get initial dimension from test parameter, default to 384 if not provided
         initial_dimension = getattr(request, "param", 384)
 
-        # Use the actual Domain model definition
         domain = Domain(
             id=1,
             name="test_domain",
             description="Test domain description",
             keywords="test,domain,keywords",
-            total_documents=0, # Default or initial value
-            db_path=self.test_domain_db_path, # Use test path
-            vector_store_path=self.test_domain_vector_store_path, # Use test path
-            embeddings_dimension=initial_dimension # Use parameter here
-            # created_at is Optional[datetime]=None by default in model
+            total_documents=0,
+            db_path=self.test_domain_db_path, 
+            vector_store_path=self.test_domain_vector_store_path, 
+            embeddings_model="sentence-transformers/all-MiniLM-L6-v2",
+            embeddings_dimension=initial_dimension,
+            faiss_index_type="IndexFlatL2",
         )
 
-        # Mock get_domain to return this specific domain object in a list
         mock_get_domain = mocker.patch('src.utils.sqlite_manager.SQLiteManager.get_domain', return_value=[domain])
 
-        # Mock update_domain to verify it gets called (use the mock from mocked_managers if preferred,
-        # but patching here ensures it's available when fixture is used)
         mock_update_domain = mocker.patch('src.utils.sqlite_manager.SQLiteManager.update_domain')
 
-        # Return the domain and the mocks
         yield domain, mock_get_domain, mock_update_domain
     
     @pytest.fixture
@@ -199,10 +187,9 @@ class TestDataIngestionOrchestrator:
             return_value=mock_embeddings
         )
 
-        # 4. Mock FaissManager method to return a list of integers (faiss indices)
+        # 4. Mock FaissManager method
         mocks['add_embeddings'] = mocker.patch(
             'src.utils.faiss_manager.FaissManager.add_embeddings',
-            return_value=[1]  # Now returns a list of integers
         )
 
         # 5. Mock update_domain method
@@ -227,7 +214,7 @@ class TestDataIngestionOrchestrator:
         assert orch.faiss_manager is not None
         # Check if configuration values were applied (example)
         assert orch.text_chunker.config.chunk_size == 500 # From test_app_config
-        assert orch.embedding_generator.config.model_name == "paraphrase-MiniLM-L3-v2" # From test_app_config
+        assert orch.embedding_generator.config.model_name == "sentence-transformers/all-MiniLM-L6-v2" # From test_app_config
         assert orch.sqlite_manager.config.storage_base_path == self.test_storage_base # From test_app_config
         
     def test_list_pdf_files(self, configured_orchestrator):
@@ -490,6 +477,7 @@ class TestDataIngestionOrchestrator:
         initial_domain, mock_get_domain, mock_update_domain = domain_fixture
         # Get expected dimension from the orchestrator's generator instance
         expected_final_dimension = orch.embedding_generator.embedding_dimension
+        print(f"EUEUEU: {expected_final_dimension}")
 
         # Reset mocks used within the test
         self.mock_control_conn.reset_mock()
@@ -523,12 +511,12 @@ class TestDataIngestionOrchestrator:
         assert first_call_args[0].id == initial_domain.id, "Incorrect domain object ID for dimension update"
         assert first_call_args[1] == self.mock_control_conn, "Incorrect connection for dimension update"
         # Expect both dimension and model name in the update dict
+
         expected_update_dict = {
             "embeddings_dimension": expected_final_dimension,
-            "embeddings_model": orch.embedding_generator.config.model_name
         }
-        assert first_call_args[2] == expected_update_dict, "Incorrect update dict for embedding dimension/model"
 
+        assert first_call_args[2] == expected_update_dict, "Incorrect update dict for embedding dimension" 
         # Check if the second call (for total_documents) also happened
         assert len(mock_update_domain.call_args_list) >= 2, "Expected update_domain call for total_documents as well"
         second_call_args = mock_update_domain.call_args_list[1].args

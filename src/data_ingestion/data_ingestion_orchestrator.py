@@ -202,6 +202,7 @@ class DataIngestionOrchestrator:
         
         self.logger.info("Iniciando o processamento do diretorio", directory_path=directory_path)
 
+        # Busca o domínio de conhecimento no banco de dados de controle
         with self.sqlite_manager.get_connection(control=True) as conn:
             try:
                 self.sqlite_manager.begin(conn)
@@ -213,19 +214,12 @@ class DataIngestionOrchestrator:
                 
                 #Antes da primeira ingestão, a dimensão dos embeddings é 0. Define o modelo e a dimensão dos embeddings do domínio
                 if domain.embeddings_dimension == 0:
-                    # Obter o NOME do modelo da configuração
-                    embedding_model_name = self.embedding_generator.config.model_name
                     embedding_dimension = self.embedding_generator.embedding_dimension
                     
                     # Atualizar o objeto domain localmente (se necessário para lógica subsequente)
-                    domain.embeddings_model = embedding_model_name
                     domain.embeddings_dimension = embedding_dimension
                     
-                    # Usar o NOME do modelo no dicionário de atualização
-                    self.sqlite_manager.update_domain(domain, conn, {
-                        "embeddings_dimension": embedding_dimension, 
-                        "embeddings_model": embedding_model_name
-                    })
+                    self.sqlite_manager.update_domain(domain, conn, {"embeddings_dimension": embedding_dimension})
                 
                 self.metrics_data["database_path"] = domain.db_path
                 self.metrics_data["embedding_dimension"] = domain.embeddings_dimension
