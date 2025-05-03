@@ -2,6 +2,7 @@ import streamlit as st
 import logging
 import traceback
 import os
+import torch
 
 from typing import Optional, List
 from src.models import DocumentFile
@@ -14,6 +15,7 @@ from src.data_ingestion import DataIngestionOrchestrator
 from src.query_processing import QueryOrchestrator
 
 logger = get_logger(__name__, log_domain="streamlit_utils")
+
 @st.cache_resource
 def get_config_manager() -> ConfigManager:
     """Cria e cacheia uma instância ConfigManager para o caminho de configuração padrão."""
@@ -28,6 +30,12 @@ def load_configuration() -> Optional[AppConfig]:
         manager = get_config_manager()
         config = manager.load_config()
         logger.info("Configuração carregada com sucesso.")
+        
+        # Check CUDA availability and store in session state
+        cuda_status = torch.cuda.is_available()
+        st.session_state['cuda_available'] = cuda_status
+        logger.info(f"CUDA Availability Check: {cuda_status}")
+        
         return config
     except ConfigurationError as e:
         logger.error(f"Falha ao carregar configuração: {e}", exc_info=True)

@@ -50,8 +50,24 @@ def handle_submission():
     st.info(f"Iniciando processo de ingestão para o domínio '{domain_name}' com o diretório '{dir_path}'. Aguarde...") # Give initial feedback
     logger.info("Iniciando ingestao de dados", selected_domain=domain_name, dir_path=dir_path)
     
+    # --- Atualiza as configurações de processamento de embeddings ---
+    config.embedding.device = embedding_device
+    config.embedding.batch_size = embedding_batch_size
 
+    # --- Atualiza as configurações do domínio se necessário ---
     try:
+        if selected_domain_object.embeddings_model != config.embedding.model_name or selected_domain_object.faiss_index_type != config.vector_store.index_type:
+            logger.info("Configuracoes de embeddings ou vector store nao correspondem aos valores do dominio. Atualizando configuracoes.", selected_domain=domain_name)
+            config.embedding.model = selected_domain_object.embeddings_model
+            config.vector_store.faiss.index_type = selected_domain_object.faiss_index_type
+            try:
+                orchestrator.update_config(config)
+            except Exception as e:
+                logger.error("Erro ao atualizar configuracoes.", selected_domain=domain_name, error=str(e), exc_info=True)
+                st.error(f"Erro ao atualizar configuracoes: {e}")
+                st.stop()
+
+
         results = orchestrator.process_directory(directory_path=dir_path, domain_name=domain_name) 
         
         if results["processed_files"] == 0:
@@ -114,6 +130,42 @@ with st.form("data_ingestion_form"):
         help="Insira o caminho completo para o diretório desejado.",
         key="directory_path_input" 
     )
+
+    # Get CUDA availability from session state
+    cuda_is_present = st.session_state.get('cuda_available', False) 
+    
+    # Define options and default index based on CUDA availability
+    embedding_options = ["cpu", "cuda"] if cuda_is_present else ["cpu"]
+    default_device = config.embedding.device if config else "cpu"
+    
+    # Fallback if default is cuda but cuda is not available
+    if default_device == "cuda" and not cuda_is_present:
+        default_device = "cpu"
+    
+    # Find index in the *actual* options list
+    try:
+        default_index = embedding_options.index(default_device)
+    except ValueError:
+        default_index = 0 # Fallback if somehow default_device is not in options
+
+    col1, col2 = st.columns(2)
+    with col1:
+        embedding_device = st.selectbox(
+            "Dispositivo Embedding", 
+            options=embedding_options, 
+            index=default_index,
+            key="embedding_device_select",
+            help="Dispositivo para calcular embeddings. 'cpu' ou 'cuda' (se disponível)."
+        )
+    with col2:
+        embedding_batch_size = st.number_input(
+            "Batch Size", 
+            min_value=1, 
+            step=1, 
+            value=config.embedding.batch_size if config else 1,
+            key="embedding_batch_size",
+            help="Tamanho do lote para calcular embeddings."
+        )
 
     submitted = st.form_submit_button("Iniciar", on_click=handle_submission)
 

@@ -108,7 +108,7 @@ if not original_domain_df.empty:
         st.session_state.selected_domain_name = domain_names[0] if domain_names else None
 
     # --- Domain Selection Dropdown ---
-    selected_name = st.selectbox(
+    selected_domain_name = st.selectbox(
         "Selecione um Domínio para Gerenciar:",
         options=domain_names,
         key='selected_domain_name',
@@ -116,31 +116,32 @@ if not original_domain_df.empty:
         help="Escolha o domínio cujos detalhes você deseja ver ou editar.",
     )
 
-    domain_id = original_domain_df[original_domain_df["name"] == selected_name]["ID"].values[0]
+    domain_id = original_domain_df[original_domain_df["name"] == selected_domain_name]["ID"].values[0]
+    
     # --- Botão de Remoção com Confirmação ---
     if 'confirming_delete_name' not in st.session_state:
         st.session_state.confirming_delete_name = None
 
     delete_placeholder = st.empty() # Placeholder for delete buttons
 
-    if st.session_state.confirming_delete_name == selected_name:
+    if st.session_state.confirming_delete_name == selected_domain_name:
         # Show confirmation buttons in the placeholder
         with delete_placeholder.container():
             col_confirm, col_cancel = st.columns(2)
             with col_confirm:
                 if st.button("✔️ Confirmar Remoção", key=f"confirm_delete_{domain_id}", type="primary"):
                     try:
-                        st.toast(f"Removendo domínio '{selected_name}'...", icon="⏳") 
-                        domain_manager.remove_domain_registry_and_files(selected_name)
-                        st.toast(f"Domínio '{selected_name}' removido com sucesso!", icon="✅")
+                        st.toast(f"Removendo domínio '{selected_domain_name}'...", icon="⏳") 
+                        domain_manager.remove_domain_registry_and_files(selected_domain_name)
+                        st.toast(f"Domínio '{selected_domain_name}' removido com sucesso!", icon="✅")
                         st.session_state.confirming_delete_name = None # Reset confirmation state
                         st.session_state.selected_domain_name = None # Reset selection
                         st.rerun()
                     except ValueError as ve:
-                        st.error(f"Erro ao remover {selected_name}: {ve}")
+                        st.error(f"Erro ao remover {selected_domain_name}: {ve}")
                         st.session_state.confirming_delete_name = None # Reset on error
                     except Exception as e:
-                        st.error(f"Erro inesperado ao remover {selected_name}: {e}")
+                        st.error(f"Erro inesperado ao remover {selected_domain_name}: {e}")
                         st.code(traceback.format_exc())
                         st.session_state.confirming_delete_name = None # Reset on error
             with col_cancel:
@@ -150,7 +151,7 @@ if not original_domain_df.empty:
     else:
         # Show initial delete button in the placeholder
         if delete_placeholder.button(f"❌ Remover", key=f"delete_{domain_id}"):
-            st.session_state.confirming_delete_name = selected_name # Set confirmation state
+            st.session_state.confirming_delete_name = selected_domain_name # Set confirmation state
             st.rerun()
 
 
@@ -158,7 +159,7 @@ else:
     st.info("Nenhum domínio de conhecimento encontrado. Crie um na página Admin.")
     if 'selected_domain_name' in st.session_state:
         st.session_state.selected_domain_name = None 
-    selected_name = None
+    selected_domain_name = None
 
 
 # --- Área de exibição de detalhes ---
@@ -223,38 +224,36 @@ if st.session_state.selected_domain_name is not None:
             st.code(selected_domain_series["vector_store_path"], language=None)
 
 
-        # --- Document List Section ---
+        # --- Seção da lista de documentos ---
         st.divider()
         st.markdown("#### Documentos no Domínio")
 
-          # Initialize confirmation state key for documents
         if 'confirming_delete_doc_id' not in st.session_state:
             st.session_state.confirming_delete_doc_id = None
 
-          # Fetch documents using the helper function
-        documents = get_domain_documents(domain_manager, selected_name)
+        documents = get_domain_documents(domain_manager, selected_domain_name)
 
         if not documents:
             st.info("Nenhum documento encontrado para este domínio.")
         else:
-            # Display documents in a list format with delete buttons
-            list_cols = st.columns((3, 1)) # Columns for name and button
+            # Exibir documentos em um formato de lista com botões de delete
+            list_cols = st.columns((3, 1)) # Colunas para nome e botão
             list_cols[0].write("**Nome do Arquivo**")
             list_cols[1].write("**Ação**")
 
             for doc in documents:
-                doc_id = doc.id # Use doc.id for unique keys
+                doc_id = doc.id # Use doc.id para chaves únicas
                 doc_name = doc.name
                 cols = st.columns((3, 1))
                   
                 with cols[0]:
                     st.write(doc_name)
-                    # Optionally display other info like hash or page count
+                    # Opcionalmente, exibir outras informações como hash ou número de páginas
                     # st.caption(f"ID: {doc_id}, Hash: {doc.hash[:8]}...")
 
                 with cols[1]:
                     delete_key_base = f"doc_{doc_id}"
-                    # Confirmation Logic for Document Deletion
+                    # Lógica de confirmação para remover o documento
                     if st.session_state.confirming_delete_doc_id == doc_id:
                         confirm_key = f"confirm_delete_{delete_key_base}"
                         cancel_key = f"cancel_delete_{delete_key_base}"
@@ -263,26 +262,25 @@ if st.session_state.selected_domain_name is not None:
                         with action_cols[0]:
                             if st.button("✔️", key=confirm_key, help=f"Confirmar remoção de {doc_name}", type="primary"):
                                 st.toast(f"Removendo documento '{doc_name}'...", icon="⏳")
-                                success = delete_document_from_domain(domain_manager, selected_name, doc)
+                                success = delete_document_from_domain(domain_manager, selected_domain_name, doc)
                                 if success:
                                     st.toast(f"Documento '{doc_name}' removido com sucesso!", icon="✅")
-                                    st.session_state.confirming_delete_doc_id = None # Reset state
+                                    st.session_state.confirming_delete_doc_id = None   
                                     st.rerun()
                                 else:
-                                    # Error message handled by the helper function
-                                    st.session_state.confirming_delete_doc_id = None # Reset state
+                                    st.session_state.confirming_delete_doc_id = None
                         with action_cols[1]:
                             if st.button("✖️", key=cancel_key, help="Cancelar remoção"):
                                 st.session_state.confirming_delete_doc_id = None
                                 st.rerun()
                     else:
-                        # Initial Delete Button
+                        # Botão de delete inicial
                         delete_key = f"delete_{delete_key_base}"
                         if st.button("❌", key=delete_key, help=f"Remover documento '{doc_name}'"):
-                            st.session_state.confirming_delete_doc_id = doc_id # Set state to request confirmation
+                            st.session_state.confirming_delete_doc_id = doc_id
                             st.rerun()
 
-# Cleanup unused session state keys (optional, but good practice)
+# Cleanup session state 
 if 'selected_domain_id' in st.session_state:
     del st.session_state['selected_domain_id']
 if 'confirming_delete_id' in st.session_state:

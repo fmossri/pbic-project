@@ -88,17 +88,53 @@ st.divider()
 st.header("Criar Novo Domínio")
 # === Formulario de Criação de Domínio ===
 with st.form("create_domain_form", clear_on_submit=True):
-    domain_name = st.text_input("Nome do Domínio", key="domain_name", placeholder="Ex: Ingestão de Dados em RAG")
-    description = st.text_area("Descrição", key="description", placeholder="Descreva o propósito deste domínio.")
-    keywords = st.text_input("Palavras-chave (separadas por vírgula)", key="keywords", placeholder="Ex: RAG, Ingestão de Dados, Processamento de Texto")
+    col1, col2 = st.columns(2)
+    with col1:
+        domain_name = st.text_input("Nome do Domínio", key="domain_name", placeholder="Ex: Ingestão de Dados em RAG")
+        description = st.text_area("Descrição", key="description", placeholder="Descreva o propósito deste domínio.")
+        keywords = st.text_input("Palavras-chave (separadas por vírgula)", key="keywords", placeholder="Ex: RAG, Ingestão de Dados, Processamento de Texto")
     
+    with col2:
+
+        ingestion_chunk_strategy = st.selectbox("Estratégia de chunking", options=["recursive"], index=0, key="ingestion_chunk_strategy") # Only recursive for now
+        ingestion_chunk_size = st.number_input("Tamanho do chunk em chars", min_value=50, step=10, value=config.ingestion.chunk_size, key="ingestion_chunk_size")
+        ingestion_chunk_overlap = st.number_input("Overlap", min_value=0, step=10, value=config.ingestion.chunk_overlap, key="ingestion_chunk_overlap")
+              
+        faiss_index_type = st.selectbox(
+            "Índice Faiss", 
+            options=config.vector_store.vector_store_options,
+            key="faiss_index_type",
+            help="Índice Faiss usado para armazenar e buscar representações vetoriais dos documentos e da query. Não pode ser alterado após a criação do domínio."
+            )
+
+        embedding_model = st.selectbox(
+            "Modelo de Embedding", 
+            options=config.embedding.embedding_options,  
+            key="embedding_model_name_select",
+            help="Modelo de Embedding usado para criar representações vetoriais dos documentos e da query. Não pode ser alterado após a criação do domínio."
+            )
+        embedding_normalize_embeddings = st.checkbox("Normaliza Embeddings", value=config.embedding.normalize_embeddings, key="embedding_normalize_embeddings")
+            
+
+
     submitted = st.form_submit_button("Criar Domínio")
     if submitted:
         if not domain_name or not description or not keywords:
             st.warning("Todos os campos são obrigatórios.")
         else:
             try:
-                domain_manager.create_domain(domain_name, description, keywords)
+                domain_data = {
+                    "name": domain_name,
+                    "description": description,
+                    "keywords": keywords,
+                    "embeddings_model": embedding_model,
+                    "faiss_index_type": faiss_index_type,
+                    #"ingestion_chunk_strategy": ingestion_chunk_strategy,
+                    #"ingestion_chunk_size": ingestion_chunk_size,
+                    #"ingestion_chunk_overlap": ingestion_chunk_overlap,
+                    #"embedding_normalize_embeddings": embedding_normalize_embeddings
+                }
+                domain_manager.create_domain(domain_data)
                 st.success(f"Domínio '{domain_name}' criado com sucesso!")
                 st.rerun()
             except ValueError as ve:

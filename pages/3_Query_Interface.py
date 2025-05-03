@@ -36,10 +36,10 @@ else:
     st.stop() # Para a execução do script se a configuração é essencial
 
 # --- Armazena configuração do LLM original para comparação ---
-if 'original_llm_config' not in st.session_state or st.session_state.original_llm_config != config.llm:
+if 'original_config' not in st.session_state or st.session_state.original_config != config:
     # Armazena uma cópia profunda para evitar modificações que afetam a configuração original
-    st.session_state.original_llm_config = copy.deepcopy(config.llm)
-    logger.debug("Stored/Updated original_llm_config in session state.")
+    st.session_state.original_config = copy.deepcopy(config)
+    logger.debug("Stored/Updated original_config in session state.")
 
 # --- Inicializa session state ---
 if 'debug_mode' not in st.session_state:
@@ -48,10 +48,12 @@ if "messages" not in st.session_state:
     st.session_state.messages = [] 
 if 'selected_query_domain' not in st.session_state:
     st.session_state.selected_query_domain = "Auto" 
-# Add state for confirmation dialog
-if 'confirming_llm_reset' not in st.session_state:
-    st.session_state.confirming_llm_reset = False
-
+if 'confirming_config_reset' not in st.session_state:
+    st.session_state.confirming_config_reset = False
+if 'original_llm_config' not in st.session_state:
+    st.session_state.original_llm_config = copy.deepcopy(config.llm)
+if 'original_query_config' not in st.session_state:
+    st.session_state.original_query_config = copy.deepcopy(config.query)
 # --- Titulo da Página ---
 st.title("💬 Query Interface")
 
@@ -135,13 +137,13 @@ with st.sidebar:
     llm_top_k = st.number_input("Top K", min_value=0, step=1, value=config.llm.top_k or 50, key="sidebar_llm_top_k")
     llm_repetition_penalty = st.slider("Repetition Penalty", min_value=1.0, max_value=2.0, step=0.01, value=config.llm.repetition_penalty or 1.0, key="sidebar_llm_repetition_penalty")
     # --- Reset button --- 
-    if not st.session_state.confirming_llm_reset:
-        if st.button("Reset LLM Defaults", type="secondary", use_container_width=True, key="trigger_reset_llm_button"):
-            st.session_state.confirming_llm_reset = True
+    if not st.session_state.confirming_config_reset:
+        if st.button("Reset Default", type="secondary", use_container_width=True, key="trigger_reset_button"):
+            st.session_state.confirming_config_reset = True
             st.rerun()
     
     # --- Diálogo de Confirmação --- 
-    if st.session_state.confirming_llm_reset:
+    if st.session_state.confirming_config_reset:
         st.warning("**Confirmar Reset?**\nTem certeza que deseja resetar todas as configurações do LLM para os valores padrão? Qualquer alteração será perdida.")
         col1_confirm, col2_confirm = st.columns(2)
         with col1_confirm:
@@ -152,24 +154,29 @@ with st.sidebar:
                     if not current_full_config:
                         st.error("Erro: Não foi possível carregar a configuração completa para reset.")
                     else:
-                        manager.reset_config(current_full_config, "llm") 
+                        sessions_to_reset = []
+                        if current_full_config.llm != st.session_state.original_config.llm:
+                            sessions_to_reset.append("llm")
+                        if current_full_config.query != st.session_state.original_config.query:
+                            sessions_to_reset.append("query")
+                        manager.reset_config(current_full_config, sessions_to_reset) 
                         load_configuration.clear()
-                        st.session_state.confirming_llm_reset = False
-                        st.success("Configurações do LLM resetadas para os valores padrão")
+                        st.session_state.confirming_config_reset = False
+                        st.sidebar.success("Configurações do LLM resetadas para os valores padrão")
                         st.rerun()
                 except ValueError as e: 
                     st.error(f"Erro ao resetar as configurações do LLM: {e}")
-                    st.session_state.confirming_llm_reset = False 
+                    st.session_state.confirming_config_reset = False 
                 except ConfigurationError as e:
                     st.error(f"Erro ao resetar as configurações padrão do LLM: {e}") 
-                    st.session_state.confirming_llm_reset = False 
+                    st.session_state.confirming_config_reset = False 
                 except Exception as e:
                     st.error(f"Erro inesperado ao resetar as configurações padrão do LLM: {e}")
-                    st.session_state.confirming_llm_reset = False 
+                    st.session_state.confirming_config_reset = False 
         with col2_confirm:
             if st.button("Cancel", use_container_width=True, key="cancel_reset_llm"):
                 logger.debug("Reset cancelado pelo usuário.")
-                st.session_state.confirming_llm_reset = False
+                st.session_state.confirming_config_reset = False
                 st.rerun()
     
     st.divider()
@@ -211,13 +218,16 @@ if prompt := st.chat_input("Pergunte aqui..."):
             retry_delay_seconds=config.llm.retry_delay_seconds, # Não é alterado nessa página
         )
 
-        if current_llm_config != st.session_state.original_llm_config:
-            logger.info("Parâmetros do LLM alterados no sidebar, salvando configuração automaticamente...")
+        if current_llm_config != st.session_state.original_llm_config or current_query_config != st.session_state.original_query_config:
+            logger.info("Parâmetros alterados no sidebar, salvando configuração automaticamente...")
             
             # Usa o objeto de configuração principal carregado no inicio da execução do script
             if not config: 
                  st.error("Não é possível salvar as alterações do LLM: Configuração principal não carregada.")
             else:
+                config.llm = current_llm_config
+                config.query = current_query_config
+                orchestrator.update_config(config)
                 updated_app_config = config.model_copy(update={'llm': current_llm_config})
                 manager.save_config(updated_app_config)
                 load_configuration.clear() 
