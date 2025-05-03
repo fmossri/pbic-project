@@ -287,7 +287,3 @@ python -m pytest
 - **Erro do File Watcher do Streamlit com PyTorch:** Ao navegar para a página `Gerenciamento de Domínios`, um erro `RuntimeError: Tried to instantiate class '__path__._path'...` relacionado a `torch.classes` pode aparecer no console. Isso parece ser um problema com o file watcher do Streamlit tentando inspecionar a biblioteca `torch`. Tentativas de solucionar isso adicionando `torch` ou `.venv` à `folderWatchBlacklist` ou definindo `watchFileSystem = false` no arquivo `.streamlit/config.toml` não surtiram efeito. O erro parece ser apenas um ruído no console e não afeta a funcionalidade principal da GUI no momento. **Workaround: Silenciar Watcher em `.streamlit/config.toml` com `fileWatcherType = "none"`. Porém, ao modificarmos o código, necessitamos atualizar a página ou reiniciar o streamlit.
 
 - **Bug em reset_config do ConfigManager** A operação de reset não está restaurando os valores originais, presentes como default nas classes de configuração; Com isso, se o arquivo de configuração é alterado repetidamente, os valores default se perdem do sistema.
-
-## Licença
-
-Este projeto é licenciado sob a Licença MIT. Veja o arquivo LICENSE para mais detalhes.
