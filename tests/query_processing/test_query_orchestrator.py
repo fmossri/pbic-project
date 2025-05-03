@@ -252,10 +252,9 @@ class TestQueryOrchestrator:
         assert result["success"] == True
     
     def test_query_llm_empty_query(self, orchestrator): 
-        """Testa o comportamento com uma query vazia no fluxo completo."""
-        with pytest.raises(ValueError) as exc_info:
+        """Testa query_llm com uma query vazia."""
+        with pytest.raises(ValueError, match="Query vazia ou inválida"):
             orchestrator.query_llm("")
-        assert "Query vazia ou inválida" in str(exc_info.value)
     
     def test_query_llm_error_handling(self, orchestrator, mocker):
         """Testa o tratamento de erros no fluxo completo."""
@@ -270,3 +269,101 @@ class TestQueryOrchestrator:
         assert error_message in str(exc_info.value)
             
         assert orchestrator.metrics_data["success"] == False 
+
+    def test_update_config_no_change(self, orchestrator, test_app_config, mocker):
+        """Testa update_config: Sem alterações."""
+        # Componentes já são mocks devido à fixture 'orchestrator'
+        # Acessamos seus métodos .update_config diretamente para assertions
+        mock_hf_update = orchestrator.hugging_face_manager.update_config
+        mock_eg_update = orchestrator.embedding_generator.update_config
+        mock_fm_update = orchestrator.faiss_manager.update_config
+        mock_tn_update = orchestrator.text_normalizer.update_config
+        mock_sm_update = orchestrator.sqlite_manager.update_config
+
+        # Resetar mocks antes da chamada
+        mock_hf_update.reset_mock()
+        mock_eg_update.reset_mock()
+        mock_fm_update.reset_mock()
+        mock_tn_update.reset_mock()
+        mock_sm_update.reset_mock()
+
+        initial_config_ref = orchestrator.config
+        new_config = test_app_config.model_copy() # Config idêntica
+
+        orchestrator.update_config(new_config)
+
+        assert orchestrator.config is initial_config_ref
+        # Verifica se nenhum método de componente foi chamado
+        mock_hf_update.assert_not_called()
+        mock_eg_update.assert_not_called()
+        mock_fm_update.assert_not_called()
+        mock_tn_update.assert_not_called()
+        mock_sm_update.assert_not_called()
+
+    def test_update_config_single_change(self, orchestrator, test_app_config, mocker):
+        """Testa update_config: Uma alteração (seção 'llm')."""
+        # Acessamos os métodos .update_config diretamente
+        mock_hf_update = orchestrator.hugging_face_manager.update_config
+        mock_eg_update = orchestrator.embedding_generator.update_config
+        mock_fm_update = orchestrator.faiss_manager.update_config
+        mock_tn_update = orchestrator.text_normalizer.update_config
+        mock_sm_update = orchestrator.sqlite_manager.update_config
+
+        # Resetar mocks antes da chamada
+        mock_hf_update.reset_mock()
+        mock_eg_update.reset_mock()
+        mock_fm_update.reset_mock()
+        mock_tn_update.reset_mock()
+        mock_sm_update.reset_mock()
+
+        new_llm_config = LLMConfig(model_repo_id="new-test-model") # Config alterada
+        new_config = test_app_config.model_copy(update={"llm": new_llm_config})
+        initial_config_ref = orchestrator.config
+
+        orchestrator.update_config(new_config)
+
+        # Verifica se APENAS o update do HFManager foi chamado
+        mock_hf_update.assert_called_once_with(new_llm_config)
+        mock_eg_update.assert_not_called()
+        mock_fm_update.assert_not_called()
+        mock_tn_update.assert_not_called()
+        mock_sm_update.assert_not_called()
+        # Verifica se a referência do config foi atualizada
+        assert orchestrator.config is new_config
+        assert orchestrator.config != initial_config_ref
+
+    def test_update_config_multiple_changes(self, orchestrator, test_app_config, mocker):
+        """Testa update_config: Múltiplas alterações ('text_normalizer', 'vector_store')."""
+        # Acessamos os métodos .update_config diretamente
+        mock_hf_update = orchestrator.hugging_face_manager.update_config
+        mock_eg_update = orchestrator.embedding_generator.update_config
+        mock_fm_update = orchestrator.faiss_manager.update_config
+        mock_tn_update = orchestrator.text_normalizer.update_config
+        mock_sm_update = orchestrator.sqlite_manager.update_config
+
+        # Resetar mocks antes da chamada
+        mock_hf_update.reset_mock()
+        mock_eg_update.reset_mock()
+        mock_fm_update.reset_mock()
+        mock_tn_update.reset_mock()
+        mock_sm_update.reset_mock()
+
+        new_tn_config = TextNormalizerConfig(use_lowercase=False) # Alterada
+        new_vs_config = VectorStoreConfig(index_params={"nprobe": 16}) # Alterada
+        new_config = test_app_config.model_copy(update={
+            "text_normalizer": new_tn_config,
+            "vector_store": new_vs_config
+        })
+        initial_config_ref = orchestrator.config
+
+        orchestrator.update_config(new_config)
+
+        # Verifica se APENAS os updates do TextNormalizer e FaissManager foram chamados
+        mock_tn_update.assert_called_once_with(new_tn_config)
+        mock_fm_update.assert_called_once_with(new_vs_config)
+        mock_hf_update.assert_not_called()
+        mock_eg_update.assert_not_called()
+        mock_sm_update.assert_not_called()
+        # Verifica se a referência do config foi atualizada
+        assert orchestrator.config is new_config
+        assert orchestrator.config != initial_config_ref 

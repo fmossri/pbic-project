@@ -8,7 +8,7 @@ from src.utils import TextNormalizer, EmbeddingGenerator, FaissManager, SQLiteMa
 from src.utils.logger import get_logger
 from .document_processor import DocumentProcessor
 from .text_chunker import TextChunker
-from src.config.models import AppConfig
+from src.config import AppConfig, check_config_changes
 class DataIngestionOrchestrator:
     """Componente principal para gerenciar o processamento de arquivos PDF."""
 
@@ -34,9 +34,42 @@ class DataIngestionOrchestrator:
         self.text_normalizer = TextNormalizer(config.text_normalizer, log_domain=self.DEFAULT_LOG_DOMAIN)
         self.embedding_generator = EmbeddingGenerator(config.embedding, log_domain=self.DEFAULT_LOG_DOMAIN)
         self.sqlite_manager = SQLiteManager(config.system, log_domain=self.DEFAULT_LOG_DOMAIN)
-        self.faiss_manager = FaissManager(config.vector_store, config.query, log_domain=self.DEFAULT_LOG_DOMAIN)
+        self.faiss_manager = FaissManager(config, log_domain=self.DEFAULT_LOG_DOMAIN)
         self.document_hashes: Dict[str, str] = {}
+
+    def update_config(self, new_config: AppConfig) -> None:
+        """
+        Atualiza a configuração do DataIngestionOrchestrator com base na configuração fornecida.
+
+        Args:
+            config (AppConfig): A nova configuração a ser aplicada.
+        """
+        self.logger.info("Iniciando a atualizacao das configuracoes do DataIngestionOrchestrator")
+        update_fields = check_config_changes(self.config, new_config)
         
+        if not update_fields:
+            self.logger.info("Nenhuma alteracao na configuracao detectada")
+            return
+        
+        self.logger.info("Alteracoes na configuracao detectadas", update_fields=update_fields)
+
+        self.logger.info("Atualizando os componentes do DataIngestionOrchestrator")
+        for field in update_fields:
+            match field:
+                case "ingestion":
+                    self.text_chunker.update_config(new_config.ingestion)
+                case "embedding":
+                    self.embedding_generator.update_config(new_config.embedding)
+                case "vector_store":
+                    self.faiss_manager.update_config(new_config.vector_store)
+                case "text_normalizer":
+                    self.text_normalizer.update_config(new_config.text_normalizer)
+                case "system":
+                    self.sqlite_manager.update_config(new_config.system)
+
+        self.config = new_config
+        self.logger.info("Configuracoes do DataIngestionOrchestrator atualizadas com sucesso")
+
     def _find_original_document(self, duplicate_hash: str, conn: sqlite3.Connection) -> DocumentFile:
         """
         Encontra o documento original do hash duplicado.
@@ -125,7 +158,7 @@ class DataIngestionOrchestrator:
         self.metrics_data["embedding_model"] = self.embedding_generator.config.model_name
         self.metrics_data["embedding_dimension"] = None
         self.metrics_data["faiss_index_path"] = None
-        self.metrics_data["faiss_index_type"] = self.faiss_manager.vector_config.index_type
+        self.metrics_data["faiss_index_type"] = self.faiss_manager.config.vector_store.index_type
         self.metrics_data["database_path"] = None
         self.metrics_data["processed_files"] = 0
         self.metrics_data["processed_pages"] = 0

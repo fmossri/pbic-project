@@ -3,7 +3,7 @@ import numpy as np
 from typing import List, Dict, Any, Optional
 from datetime import datetime
 
-from src.config.models import AppConfig
+from src.config import AppConfig, check_config_changes
 from src.models import Domain, Chunk
 from src.utils import TextNormalizer, EmbeddingGenerator, FaissManager, SQLiteManager
 from src.utils.logger import get_logger
@@ -19,11 +19,45 @@ class QueryOrchestrator:
         self.logger.info("Inicializando o QueryOrchestrator")
 
         self.metrics_data = {}
-        self.text_normalizer = TextNormalizer(config=config.text_normalizer, log_domain=self.DEFAULT_LOG_DOMAIN)
-        self.embedding_generator = EmbeddingGenerator(config=config.embedding, log_domain=self.DEFAULT_LOG_DOMAIN)
-        self.faiss_manager = FaissManager(vector_config=config.vector_store, query_config=config.query, log_domain=self.DEFAULT_LOG_DOMAIN)
-        self.sqlite_manager = SQLiteManager(config=config.system, log_domain=self.DEFAULT_LOG_DOMAIN)
-        self.hugging_face_manager = HuggingFaceManager(config=config.llm, log_domain=self.DEFAULT_LOG_DOMAIN)
+        self.config = config
+        self.text_normalizer = TextNormalizer(config.text_normalizer, log_domain=self.DEFAULT_LOG_DOMAIN)
+        self.embedding_generator = EmbeddingGenerator(config.embedding, log_domain=self.DEFAULT_LOG_DOMAIN)
+        self.faiss_manager = FaissManager(config, log_domain=self.DEFAULT_LOG_DOMAIN)
+        self.sqlite_manager = SQLiteManager(config.system, log_domain=self.DEFAULT_LOG_DOMAIN)
+        self.hugging_face_manager = HuggingFaceManager(config.llm, log_domain=self.DEFAULT_LOG_DOMAIN)
+
+    def update_config(self, new_config: AppConfig) -> None:
+        """
+        Atualiza a configuração do QueryOrchestrator com base na configuração fornecida.
+
+        Args:
+            config (AppConfig): A nova configuração a ser aplicada.
+        """
+        self.logger.info("Iniciando a atualizacao das configuracoes do QueryOrchestrator")
+        update_fields = check_config_changes(self.config, new_config)
+        
+        if not update_fields:
+            self.logger.info("Nenhuma alteracao na configuracao detectada")
+            return
+        
+        self.logger.info("Alteracoes na configuracao detectadas", update_fields=update_fields)
+
+        self.logger.info("Atualizando os componentes do QueryOrchestrator")
+        for field in update_fields:
+            match field:
+                case "llm":
+                    self.hugging_face_manager.update_config(new_config.llm)
+                case "embedding":
+                    self.embedding_generator.update_config(new_config.embedding)
+                case "vector_store":
+                    self.faiss_manager.update_config(new_config.vector_store)
+                case "text_normalizer":
+                    self.text_normalizer.update_config(new_config.text_normalizer)
+                case "system":
+                    self.sqlite_manager.update_config(new_config.system)
+
+        self.config = new_config
+        self.logger.info("Configuracoes do QueryOrchestrator atualizadas com sucesso")
 
     def _process_query(self, query: str, domain: Domain) -> np.ndarray:
         """
