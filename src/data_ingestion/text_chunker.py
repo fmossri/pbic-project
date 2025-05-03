@@ -21,30 +21,74 @@ class TextChunker:
         self.logger = get_logger(__name__, log_domain=log_domain)
         self.config = config
         self.logger.info("Inicializando o TextChunker.", config_data=config.model_dump())
+        self.splitter = self._load_splitter(config.chunk_strategy)
+
+    def update_config(self, new_config: IngestionConfig) -> None:
+        """
+        Atualiza a configuração do TextChunker com base na configuração fornecida.
+
+        Args:
+            new_config (IngestionConfig): A nova configuração a ser aplicada.
+        """
+        if new_config == self.config:
+            self.logger.info("Nenhuma alteracao na configuracao detectada")
+            return
         
-        if self.config.chunk_strategy == "recursive":
-            self.splitter = RecursiveCharacterTextSplitter(
-                chunk_size=self.config.chunk_size, 
-                chunk_overlap=self.config.chunk_overlap,
-                separators=[
-                    "\n\n",  # Parágrafos
-                    "\n",    # Quebras de linha
-                    ".",     # Pontos
-                    "!",     # Exclamações
-                    "?",     # Interrogações
-                    ";",     # Ponto e vírgula
-                    ":",     # Dois pontos
-                    ",",     # Vírgulas
-                    " ",     # Espaços
-                    ""       # Fallback para divisão por caractere
-                ],
-                length_function=len,
-                add_start_index=True
-            )
-            self.logger.debug(f"Usando estrategia de chunking: {self.config.chunk_strategy}")
-        else:
-            self.logger.error(f"Estrategia de chunking nao suportada: {self.config.chunk_strategy}")
-            raise NotImplementedError(f"Estratégia de chunking não suportada: {self.config.chunk_strategy}")
+        if new_config.chunk_strategy != self.config.chunk_strategy:
+            self.splitter = self._load_splitter(new_config.chunk_strategy)
+            self.logger.info(f"Estrategia de chunking alterada para: {new_config.chunk_strategy}")
+
+        if new_config.chunk_size != self.config.chunk_size or new_config.chunk_overlap != self.config.chunk_overlap:
+            self.splitter._chunk_size = new_config.chunk_size
+            self.splitter._chunk_overlap = new_config.chunk_overlap
+            self.logger.info(f"Parametros de chunking alterados para: {new_config.model_dump()}")
+
+        self.config = new_config
+        self.logger.info("Configuracoes do TextChunker atualizadas com sucesso")
+
+
+    def _load_splitter(self, strategy: str) -> RecursiveCharacterTextSplitter:
+        """
+        Carrega o splitter com base na configuração atual.
+
+        Returns:
+            RecursiveCharacterTextSplitter: O splitter carregado. 
+            # Por enquanto o único suportado; alterar a assinatura quando adicionar outras estratégias
+        """
+        splitter = None
+        try:
+            match strategy:
+                case "recursive":
+                    splitter = RecursiveCharacterTextSplitter(
+                        chunk_size=self.config.chunk_size, 
+                        chunk_overlap=self.config.chunk_overlap,
+                        separators=[
+                            "\n\n",  # Parágrafos
+                            "\n",    # Quebras de linha
+                            ".",     # Pontos
+                            "!",     # Exclamações
+                            "?",     # Interrogações
+                            ";",     # Ponto e vírgula
+                            ":",     # Dois pontos
+                            ",",     # Vírgulas
+                            " ",     # Espaços
+                            ""       # Fallback para divisão por caractere
+                        ],
+                        length_function=len,
+                        add_start_index=True
+                    )
+                    self.logger.debug(f"Usando estrategia de chunking: {self.config.chunk_strategy}")
+
+                case _:
+                    raise ValueError(f"Estrategia de chunking nao suportada: {strategy}")
+                
+            return splitter
+
+        except Exception as e:
+            self.logger.error(f"Erro ao carregar o splitter: {e}", exc_info=True)
+            raise e
+
+
 
     def _chunk_text(self, text: str, metadata: Optional[Dict] = None) -> List[Document]:
         """

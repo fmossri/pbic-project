@@ -34,6 +34,29 @@ class EmbeddingGenerator:
                           model_card_data=str(self.model.model_card_data)
                         )
 
+    def update_config(self, new_config: EmbeddingConfig) -> None:
+        """
+        Atualiza a configuração do EmbeddingGenerator com base na configuração fornecida.
+
+        Args:
+            config (EmbeddingConfig): A nova configuração a ser aplicada.
+        """
+        if new_config == self.config:
+            self.logger.info("Nenhuma alteracao na configuracao detectada")
+            return
+
+        if new_config.model_name != self.config.model_name:
+            self.model = SentenceTransformer(new_config.model_name, device=new_config.device)
+            self.embedding_dimension = self.model.get_sentence_embedding_dimension()
+            self.logger.debug(f"Modelo de embedding atualizado para {new_config.model_name}")
+
+        elif new_config.device != self.config.device:
+            self.model.to(new_config.device)
+            self.logger.debug(f"Dispositivo de embedding atualizado para {new_config.device}")
+
+        self.config = new_config
+            
+        self.logger.info("Configuracoes do EmbeddingGenerator atualizadas com sucesso")
     
     def generate_embeddings(self, chunks: List[str]) -> np.ndarray:
         """Calcula os embeddings para uma lista de chunks.

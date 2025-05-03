@@ -5,7 +5,6 @@ from src.utils.sqlite_manager import SQLiteManager
 from src.utils.logger import get_logger
 from src.models import Domain, DocumentFile
 from src.config.models import AppConfig
-
 class DomainManager:
 
     def __init__(self, config: AppConfig, sqlite_manager: SQLiteManager, log_domain: str = "utils"):
@@ -15,6 +14,18 @@ class DomainManager:
 
         self.logger = get_logger(__name__, log_domain)
         self.logger.info("Inicializando DomainManager")
+
+    def update_config(self, new_config: AppConfig) -> None:
+        """
+        Atualiza a configuração do DomainManager com base na configuração fornecida.
+
+        Args:
+            config (AppConfig): A nova configuração a ser aplicada.
+        """
+        self.config = new_config
+        self.storage_base_path = new_config.system.storage_base_path
+        self.sqlite_manager.update_config(new_config.system)
+        self.logger.info("Configuracoes do DomainManager atualizadas com sucesso")
 
     def create_domain(self, new_domain_data: Dict[str, Any]) -> None:
         """

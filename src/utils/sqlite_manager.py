@@ -20,6 +20,21 @@ class SQLiteManager:
         self.db_path = None
         self.schema_path = self.DOMAIN_SCHEMA_PATH
 
+    def update_config(self, new_config: SystemConfig) -> None:
+        """
+        Atualiza a configuração do SQLiteManager com base na configuração fornecida.
+
+        Args:
+            new_config (SystemConfig): A nova configuração a ser aplicada.
+        """
+
+        if new_config.control_db_filename != self.config.control_db_filename:
+            self.control_db_path = os.path.join(self.config.storage_base_path, new_config.control_db_filename)
+
+        self.config = new_config
+        self.logger.info("Configuracoes do SQLiteManager atualizadas com sucesso")
+    
+
     def _create_database(self, control: bool = False, db_path: str = None, schema_path: str = None) -> None:
         # Determina o banco de dados e o schema a ser utilizado
         if control:

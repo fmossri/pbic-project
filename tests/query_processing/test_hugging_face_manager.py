@@ -27,6 +27,32 @@ class TestHuggingFaceManager:
         """Inject the test_llm_config into the test class instance."""
         self.config = test_llm_config
 
+    @pytest.fixture
+    def manager_for_update(self, test_llm_config, mocker):
+        """Fixture to provide a manager instance with mocked client for update tests."""
+        # Mock the InferenceClient initialization
+        mock_client_instance = MagicMock(name="initial_client")
+        mock_inference_client_class = mocker.patch(
+            'src.query_processing.hugging_face_manager.InferenceClient', 
+            autospec=True
+        )
+        mock_inference_client_class.return_value = mock_client_instance
+        
+        # Mock os.getenv used during client init
+        mocker.patch('src.query_processing.hugging_face_manager.os.getenv', return_value="test_token")
+
+        manager = HuggingFaceManager(config=test_llm_config, log_domain="test_update")
+        manager.logger = MagicMock()
+
+        # Reset mocks called during init
+        mock_inference_client_class.reset_mock()
+        
+        # Store mocks/patches
+        manager._initial_client_mock = mock_client_instance
+        manager._client_class_patch = mock_inference_client_class
+        
+        return manager
+
     def test_initialization(self):
         """Testa a inicialização do HuggingFaceManager."""
         manager = HuggingFaceManager(config=self.config, log_domain="test_domain")
@@ -131,3 +157,61 @@ class TestHuggingFaceManager:
         assert not isinstance(exc_info.value, HfHubHTTPError)
         # Mock assertion remains the same
         mock_client.text_generation.assert_called_once() 
+
+    # --- update_config Tests ---
+
+    def test_update_config_no_change(self, manager_for_update, test_llm_config):
+        """Test update_config when new config is identical."""
+        mock_client_class = manager_for_update._client_class_patch
+        initial_config_ref = manager_for_update.config
+
+        new_config = test_llm_config.model_copy()
+        manager_for_update.update_config(new_config)
+
+        mock_client_class.assert_not_called() # Client should not be re-initialized
+        assert manager_for_update.config is initial_config_ref # Config ref should NOT change
+        assert manager_for_update.client is manager_for_update._initial_client_mock # Client ref should not change
+
+    def test_update_config_params_only(self, manager_for_update, test_llm_config):
+        """Test update_config changing only non-client-init params."""
+        mock_client_class = manager_for_update._client_class_patch
+        initial_config_ref = manager_for_update.config
+
+        new_config = test_llm_config.model_copy()
+        new_config.temperature = 0.99
+        new_config.max_new_tokens = 500
+        new_config.max_retries = 5
+        new_config.retry_delay_seconds = 10
+
+        manager_for_update.update_config(new_config)
+
+        mock_client_class.assert_not_called() # Client should not be re-initialized
+        assert manager_for_update.config is new_config # Config ref should update
+        assert manager_for_update.config != initial_config_ref
+        assert manager_for_update.config.temperature == 0.99
+        assert manager_for_update.max_retries == 5
+        assert manager_for_update.retry_delay == 10
+        assert manager_for_update.client is manager_for_update._initial_client_mock # Client ref should not change
+
+    def test_update_config_model_repo_id_change(self, manager_for_update, test_llm_config):
+        """Test update_config when model_repo_id changes."""
+        mock_client_class = manager_for_update._client_class_patch
+        original_client_mock = manager_for_update._initial_client_mock
+        
+        # Prepare a new mock client instance for the re-initialization
+        new_client_mock = MagicMock(name="new_client")
+        mock_client_class.return_value = new_client_mock # Next call to InferenceClient returns this
+
+        new_config = test_llm_config.model_copy()
+        new_model_id = "new-org/new-model-v2"
+        new_config.model_repo_id = new_model_id
+
+        manager_for_update.update_config(new_config)
+
+        # InferenceClient should be called ONCE with the new model ID
+        mock_client_class.assert_called_once_with(token="test_token", model=new_model_id)
+        assert manager_for_update.config is new_config
+        assert manager_for_update.config.model_repo_id == new_model_id
+        # Manager should now hold the *new* client instance
+        assert manager_for_update.client is new_client_mock
+        assert manager_for_update.client is not original_client_mock 

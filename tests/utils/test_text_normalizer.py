@@ -211,3 +211,46 @@ def test_normalize_unicode_only_config(config_all_off):
     expected = "  HeLLo,  WoRLD! \t \n " # Only unicode chars changed
     assert normalizer_unicode.normalize(text)[0] == expected
 
+# --- update_config Tests ---
+
+def test_update_config_no_change(normalizer, config_all_on):
+    """Test update_config when the new config is identical."""
+    initial_config_ref = normalizer.config # Store initial ref
+    new_config = config_all_on.model_copy() # Identical copy
+
+    normalizer.update_config(new_config)
+
+    # Assert config reference DID NOT change because values were identical
+    assert normalizer.config is initial_config_ref 
+    # Optional: Also check values are still equal (though covered by 'is')
+    assert normalizer.config == new_config
+
+def test_update_config_flags_change(normalizer, config_all_off):
+    """Test update_config changes behavior of normalize."""
+    # Initial state (all on)
+    assert normalizer.normalize("  HELLO   WORLD!  ")[0] == "hello world!"
+
+    # Update config to all off
+    normalizer.update_config(config_all_off) 
+
+    # Check config object was updated
+    assert normalizer.config is config_all_off
+    assert normalizer.config.use_lowercase is False
+    assert normalizer.config.use_remove_extra_whitespace is False
+    assert normalizer.config.use_unicode_normalization is False
+
+    # Verify normalize behavior changed - text should be unchanged
+    assert normalizer.normalize("  HELLO   WORLD!  ")[0] == "  HELLO   WORLD!  "
+
+    # Update config back to all on (using a copy)
+    config_on_again = config_all_off.model_copy(update={
+        "use_unicode_normalization": True,
+        "use_lowercase": True,
+        "use_remove_extra_whitespace": True
+    })
+    normalizer.update_config(config_on_again)
+
+    # Verify behavior reverts
+    assert normalizer.normalize("  HELLO   WORLD!  ")[0] == "hello world!"
+    assert normalizer.config is config_on_again
+

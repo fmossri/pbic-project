@@ -21,10 +21,32 @@ class HuggingFaceManager:
         self.max_retries = self.config.max_retries
         self.retry_delay = self.config.retry_delay_seconds
         self.client = self._initialize_client()
-        self.logger.debug(f"Cliente Hugging Face inicializado para modelo: {self.config.model_repo_id}")
+
+    def update_config(self, new_config: LLMConfig) -> None:
+        """
+        Atualiza a configuração do HuggingFaceManager com base na configuração fornecida.
+
+        Args:
+            config (LLMConfig): A nova configuração a ser aplicada.
+        """ 
+        if new_config == self.config:
+            self.logger.info("Nenhuma alteracao na configuracao detectada")
+            return
         
+        self.max_retries = new_config.max_retries
+        self.retry_delay = new_config.retry_delay_seconds
+
+        if new_config.model_repo_id != self.config.model_repo_id:
+            self.config = new_config
+            self.client = self._initialize_client()
+
+        else:
+            self.config = new_config
+        
+        self.logger.info("Configuracoes do HuggingFaceManager atualizadas com sucesso")
+
     def _initialize_client(self) -> InferenceClient:
-        """Initialize the Hugging Face Inference client."""
+        """Inicializa o cliente Hugging Face Inference."""
 
         self.logger.debug("Inicializando o cliente Hugging Face")
         
@@ -32,10 +54,13 @@ class HuggingFaceManager:
         if not token:
             self.logger.warning("HUGGINGFACE_API_TOKEN não encontrado no ambiente. Algumas operações podem falhar.")
         
+        self.logger.debug(f"Inicializado InferenceClient do Hugging Face para o modelo: {self.config.model_repo_id}")
         return InferenceClient(
             token=token,
             model=self.config.model_repo_id,
         )
+
+
 
     def generate_answer(self, question: str, context_prompt: str) -> str: 
         """

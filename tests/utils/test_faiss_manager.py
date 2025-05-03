@@ -4,9 +4,10 @@ import numpy as np
 import faiss
 import time
 from pathlib import Path
+from unittest.mock import patch
 
 from src.utils import FaissManager
-from src.config.models import SystemConfig, VectorStoreConfig, QueryConfig
+from src.config.models import AppConfig, VectorStoreConfig, QueryConfig
 
 # Define standard embedding dimension for tests
 TEST_DIMENSION = 64 
@@ -34,19 +35,17 @@ class TestFaissManager:
         return str(test_dir / f"{test_name}_{os.getpid()}.faiss")
 
     @pytest.fixture(scope="class")
-    def vector_config(self):
-        return VectorStoreConfig(index_type="IndexFlatL2") 
-
-    @pytest.fixture(scope="class")
-    def query_config(self):
-        return QueryConfig(retrieval_k=5)
+    def app_config(self):
+        return AppConfig(
+            vector_store=VectorStoreConfig(index_type="IndexFlatL2"),
+            query=QueryConfig(retrieval_k=5)
+        )
 
     @pytest.fixture(scope="function")
-    def faiss_manager(self, vector_config, query_config):
+    def faiss_manager(self, app_config):
         """Fixture to create a FaissManager instance."""
         return FaissManager(
-            vector_config=vector_config, 
-            query_config=query_config,
+            config=app_config,
             log_domain="test_faiss"
         )
     
@@ -179,7 +178,7 @@ class TestFaissManager:
     def test_search_k_greater_than_ntotal(self, faiss_manager, index_path, sample_embeddings, sample_ids):
         """Test searching with k larger than the number of items in the index."""
         num_to_add = 3
-        assert num_to_add < faiss_manager.query_config.retrieval_k
+        assert num_to_add < faiss_manager.config.query.retrieval_k
         
         faiss_manager.add_embeddings(sample_embeddings[:num_to_add], sample_ids[:num_to_add], index_path, TEST_DIMENSION)
         
@@ -198,8 +197,7 @@ class TestFaissManager:
          
          # 2. Create new manager (no system_config needed)
          manager2 = FaissManager(
-             vector_config=faiss_manager.vector_config, 
-             query_config=faiss_manager.query_config,
+             config=faiss_manager.config,
              log_domain="test_faiss_load"
          )
          
@@ -210,3 +208,70 @@ class TestFaissManager:
          assert ids_result.shape == (1, 1)
          assert ids_result[0, 0] == sample_ids[1] 
          assert distances[0, 0] < 1e-6
+
+    # --- update_config Tests ---
+
+    def test_update_config_no_change(self, faiss_manager, app_config):
+        """Test update_config when the new config object is identical."""
+        initial_config_ref = faiss_manager.config
+        new_config = app_config.model_copy() # Create identical copy
+
+        faiss_manager.update_config(new_config)
+
+        # Config reference should be updated to the new object
+        assert faiss_manager.config is new_config
+        # Values should still be equal
+        assert faiss_manager.config == initial_config_ref 
+
+    def test_update_config_retrieval_k_change(self, faiss_manager, app_config, index_path, sample_embeddings, sample_ids):
+        """Test that updating config (specifically retrieval_k) affects search."""
+        # Add data first
+        faiss_manager.add_embeddings(sample_embeddings, sample_ids, index_path, TEST_DIMENSION)
+        initial_k = faiss_manager.config.query.retrieval_k
+        assert initial_k == 5 # Based on fixture
+
+        # Create new config with different k
+        new_config = app_config.model_copy(deep=True)
+        new_k = 3
+        new_config.query.retrieval_k = new_k
+        assert new_k != initial_k
+
+        # Update the manager's config
+        faiss_manager.update_config(new_config)
+
+        # Verify config object was updated
+        assert faiss_manager.config is new_config
+        assert faiss_manager.config.query.retrieval_k == new_k
+
+        # Perform a search and verify the *new* k is used (implicitly by search method)
+        query_vector = sample_embeddings[0].reshape(1, -1)
+        # Mock _initialize_index to avoid file interaction and focus on search logic
+        with patch.object(faiss_manager, '_initialize_index', return_value=faiss.read_index(index_path)):
+             distances, ids_result = faiss_manager.search_faiss_index(
+                 query_embedding=query_vector,
+                 index_path=index_path, 
+                 dimension=TEST_DIMENSION
+                 # IMPORTANT: Do NOT pass k here, let the method use its internal config
+             )
+        
+        # Check if the search returned the NEW k results
+        assert ids_result.shape[1] == new_k 
+
+    def test_update_config_vector_store_change(self, faiss_manager, app_config):
+        """Test updating vector_store config (currently just updates reference)."""
+        # This test mainly verifies the config object updates.
+        # The current update_config doesn't have specific logic for vector_store changes.
+        initial_config_ref = faiss_manager.config
+
+        new_config = app_config.model_copy(deep=True)
+        new_config.vector_store.index_type = "IndexIVFFlat" # Hypothetical change
+        new_config.vector_store.index_params = {"nlist": 100} # Hypothetical change
+        
+        faiss_manager.update_config(new_config)
+
+        assert faiss_manager.config is new_config
+        assert faiss_manager.config != initial_config_ref
+        assert faiss_manager.config.vector_store.index_type == "IndexIVFFlat"
+        assert faiss_manager.config.vector_store.index_params == {"nlist": 100}
+        # NOTE: No assertion here that the *behavior* of index creation changes,
+        # because update_config itself doesn't trigger re-initialization based on this.

@@ -12,6 +12,20 @@ class TextNormalizer:
         self.logger = get_logger(__name__, log_domain=log_domain)
         self.logger.info("Inicializando o TextNormalizer", config=config.model_dump())
 
+    def update_config(self, new_config: TextNormalizerConfig) -> None:
+        """
+        Atualiza a configuração do TextNormalizer com base na configuração fornecida.
+
+        Args:
+            new_config (TextNormalizerConfig): A nova configuração a ser aplicada.
+        """
+        if new_config == self.config:
+            self.logger.info("Nenhuma alteracao na configuracao detectada")
+            return
+        
+        self.config = new_config
+        self.logger.info("Configuracoes do TextNormalizer atualizadas com sucesso")
+
     def normalize(self, texts: list[str] | str) -> list[str]:
         """Applica etapas de normalização configuradas ao texto(s) de entrada."""
         self.logger.debug("Iniciando a normalizacao do texto")

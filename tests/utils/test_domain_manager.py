@@ -641,3 +641,35 @@ class TestDomainManager:
             ])
             mock_sqlite_manager.get_domain.assert_called_once_with(mock_control_conn, domain_name)
             mock_sqlite_manager.get_document_file.assert_called_once_with(mock_domain_conn)
+
+    # --- update_config Tests ---
+
+    def test_update_config_updates_internal_config(self, domain_manager, test_config):
+        """Test that update_config correctly updates the internal config reference."""
+        initial_config_ref = domain_manager.config
+        new_system_config = SystemConfig(storage_base_path="/new/path", control_db_filename="new_control.db")
+        new_app_config = test_config.model_copy(update={"system": new_system_config})
+
+        assert domain_manager.config is initial_config_ref # Should be initial obj
+        
+        domain_manager.update_config(new_app_config)
+
+        assert domain_manager.config is new_app_config # Ref should now point to new obj
+        assert domain_manager.config != initial_config_ref
+        # Verify internal path attribute is also updated (though less critical)
+        assert domain_manager.storage_base_path == "/new/path"
+
+
+    def test_update_config_calls_sqlite_manager_update(self, domain_manager, mock_sqlite_manager, test_config):
+        """Test that update_config calls sqlite_manager.update_config with the correct SystemConfig."""
+        new_system_config = SystemConfig(storage_base_path="/another/path", control_db_filename="another_control.db")
+        new_app_config = test_config.model_copy(update={"system": new_system_config})
+
+        # Reset mock before the call we are testing
+        mock_sqlite_manager.update_config.reset_mock()
+
+        domain_manager.update_config(new_app_config)
+
+        # Assert that the mock's update_config was called once with the SystemConfig part
+        mock_sqlite_manager.update_config.assert_called_once_with(new_system_config)
+        assert domain_manager.config is new_app_config # Also verify config object updated

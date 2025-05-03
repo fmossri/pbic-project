@@ -6,7 +6,7 @@ from typing import List, Optional
 import os
 from pathlib import Path
 from src.utils.logger import get_logger
-from src.config.models import  VectorStoreConfig, QueryConfig
+from src.config.models import AppConfig
 
 class FaissManager:
     """Componente para armazenamento e indexação de vetores usando FAISS.
@@ -15,25 +15,45 @@ class FaissManager:
        aceitando a dimensão do embedding por método.
     """
 
-    def __init__(self, 
-                 vector_config: VectorStoreConfig, 
-                 query_config: QueryConfig,
-                 log_domain: str = "utils"):
+    def __init__(self, config: AppConfig, log_domain: str = "utils"):
         """
         Inicializa o FaissManager com configurações.
         
         Args:
-            vector_config (VectorStoreConfig): Configuração do vector store.
-            query_config (QueryConfig): Configuração de query.
+            config (AppConfig): Configuração do sistema.
             log_domain (str): Domínio para o logger.
         """
         self.logger = get_logger(__name__, log_domain=log_domain)
-        self.vector_config = vector_config
-        self.query_config = query_config
-        self.logger.info("FaissManager inicializado (dimensão por método).", 
-                         vector_config=vector_config.model_dump(),
-                         query_config=query_config.model_dump()
+        self.config = config
+        self.logger.info("FaissManager inicializado.", 
+                         vector_store_config=self.config.vector_store.model_dump(),
+                         query_config=self.config.query.model_dump()
                         )
+        
+    def update_config(self, new_config: AppConfig) -> None:
+        """
+        Atualiza a configuração do DomainManager com base na configuração fornecida.
+
+        Args:
+            config (AppConfig): A nova configuração a ser aplicada.
+        """
+        self.config = new_config
+        self.logger.info("Configuracoes do DomainManager atualizadas com sucesso")
+
+    def _create_vector_store(self, index_path: str, dimension: int) -> faiss.Index:
+
+        match self.config.vector_store.index_type:
+            case "IndexFlatL2":
+                base_index = faiss.IndexFlatL2(dimension)
+                # IndexIDMap como wrapper para permitir uso de IDs personalizados
+                index = faiss.IndexIDMap(base_index)
+
+            #TODO: Implementar outros tipos de índice
+
+        self._save_state(index, index_path)
+        self.logger.info(f"Novo indice FAISS (IDMap, vazio) salvo em: {index_path}")
+
+        return index
 
     def _initialize_index(self, index_path: str, dimension: int) -> faiss.Index:
         """Inicializa ou carrega um índice FAISS (IndexIDMap(IndexFlatL2)) específico.
@@ -64,16 +84,11 @@ class FaissManager:
                      raise ValueError(f"Dimensão do índice carregado ({index.d}) diferente da esperada ({dimension}) em {index_path}")
                 self.logger.debug(f"Índice FAISS carregado: {index_path}, n_vectors={index.ntotal}, dimension={index.d}")
                 return index
-            # Se o arquivo de índice não existir, cria um novo índice (Por enquanto ignorando vector_config.index_type, sempre IndexFlatL2)
+            # Se o arquivo de índice não existir, cria um novo índice
             else:
-                # TODO: Implementar lógica baseada em self.vector_config.index_type para múltiplos tipos de índice possíveis
                 self.logger.warning(f"Indice FAISS não encontrado em {index_path}. Criando novo indice IndexIDMap(IndexFlatL2) com dimensão {dimension}.")
-                base_index = faiss.IndexFlatL2(dimension)
-                # IndexIDMap como wrapper para permitir uso de IDs personalizados
-                index = faiss.IndexIDMap(base_index)
+                index = self._create_vector_store(index_path, dimension)
 
-                self._save_state(index, index_path)
-                self.logger.info(f"Novo indice FAISS (IDMap, vazio) salvo em: {index_path}")
                 return index
         except Exception as e:
             self.logger.error(f"Erro ao inicializar o indice FAISS (IDMap) em {index_path}: {e}", exc_info=True)
@@ -145,13 +160,13 @@ class FaissManager:
             query_embedding (np.ndarray): Vetor de embedding da query (1, D) ou (D,).
             index_path (str): Caminho completo para o arquivo de índice FAISS.
             dimension (int): A dimensão esperada do query_embedding e do índice.
-            k (Optional[int]): Número de vizinhos a retornar. Usa query_config.retrieval_k se None.
+            k (Optional[int]): Número de vizinhos a retornar. Usa config.query.retrieval_k se None.
 
         Returns:
             tuple[np.ndarray, np.ndarray]: Distâncias (1, k) e os IDs (1, k) dos vizinhos (np.int64).
                                            Os IDs retornados são aqueles fornecidos durante add_embeddings.
         """
-        k = k if k is not None else self.query_config.retrieval_k
+        k = k if k is not None else self.config.query.retrieval_k
         if k <= 0:
              self.logger.warning(f"Solicitado k={k} para busca. Usando k=1.")
              k = 1

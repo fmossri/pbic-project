@@ -3,6 +3,7 @@ from src.data_ingestion.text_chunker import TextChunker
 from src.models import Chunk
 from src.config.models import IngestionConfig
 from langchain.schema import Document
+from unittest.mock import MagicMock, patch
 
 class TestTextChunker:
     """Suite de testes para a classe TextChunker."""
@@ -22,6 +23,25 @@ class TestTextChunker:
         """Fixture to provide a TextChunker instance with default config."""
         return TextChunker(config=default_config, log_domain="test_domain")
 
+    @pytest.fixture
+    def chunker_for_update(self, default_config, mocker):
+        """Fixture to create a chunker instance with mocked dependencies for update tests."""
+        # Mock the splitter class
+        mock_splitter_instance = MagicMock(name="initial_splitter_instance")
+        # Patch the class lookup within the text_chunker module
+        mock_splitter_class = mocker.patch('src.data_ingestion.text_chunker.RecursiveCharacterTextSplitter', autospec=True)
+        mock_splitter_class.return_value = mock_splitter_instance
+
+        chunker = TextChunker(config=default_config, log_domain="test_update")
+        chunker.logger = MagicMock()
+
+        # Reset mocks called during init
+        mock_splitter_class.reset_mock()
+        # Store mocks/patches for use in tests
+        chunker._initial_splitter_mock = mock_splitter_instance
+        chunker._splitter_class_patch = mock_splitter_class
+
+        return chunker
     def test_empty_text(self, chunker):
         """Testa o chunking de texto vazio."""
         docs = chunker._chunk_text("")
@@ -153,3 +173,118 @@ As implicações éticas não podem ser ignoradas neste contexto. A sociedade pr
             assert chunk.chunk_page_index == i
             assert isinstance(chunk.chunk_start_char_position, int)
             assert chunk.chunk_start_char_position >= 0
+
+    def test_update_no_change(self, chunker_for_update, default_config):
+        """Test update_config when the new config is identical."""
+        mock_splitter_class = chunker_for_update._splitter_class_patch
+        splitter_instance = chunker_for_update._initial_splitter_mock
+
+        new_config = default_config.model_copy()
+        chunker_for_update.update_config(new_config)
+
+        mock_splitter_class.assert_not_called() # Should not create new splitter
+        # Simplified assertions: Check config updated and splitter instance remains the same
+        # Removed brittle checks on internal mock attributes
+        assert chunker_for_update.config == new_config
+        assert chunker_for_update.splitter == splitter_instance
+
+    def test_update_size_overlap_only(self, chunker_for_update: TextChunker, default_config):
+        """Test update_config when only chunk_size and chunk_overlap change."""
+        mock_splitter_class = chunker_for_update._splitter_class_patch
+        # Get the *actual* splitter instance held by the chunker
+        splitter_instance = chunker_for_update.splitter 
+
+        new_config = default_config.model_copy()
+        new_config.chunk_size = 1000
+        new_config.chunk_overlap = 100
+
+        # We need to allow setting these attributes on the mock
+        splitter_instance._chunk_size = default_config.chunk_size 
+        splitter_instance._chunk_overlap = default_config.chunk_overlap
+
+        chunker_for_update.update_config(new_config)
+
+        mock_splitter_class.assert_not_called() # Should not create new splitter
+        # Check that the attributes on the *existing* splitter instance were updated
+        assert splitter_instance._chunk_size == new_config.chunk_size
+        assert splitter_instance._chunk_overlap == new_config.chunk_overlap
+        assert chunker_for_update.config == new_config
+
+    # Renamed and adjusted test logic
+    def test_update_size_overlap_with_same_strategy(self, chunker_for_update, default_config):
+        """Test update_config when size/overlap change but strategy remains the same."""
+        mock_splitter_class = chunker_for_update._splitter_class_patch
+        # Get the actual splitter instance (which is our mock)
+        splitter_instance = chunker_for_update.splitter 
+        # Ensure the mock attributes exist from the fixture
+        assert hasattr(splitter_instance, '_chunk_size')
+        assert hasattr(splitter_instance, '_chunk_overlap')
+
+        new_config = default_config.model_copy()
+        # Keep the strategy the same
+        new_config.chunk_strategy = default_config.chunk_strategy 
+        # Change size and overlap
+        new_config.chunk_size = 1200
+        new_config.chunk_overlap = 120
+
+        chunker_for_update.update_config(new_config)
+
+        # Assert that _load_splitter was NOT called (strategy didn't change)
+        mock_splitter_class.assert_not_called()
+        
+        # Assert that the direct attribute setting for size/overlap WAS called 
+        # on the original splitter instance.
+        assert splitter_instance._chunk_size == new_config.chunk_size
+        assert splitter_instance._chunk_overlap == new_config.chunk_overlap
+        
+        # Final state checks
+        assert chunker_for_update.splitter == splitter_instance # Should be the same instance
+        assert chunker_for_update.config == new_config
+
+    # Assuming chunk_strategy only has 'recursive' for now
+    # Add tests here if/when new strategies are implemented
+    # def test_update_strategy_only(self, chunker_for_update, initial_config):
+    #     ...
+
+    def test_update_all_params(self, chunker_for_update, default_config, mocker):
+        """Test update_config when strategy, size, and overlap change."""
+        mock_splitter_class = chunker_for_update._splitter_class_patch
+        original_splitter_instance = chunker_for_update._initial_splitter_mock
+        
+        # Prepare a new mock instance for the splitter
+        new_splitter_instance = MagicMock(name="new_splitter_instance")
+        # No need to configure mock_splitter_class.return_value here, 
+        # because we will mock _load_splitter directly.
+
+        new_config = default_config.model_copy()
+        new_strategy = "semantic" # Use a distinct hypothetical strategy
+        new_config.chunk_strategy = new_strategy
+        new_config.chunk_size = 1200
+        new_config.chunk_overlap = 120
+
+        # --- Mock _load_splitter for this test --- 
+        # This prevents the AttributeError because the real _load_splitter only handles 'recursive'
+        # We assert that update_config *calls* _load_splitter correctly.
+        mock_load_method = mocker.patch.object(
+            chunker_for_update, 
+            '_load_splitter', 
+            return_value=new_splitter_instance, # Make it return our new mock instance
+            autospec=True
+        )
+        # --- End Mock --- 
+
+        chunker_for_update.update_config(new_config)
+
+        # Assert that _load_splitter was called correctly due to strategy change
+        mock_load_method.assert_called_once_with(new_strategy)
+        
+        # Assert that the direct attribute setting for size/overlap was *NOT* called, 
+        # because the strategy change should handle reloading/reconfiguring.
+        # We need to check if __setattr__ was called on the *original* mock for these specific attributes.
+        # This is a bit advanced, maybe just check the final state is simpler.
+        # Let's check the final state:
+        assert chunker_for_update.splitter == new_splitter_instance
+        assert chunker_for_update.config == new_config
+        # We cannot easily assert that mock_splitter_class was *not* called directly here 
+        # because _load_splitter (if not mocked) would call it.
+        # The key check is that _load_splitter *was* called.

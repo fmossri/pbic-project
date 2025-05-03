@@ -424,3 +424,75 @@ class TestSQLiteManager:
             cursor = conn.cursor()
             cursor.execute("SELECT * FROM knowledge_domains WHERE id = ?", (domain_id,))
             assert cursor.fetchone() is None
+
+    # --- update_config Tests ---
+
+    def test_update_config_no_change(self, test_config):
+        """Test update_config when the new config is identical."""
+        initial_manager = SQLiteManager(config=test_config)
+        initial_path = initial_manager.control_db_path
+        initial_config_obj = initial_manager.config
+
+        new_config = test_config.model_copy() # Identical config
+        initial_manager.update_config(new_config)
+
+        assert initial_manager.config is new_config # Reference should update
+        assert initial_manager.config == initial_config_obj # Values should be same
+        assert initial_manager.control_db_path == initial_path # Path should not change
+
+    def test_update_config_filename_change(self, test_config):
+        """Test update_config when only control_db_filename changes."""
+        initial_manager = SQLiteManager(config=test_config)
+        original_base_path = initial_manager.config.storage_base_path
+
+        new_config = test_config.model_copy()
+        new_filename = "new_control.db"
+        new_config.control_db_filename = new_filename
+
+        initial_manager.update_config(new_config)
+
+        expected_new_path = os.path.join(original_base_path, new_filename)
+
+        assert initial_manager.config is new_config
+        assert initial_manager.config.control_db_filename == new_filename
+        # Verify path is updated based on OLD base path and NEW filename (current logic)
+        assert initial_manager.control_db_path == expected_new_path
+
+    def test_update_config_basepath_change(self, test_config):
+        """Test update_config when only storage_base_path changes (should NOT update path)."""
+        initial_manager = SQLiteManager(config=test_config)
+        initial_path = initial_manager.control_db_path
+        original_filename = initial_manager.config.control_db_filename
+
+        new_config = test_config.model_copy()
+        new_base_path = "/new/storage/path"
+        new_config.storage_base_path = new_base_path
+
+        initial_manager.update_config(new_config)
+
+        assert initial_manager.config is new_config
+        assert initial_manager.config.storage_base_path == new_base_path
+        # Verify path is NOT updated because current logic only checks filename
+        assert initial_manager.control_db_path == initial_path 
+
+    def test_update_config_both_change(self, test_config):
+        """Test update_config when both base_path and filename change."""
+        initial_manager = SQLiteManager(config=test_config)
+        original_base_path = initial_manager.config.storage_base_path # Get the original base path
+
+        new_config = test_config.model_copy()
+        new_base_path = "/new/storage/path/both"
+        new_filename = "control_both.db"
+        new_config.storage_base_path = new_base_path
+        new_config.control_db_filename = new_filename
+
+        initial_manager.update_config(new_config)
+
+        # Path should update based on OLD base path and NEW filename
+        expected_new_path = os.path.join(original_base_path, new_filename) 
+
+        assert initial_manager.config is new_config
+        assert initial_manager.config.storage_base_path == new_base_path
+        assert initial_manager.config.control_db_filename == new_filename
+        # Verify path reflects only the filename change based on the original base path
+        assert initial_manager.control_db_path == expected_new_path
