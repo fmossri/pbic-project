@@ -300,7 +300,7 @@ class QueryOrchestrator:
         self.metrics_data["start_time"] = start_time
         self.metrics_data["embedding_model"] = self.embedding_generator.config.model_name
         self.metrics_data["embedding_dimension"] = self.embedding_generator.embedding_dimension
-        self.metrics_data["faiss_index_type"] = self.faiss_manager.vector_config.index_type
+        self.metrics_data["faiss_index_type"] = self.faiss_manager.config.vector_store.index_type
         self.metrics_data["retrieved_chunks"] = 0
 
     def query_llm(self, query: str, domain_names: Optional[List[str]] = None) -> Dict[str, Any]:
@@ -348,6 +348,8 @@ class QueryOrchestrator:
             self.logger.debug("Prompt final sendo enviado ao LLM:", final_prompt=context_prompt)
 
             answer = self.hugging_face_manager.generate_answer(query, context_prompt)
+            print(f"{answer}")
+            print(f"{self.config.model_dump().items()}")
             self.logger.debug("Resposta do LLM:", answer=answer)
 
             self.metrics_data["answer"] = answer
