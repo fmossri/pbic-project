@@ -83,6 +83,9 @@ class TestQueryOrchestrator:
         orch.faiss_manager.query_config = test_app_config.query
         orch.hugging_face_manager.config = test_app_config.llm
         
+        # Explicitly set the config attribute for FaissManager mock
+        orch.faiss_manager.config = test_app_config
+
         return orch
     
     def test_initialization(self, orchestrator, test_app_config): # Pass orchestrator fixture
