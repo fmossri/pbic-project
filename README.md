@@ -48,7 +48,7 @@ Este sistema implementa um pipeline RAG (Retrieval-Augmented Generation) para pr
 │   ├── config/
 │   │   ├── config_manager.py
 │   │   ├── config_utils.py
-│   │   ├── models.py
+│   │   ├── models.py       # Modelos das configurações
 │   ├── data_ingestion/     # Lógica de ingestão de documentos
 │   │   ├── __init__.py
 │   │   ├── data_ingestion_orchestrator.py
@@ -108,7 +108,8 @@ Este sistema implementa um pipeline RAG (Retrieval-Augmented Generation) para pr
 ├── main.py                 # Ponto de entrada principal da CLI (Incompleto)
 ├── README.md               
 ├── requirements.txt        
-├── .env                    
+├── .env     
+├── install.py             # Script de instalação do programa                    
 └── .gitignore              
 ```
 
@@ -183,7 +184,7 @@ Este sistema implementa um pipeline RAG (Retrieval-Augmented Generation) para pr
 
 3.  **Instale as dependências:**
     ```bash
-    pip install -r requirements.txt
+    python install * Substitui pip install -r requirements.txt, para garantir portabilidade através de sistemas com gpus diferentes, ou sem gpu
     ```
 
 4.  **Configure o Token da Hugging Face:**
@@ -286,4 +287,8 @@ python -m pytest
 
 - **Erro do File Watcher do Streamlit com PyTorch:** Ao navegar para a página `Gerenciamento de Domínios`, um erro `RuntimeError: Tried to instantiate class '__path__._path'...` relacionado a `torch.classes` pode aparecer no console. Isso parece ser um problema com o file watcher do Streamlit tentando inspecionar a biblioteca `torch`. Tentativas de solucionar isso adicionando `torch` ou `.venv` à `folderWatchBlacklist` ou definindo `watchFileSystem = false` no arquivo `.streamlit/config.toml` não surtiram efeito. O erro parece ser apenas um ruído no console e não afeta a funcionalidade principal da GUI no momento. **Workaround: Silenciar Watcher em `.streamlit/config.toml` com `fileWatcherType = "none"`. Porém, ao modificarmos o código, necessitamos atualizar a página ou reiniciar o streamlit.
 
-- **Bug em reset_config do ConfigManager** A operação de reset não está restaurando os valores originais, presentes como default nas classes de configuração; Com isso, se o arquivo de configuração é alterado repetidamente, os valores default se perdem do sistema.
+- **Informações de configurações de Chunking do Domínio se perdem após criação** Como a classe `Domain` não possui os campos relativos à suas configurações de chunking, após criada essas informações se perdem. Necessário adicioná-las à classe, para que possam ser recuperadas do objeto para exibição no GUI.
+
+- **Visualização das configurações, em Configuration** A página `4_Configuration.py` mostra todas as propriedades da configuração atual, a partir da leitura do arquivo `config.toml`. Porém, após atualização do código, as definições de configuração relativas à Chunking, modelo de embedding, índice faiss e normalização de Embeddings foram passadas à área de criação de Domínio (Dado que essas configurações não podem ser mudadas após definidas, pois levam à inconsistência dos dados armazenados e potencialmente corrupção dos registros). Como a criação de um novo domínio não gera chamada à `ConfigManager.save_config()`, a exibição dos valores desses campos de configuração se torna incorreta. **Fix: Ou salvar o arquivo a cada novo domínio selecionado em DataIngestion (O que parece não ser desejável; o arquivo não deve ser alterado repetidamente); ou mover essas informações da seção `Configuração Atual` para a seção `Detalhes do Domínio`; ou fazer uma busca dessas informações no domínio armazenado na `session state`; ou dividir a seção em duas: Configurações gerais e configurações do domínio.
+
+- **Caracteres especiais do PT-BR sendo passados para o JSON no logger** As mensagens de log com caractéres do Português, como â, ã, ç, etc., estão sendo passadas para o parsing JSON diretamente, sem tratamento. Como JSON não lida com esse tipo de caractére, as mensagens logadas se tornam defeituosas. **Fix: Criar uma função de tratamento de string que remova os caracteres especiais, e passar as mensagens através dela antes de enviar para o handler de arquivo.

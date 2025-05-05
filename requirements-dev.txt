@@ -1,0 +1,7 @@
+# Development and Testing Dependencies
+pytest==8.3.5
+pytest-benchmark==5.1.0
+pytest-mock==3.14.0
+pytest-timeout==2.3.1
+py-cpuinfo==9.0.0
+pipdeptree==2.26.1 
