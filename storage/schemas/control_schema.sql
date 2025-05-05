@@ -13,6 +13,8 @@ CREATE TABLE IF NOT EXISTS knowledge_domains (
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
+DROP TRIGGER IF EXISTS update_knowledge_domain_updated_at;
+
 CREATE TRIGGER update_knowledge_domain_updated_at
     AFTER UPDATE ON knowledge_domains
     FOR EACH ROW

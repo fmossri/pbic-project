@@ -88,7 +88,7 @@ class SQLiteManager:
         if control:
             if not os.path.exists(self.control_db_path):
                 self.logger.info(f"Banco de dados de controle nao encontrado em {self.control_db_path}. Inicializando o banco de dados de controle...")
-                self._create_database(self.control_db_path)
+                self._create_database(control=True)
 
             self.logger.info(f"Conectando ao banco de dados de controle em: {self.control_db_path}")
             return sqlite3.connect(self.control_db_path)
