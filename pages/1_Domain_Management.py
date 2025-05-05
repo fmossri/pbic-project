@@ -32,6 +32,8 @@ if 'confirming_delete_id' not in st.session_state:
     st.session_state.confirming_delete_id = None
 if 'selected_domain_id' not in st.session_state:
     st.session_state.selected_domain_id = None
+if 'selected_domain_name' not in st.session_state:
+    st.session_state.selected_domain_name = None
 
 # --- Titulo da Página ---
 st.title("🧠 Gerenciamento de Domínios de Conhecimento")
@@ -165,7 +167,7 @@ else:
 # --- Área de exibição de detalhes ---
 if st.session_state.selected_domain_name is not None:
     st.divider()
-    st.subheader("Editar Detalhes do Domínio Selecionado")
+    st.subheader("Detalhes do Domínio Selecionado")
     
     # Encontra os dados do domínio selecionado do DataFrame original
     selected_domain_series = original_domain_df[original_domain_df["name"] == st.session_state.selected_domain_name].iloc[0].copy()
@@ -178,6 +180,7 @@ if st.session_state.selected_domain_name is not None:
         col_left, col_right = st.columns(2)
 
         with col_left:
+            st.subheader("Editar detalhes")
             st.markdown(f"**ID:** {domain_id}")
             
             # --- Campos editáveis ---
@@ -201,8 +204,6 @@ if st.session_state.selected_domain_name is not None:
                         st.toast("Salvando alterações...", icon="⏳")
                         domain_manager.update_domain_details(original_name, updates)
                         st.toast("Alterações salvas com sucesso!", icon="✅")
-                        # Clear selection state after save
-                        st.session_state.selected_domain_name = None 
                         st.session_state.confirming_delete_name = None # Reset delete confirm just in case
                         st.rerun()
                     except ValueError as ve:
