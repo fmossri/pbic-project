@@ -49,8 +49,8 @@ class QueryOrchestrator:
                     self.hugging_face_manager.update_config(new_config.llm)
                 case "embedding":
                     self.embedding_generator.update_config(new_config.embedding)
-                case "vector_store":
-                    self.faiss_manager.update_config(new_config.vector_store)
+                case "vector_store" | "query":
+                    self.faiss_manager.update_config(new_config)
                 case "text_normalizer":
                     self.text_normalizer.update_config(new_config.text_normalizer)
                 case "system":
