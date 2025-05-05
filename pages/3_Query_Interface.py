@@ -125,8 +125,8 @@ with st.sidebar:
     st.header("Configuração de busca")
     st.caption("Ajustes serão atualizados automaticamente ao enviar uma query.")
     
-    st.header("Top-K Documentos")
-    query_retrieval_k = st.number_input("Top-K", min_value=1, step=1, value=config.query.retrieval_k, key="sidebar_query_retrieval_k")
+    st.header("Parâmetros da recuperação")
+    query_retrieval_k = st.number_input("K Documentos", min_value=1, step=1, value=config.query.retrieval_k, key="sidebar_query_retrieval_k", help="Número de documentos a serem recuperados para a query.")
     
     st.header("Parâmetros do LLM")
     llm_model_repo_id = st.text_input("Model Repo ID", value=config.llm.model_repo_id, key="sidebar_llm_model_repo_id")
@@ -149,32 +149,30 @@ with st.sidebar:
         with col1_confirm:
             if st.button("Reset", use_container_width=True, key="confirm_reset_llm"):
                 try:
-                    logger.info("Confirmado: Resetando as configurações padrão do LLM...")
+                    logger.info("Confirmado: Restaurando as configurações padrão...")
                     current_full_config = load_configuration() 
                     if not current_full_config:
                         st.error("Erro: Não foi possível carregar a configuração completa para reset.")
                     else:
-                        sessions_to_reset = []
-                        if current_full_config.llm != st.session_state.original_config.llm:
-                            sessions_to_reset.append("llm")
-                        if current_full_config.query != st.session_state.original_config.query:
-                            sessions_to_reset.append("query")
-                        manager.reset_config(current_full_config, sessions_to_reset) 
+                        sections_to_reset_now = ["llm", "query"]
+                        
+                        manager.reset_config(current_full_config, sections_to_reset_now) 
+                        
                         load_configuration.clear()
                         st.session_state.confirming_config_reset = False
-                        st.sidebar.success("Configurações do LLM resetadas para os valores padrão")
+                        st.sidebar.success("Configurações restauradas para os valores padrão.")
                         st.rerun()
                 except ValueError as e: 
-                    st.error(f"Erro ao resetar as configurações do LLM: {e}")
+                    st.error(f"Erro ao restaurar as configurações do LLM: {e}")
                     st.session_state.confirming_config_reset = False 
                 except ConfigurationError as e:
-                    st.error(f"Erro ao resetar as configurações padrão do LLM: {e}") 
+                    st.error(f"Erro ao restaurar as configurações padrão do LLM: {e}") 
                     st.session_state.confirming_config_reset = False 
                 except Exception as e:
-                    st.error(f"Erro inesperado ao resetar as configurações padrão do LLM: {e}")
+                    st.error(f"Erro inesperado ao restaurar as configurações padrão do LLM: {e}")
                     st.session_state.confirming_config_reset = False 
         with col2_confirm:
-            if st.button("Cancel", use_container_width=True, key="cancel_reset_llm"):
+            if st.button("Cancelar", use_container_width=True, key="cancel_reset_llm"):
                 logger.debug("Reset cancelado pelo usuário.")
                 st.session_state.confirming_config_reset = False
                 st.rerun()
@@ -205,7 +203,7 @@ if prompt := st.chat_input("Pergunte aqui..."):
 
     # --- Salva automaticamente a configuração do LLM se tiver sido alterada --- 
     try:
-        current_query_config = QueryConfig(retrieval_k=config.query.retrieval_k)
+        current_query_config = QueryConfig(retrieval_k=query_retrieval_k)
         current_llm_config = LLMConfig(
             model_repo_id=llm_model_repo_id,
             prompt_template=llm_prompt_template,
@@ -223,22 +221,33 @@ if prompt := st.chat_input("Pergunte aqui..."):
             
             # Usa o objeto de configuração principal carregado no inicio da execução do script
             if not config: 
-                 st.error("Não é possível salvar as alterações do LLM: Configuração principal não carregada.")
+                 st.error("Não é possível salvar as alterações: Configuração principal não carregada.")
             else:
+                # Atualiza o objeto de configuração carregado na memória diretamente
                 config.llm = current_llm_config
                 config.query = current_query_config
-                orchestrator.update_config(config)
-                updated_app_config = config.model_copy(update={'llm': current_llm_config})
-                manager.save_config(updated_app_config)
-                load_configuration.clear() 
+                
+                # Pass the fully updated config to the orchestrator
+                logger.info("Atualizando o orchestrator com a nova configuração...")
+                orchestrator.update_config(config) 
+                
+                # Save the fully updated config object to the file
+                logger.info("Salvando a configuração atualizada no arquivo...")
+                manager.save_config(config)
+                
+                load_configuration.clear()
+                
                 # Atualiza o estado da session com a nova configuração salva
-                st.session_state.original_llm_config = copy.deepcopy(current_llm_config) 
-                st.toast("Configuração do LLM salva automaticamente!")
+                logger.info("Atualizando a configuração original na session state...")
+                st.session_state.original_llm_config = copy.deepcopy(current_llm_config)
+                st.session_state.original_query_config = copy.deepcopy(current_query_config)
+                
+                st.toast("Configurações salvas automaticamente!")
         else:
-            logger.debug("Parâmetros do LLM não alterados, prosseguindo com a query.")
+            logger.debug("Parâmetros não alterados, prosseguindo com a query.")
 
     except ValidationError as e:
-        st.error(f"Erro de validação da configuração do LLM durante o salvamento automático:\n{e}")
+        st.error(f"Erro de validação da configuração durante o salvamento automático:\n{e}")
         st.stop()
 
     except ConfigurationError as e:

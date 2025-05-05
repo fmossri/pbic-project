@@ -229,8 +229,10 @@ class ConfigManager:
         if section_names is None:
             section_names = list(_section_name_to_model.keys())
 
-        for section_name in section_names:
+        # Create a single copy before the loop to accumulate resets
+        config_to_update = config.model_copy(deep=True)
 
+        for section_name in section_names:
             if section_name not in _section_name_to_model:
                 msg = f"Nome de seção inválido para reset: '{section_name}'. Válidos: {list(_section_name_to_model.keys())}"
                 logger.error(msg)
@@ -239,19 +241,32 @@ class ConfigManager:
             try:
                 logger.info(f"Resetando a seção '{section_name}' da configuração para os padrões.")
                 ModelClass = _section_name_to_model[section_name]
+                # Cria uma instância com valores padrão para essa seção
                 default_section_instance = ModelClass()
-                current_config_copy = config.model_copy(deep=True)
-                updated_config = current_config_copy.model_copy(update={section_name: default_section_instance})
+                # Atualiza o objeto de configuração cumulativamente
+                setattr(config_to_update, section_name, default_section_instance)
                 
-                logger.info(f"Salvando configuração com a seção '{section_name}' resetada para {self.config_path}...")
-                self.save_config(updated_config) 
+                # DO NOT SAVE INSIDE THE LOOP
+                # logger.info(f"Salvando configuração com a seção '{section_name}' resetada para {self.config_path}...")
+                # self.save_config(updated_config) 
                 
-            except ConfigurationError:
-                raise
-            except Exception as e:
-                msg = f"Erro inesperado ao resetar e salvar a seção '{section_name}' da configuração: {e}"
+            except Exception as e: # Catch potential errors during defaulting or setattr
+                msg = f"Erro ao resetar a seção '{section_name}': {e}"
                 logger.error(msg, exc_info=True)
+                # Optionally re-raise or handle differently
                 raise ConfigurationError(msg) from e
+
+        # Save the fully updated config object AFTER the loop completes
+        try:
+            logger.info(f"Salvando configuração com seções resetadas ({section_names}) para {self.config_path}...")
+            self.save_config(config_to_update)
+            logger.info("Configuração resetada e salva com sucesso.")
+        except ConfigurationError:
+             raise # Propagate save errors
+        except Exception as e:
+            msg = f"Erro inesperado ao salvar configuração resetada: {e}"
+            logger.error(msg, exc_info=True)
+            raise ConfigurationError(msg) from e
 
     def get_default_config_path(self) -> Path:
         """Retorna o caminho para o arquivo de configuração gerenciado por esta instância."""
