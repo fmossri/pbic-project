@@ -51,7 +51,7 @@ def handle_submission():
     logger.info("Iniciando ingestao de dados", selected_domain=domain_name, dir_path=dir_path)
     
     # --- Atualiza as configurações de processamento de embeddings ---
-    config.embedding.device = embedding_device
+    config.embedding.device = "cuda" if embedding_device == "gpu" else embedding_device
     config.embedding.batch_size = embedding_batch_size
 
     # --- Atualiza as configurações do domínio se necessário ---
@@ -155,7 +155,7 @@ with st.form("data_ingestion_form"):
             options=embedding_options, 
             index=default_index,
             key="embedding_device_select",
-            help="Dispositivo para calcular embeddings. 'cpu' ou 'cuda' (se disponível)."
+            help="Dispositivo para calcular embeddings. 'cpu' ou 'gpu' (se disponível)."
         )
     with col2:
         embedding_batch_size = st.number_input(
