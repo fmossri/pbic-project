@@ -7,7 +7,7 @@ from src.models import DocumentFile, Chunk
 from src.utils import TextNormalizer, EmbeddingGenerator, FaissManager, SQLiteManager
 from src.utils.logger import get_logger
 from .document_processor import DocumentProcessor
-from .text_chunker import TextChunker
+from .chunking_strategy import ChunkingManager
 from src.config import AppConfig, check_config_changes
 class DataIngestionOrchestrator:
     """Componente principal para gerenciar o processamento de arquivos PDF."""
@@ -29,12 +29,12 @@ class DataIngestionOrchestrator:
         
         self.metrics_data = {}
         self.config = config
-        self.document_processor = DocumentProcessor(log_domain=self.DEFAULT_LOG_DOMAIN)
-        self.text_chunker = TextChunker(config.ingestion, log_domain=self.DEFAULT_LOG_DOMAIN)
-        self.text_normalizer = TextNormalizer(config.text_normalizer, log_domain=self.DEFAULT_LOG_DOMAIN)
-        self.embedding_generator = EmbeddingGenerator(config.embedding, log_domain=self.DEFAULT_LOG_DOMAIN)
-        self.sqlite_manager = SQLiteManager(config.system, log_domain=self.DEFAULT_LOG_DOMAIN)
-        self.faiss_manager = FaissManager(config, log_domain=self.DEFAULT_LOG_DOMAIN)
+        self.document_processor: DocumentProcessor = DocumentProcessor(log_domain=self.DEFAULT_LOG_DOMAIN)
+        self.text_chunker: ChunkingManager = ChunkingManager(config.ingestion, log_domain=self.DEFAULT_LOG_DOMAIN)
+        self.text_normalizer: TextNormalizer = TextNormalizer(config.text_normalizer, log_domain=self.DEFAULT_LOG_DOMAIN)
+        self.embedding_generator: EmbeddingGenerator = EmbeddingGenerator(config.embedding, log_domain=self.DEFAULT_LOG_DOMAIN)
+        self.sqlite_manager: SQLiteManager = SQLiteManager(config.system, log_domain=self.DEFAULT_LOG_DOMAIN)
+        self.faiss_manager: FaissManager = FaissManager(config, log_domain=self.DEFAULT_LOG_DOMAIN)
         self.document_hashes: Dict[str, str] = {}
 
     def update_config(self, new_config: AppConfig) -> None:
@@ -152,7 +152,7 @@ class DataIngestionOrchestrator:
         start_time = datetime.now()
         self.metrics_data["process"] = "Ingestão de dados"
         self.metrics_data["start_time"] = start_time
-        self.metrics_data["text_chunker"] = type(self.text_chunker.splitter).__name__
+        self.metrics_data["text_chunker"] = type(self.text_chunker.chunker).__name__
         self.metrics_data["chunk_size"] = self.text_chunker.config.chunk_size
         self.metrics_data["chunk_overlap"] = self.text_chunker.config.chunk_overlap
         self.metrics_data["embedding_model"] = self.embedding_generator.config.model_name

@@ -6,7 +6,7 @@ class SystemConfig(BaseModel):
     control_db_filename: str = "control.db"
 
 class IngestionConfig(BaseModel):
-    chunk_strategy: Literal["recursive"] = "recursive"  # Adicionar "semantic" depois
+    chunk_strategy: Literal["recursive", "semantic-cluster"] = "recursive"  # Adicionar "semantic" depois
     chunk_size: PositiveInt = 1000
     chunk_overlap: conint(ge=0) = 200 # type: ignore
 

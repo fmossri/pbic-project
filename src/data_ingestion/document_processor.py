@@ -34,7 +34,11 @@ class DocumentProcessor:
             # Calcula o hash do texto
             hash_function = hashlib.md5()
             hash_function.update(text_content.encode('utf-8'))
-            return hash_function.hexdigest()
+
+            file_hash = hash_function.hexdigest()
+            self.logger.debug(f"Hash do documento calculado com sucesso", file_hash=file_hash)
+            return file_hash
+
         except Exception as e:
             self.logger.error("Erro ao calcular o hash do documento", error=str(e))
             raise e
@@ -89,7 +93,7 @@ class DocumentProcessor:
             text_content = "\n".join(page.page_content for page in pages)
             # Calcula o hash do documento
             file.hash = self._calculate_hash(text_content)
-            self.logger.debug(f"Hash do documento calculado com sucesso", file_hash=file.hash)
+
             self.logger.info(f"Documento processado com sucesso")
 
         except Exception as e:
