@@ -89,8 +89,8 @@ class SemanticClusterStrategy(ChunkingStrategy):
         Prepara as strings dos metadados
         """
         metadata_strings = [
-            f"Página: {item['metadata'].get('page_num', '')} | "
-            f"Índice: {item['metadata'].get('index_in_doc', '')}"
+            f"Página: {item.metadata.get('page_number', '')} | "
+            f"Índice: {item.metadata.get('index_in_doc', '')}"
             for item in small_chunks
         ]
         return metadata_strings
@@ -106,7 +106,7 @@ class SemanticClusterStrategy(ChunkingStrategy):
         Returns:
             Array numpy com os embeddings combinados
         """
-        self.logger.info("Passo 5: Combinando embeddings textuais e de metadados com peso: %.2f", self.config.embedding.weight)
+        self.logger.info("Passo 5: Combinando embeddings textuais e de metadados", weight=self.config.embedding.weight)
         # Define o peso para os metadados (ajuste conforme necessário)
         metadata_weight = self.config.embedding.weight
         
@@ -123,7 +123,7 @@ class SemanticClusterStrategy(ChunkingStrategy):
         """
         Agrupa os chunks em clusters
         """
-        self.logger.info("Passo 6: Iniciando o clustering hierárquico com distância limite: %.2f", self.config.clustering.distance_threshold)
+        self.logger.info("Passo 6: Iniciando o clustering hierárquico", distance_threshold=self.config.clustering.distance_threshold)
         clustering = AgglomerativeClustering(n_clusters=None, distance_threshold=self.config.clustering.distance_threshold)
         labels = clustering.fit_predict(combined_embeddings)
         self.logger.info(f"Clustering concluído. {len(set(labels))} clusters identificados.")
@@ -148,7 +148,7 @@ class SemanticClusterStrategy(ChunkingStrategy):
         """
         self.logger.info("Passo 8: Criando chunks grandes com tamanho otimizado a partir dos clusters")
         big_chunks = []
-        max_words = self.config.chunking.max_words
+        max_words = self.config.clustering.max_words
         for cluster_small_chunks in clusters.values():
             chunk = " ".join(cluster_small_chunks)
             words = chunk.split()
@@ -230,13 +230,13 @@ class SemanticClusterStrategy(ChunkingStrategy):
 
         # Geração de embeddings textuais
         self.logger.info("Passo 3: Gerando embeddings textuais para os chunks pequenos")
-        text_embeddings = self.embedding_model.encode(enriched_small_chunks, self.config.embedding.batch_size)
+        text_embeddings = self.embedding_model.encode(enriched_small_chunks, batch_size=self.config.embedding.batch_size)
 
         # Preparação das strings dos metadados
         metadata_strings = self._prepare_metadata_strings(small_chunks)
         # Geração de embeddings de metadados
         self.logger.info("Passo 4: Gerando embeddings para os metadados dos chunks pequenos")
-        metadata_embeddings = self.embedding_model.encode(metadata_strings, self.config.embedding.batch_size)
+        metadata_embeddings = self.embedding_model.encode(metadata_strings, batch_size=self.config.embedding.batch_size)
 
         # Combinação dos embeddings
 
