@@ -16,7 +16,7 @@ class SQLiteManager:
     DOMAIN_SCHEMA_PATH: str = os.path.join("storage", "schemas", "schema.sql")
 
     def __init__(self, config: SystemConfig, log_domain: str = "utils"):
-        self.config = config
+        self.config = config.model_copy(deep=True)
         self.logger = get_logger(__name__, log_domain=log_domain)
         self.logger.info("Inicializando o SQLiteManager")
         self.control_db_path = os.path.join(config.storage_base_path, config.control_db_filename)
@@ -34,7 +34,7 @@ class SQLiteManager:
         if new_config.control_db_filename != self.config.control_db_filename:
             self.control_db_path = os.path.join(self.config.storage_base_path, new_config.control_db_filename)
 
-        self.config = new_config
+        self.config = new_config.model_copy(deep=True)
         self.logger.info("Configuracoes do SQLiteManager atualizadas com sucesso")
     
 
@@ -349,9 +349,11 @@ class SQLiteManager:
                 columns = [description[0] for description in cursor.description]
                 
                 for row in domain_data:
+                    config = self._get_domain_config(conn, row[0])
                     # Cria um dicionário com os nomes das colunas e os valores da linha
                     domain_dict = dict(zip(columns, row))
                     domain = Domain(**domain_dict)
+                    domain.config = config
                     all_domains.append(domain)
                 return all_domains
             else:
@@ -431,7 +433,7 @@ class SQLiteManager:
             self.logger.error(f"Erro ao inserir a configuração de domínio: {e}")
             raise e
 
-    def get_domain_config(self, conn: sqlite3.Connection, domain_id: int) -> Optional[DomainConfig]:
+    def _get_domain_config(self, conn: sqlite3.Connection, domain_id: int) -> Optional[DomainConfig]:
         """
         Recupera a configuração de domínio do banco de dados de controle.
         """
