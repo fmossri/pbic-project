@@ -1,8 +1,8 @@
 from typing import List, Dict, Optional
 
-from src.models import Chunk
+from src.models import Chunk, DocumentFile
 from src.utils.logger import get_logger
-from src.config.models import IngestionConfig
+from src.config.models import AppConfig
 
 from .chunking_strategy import ChunkingStrategy
 from .recursive_strategy import RecursiveStrategy
@@ -14,12 +14,12 @@ class ChunkingManager:
        Utiliza a estratégia e os parâmetros definidos na configuração.
     """
     
-    def __init__(self, config: IngestionConfig, log_domain: str = "text-chunker"):
+    def __init__(self, config: AppConfig, log_domain: str = "text-chunker"):
         """
         Inicializa o TextChunker com base na configuração fornecida.
         
         Args:
-            config (IngestionConfig): Objeto de configuração contendo os parâmetros de ingestão.
+            config (AppConfig): Objeto de configuração contendo os parâmetros de ingestão.
             log_domain (str): Domínio para o logger.
         """
         self.logger = get_logger(__name__, log_domain=log_domain)
@@ -27,20 +27,20 @@ class ChunkingManager:
         self.logger.info("Inicializando o TextChunker.", config_data=config.model_dump())
         self.chunker = self._create_chunker(config.chunk_strategy)
 
-    def update_config(self, new_config: IngestionConfig) -> None:
+    def update_config(self, new_config: AppConfig) -> None:
         """
         Atualiza a configuração do TextChunker com base na configuração fornecida.
 
         Args:
-            new_config (IngestionConfig): A nova configuração a ser aplicada.
+            new_config (AppConfig): A nova configuração a ser aplicada.
         """
         if new_config == self.config:
             self.logger.info("Nenhuma alteracao na configuracao detectada")
             return
         
-        if new_config.chunk_strategy != self.config.chunk_strategy:
-            self.chunker = self._create_chunker(new_config.chunk_strategy)
-            self.logger.info(f"Estrategia de chunking alterada para: {new_config.chunk_strategy}")
+        if new_config.ingestion.chunk_strategy != self.config.ingestion.chunk_strategy:
+            self.chunker = self._create_chunker(new_config.ingestion.chunk_strategy)
+            self.logger.info(f"Estrategia de chunking alterada para: {new_config.ingestion.chunk_strategy}")
 
         else:
             self.chunker.update_config(new_config)
@@ -50,7 +50,7 @@ class ChunkingManager:
         self.logger.info("Configuracoes do TextChunker atualizadas com sucesso")
 
 
-    def _create_chunker(self, new_config: IngestionConfig) -> ChunkingStrategy:
+    def _create_chunker(self, new_config: AppConfig) -> ChunkingStrategy:
         """
         Carrega o splitter com base na configuração atual.
 
@@ -60,7 +60,7 @@ class ChunkingManager:
         """
         chunker = None
         try:
-            match new_config.chunk_strategy:
+            match new_config.ingestion.chunk_strategy:
                 case "recursive":
                     chunker = RecursiveStrategy(new_config, log_domain=self.logger.log_domain)
 
@@ -68,7 +68,7 @@ class ChunkingManager:
                     chunker = SemanticClusterStrategy(new_config, log_domain=self.logger.log_domain)
 
                 case _:
-                    raise ValueError(f"Estrategia de chunking nao suportada: {new_config.chunk_strategy}")
+                    raise ValueError(f"Estrategia de chunking nao suportada: {new_config.ingestion.chunk_strategy}")
                 
             return chunker
 
@@ -76,7 +76,7 @@ class ChunkingManager:
             self.logger.error(f"Erro ao carregar o splitter: {e}", exc_info=True)
             raise e
     
-    def create_chunks(self, text: str, metadata: Optional[Dict] = None) -> List[Chunk]:
-        return self.chunker.create_chunks(text, metadata)
+    def create_chunks(self, file: DocumentFile) -> List[Chunk]:
+        return self.chunker.create_chunks(file)
 
 

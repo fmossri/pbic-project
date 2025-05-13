@@ -2,9 +2,11 @@ from typing import List, Optional, Dict
 
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain.schema import Document
+from sentence_transformers import SentenceTransformer
+from keybert import KeyBERT
 
-from src.models import Chunk
-from src.config.models import IngestionConfig
+from src.models import Chunk, DocumentFile
+from src.config.models import AppConfig
 
 from .chunking_strategy import ChunkingStrategy
 
@@ -13,20 +15,20 @@ class RecursiveStrategy(ChunkingStrategy):
        Utiliza a estratégia e os parâmetros definidos na configuração.
     """
     
-    def __init__(self, config: IngestionConfig, log_domain: str = "text-chunker"):
+    def __init__(self, config: AppConfig, log_domain: str = "text-chunker"):
         """
         Inicializa o RecursiveStrategy com base na configuração fornecida.
         
         Args:
-            config (IngestionConfig): Objeto de configuração contendo os parâmetros de ingestão.
+            config (AppConfig): Objeto de configuração contendo os parâmetros de ingestão.
             log_domain (str): Domínio para o logger.
         """
         super().__init__(config, log_domain)
 
         self.logger.info("Inicializando o RecursiveStrategy.", config_data=config.model_dump())
-        self.model = RecursiveCharacterTextSplitter(
-                        chunk_size=self.config.chunk_size, 
-                        chunk_overlap=self.config.chunk_overlap,
+        self.splitter = RecursiveCharacterTextSplitter(
+                        chunk_size=self.config.ingestion.chunk_size, 
+                        chunk_overlap=self.config.ingestion.chunk_overlap,
                         separators=[
                             "\n\n",  # Parágrafos
                             "\n",    # Quebras de linha
@@ -42,26 +44,6 @@ class RecursiveStrategy(ChunkingStrategy):
                         length_function=len,
                         add_start_index=True
                     )
-
-    def update_config(self, new_config: IngestionConfig) -> None:
-        """
-        Atualiza a configuração do RecursiveStrategy com base na configuração fornecida.
-
-        Args:
-            new_config (IngestionConfig): A nova configuração a ser aplicada.
-        """
-        if new_config == self.config:
-            self.logger.info("Nenhuma alteracao na configuracao detectada")
-            return
-
-        if new_config.chunk_size != self.config.chunk_size or new_config.chunk_overlap != self.config.chunk_overlap:
-            self.model._chunk_size, self.model._chunk_overlap = new_config.chunk_size, new_config.chunk_overlap
-            
-            self.logger.info(f"Parametros de chunking recursivo alterados para: {new_config.model_dump()}")
-
-        self.config = new_config
-        self.logger.info("Configuracoes do RecursiveStrategy atualizadas com sucesso")
-
 
     def _chunk_text(self, text: str, metadata: Optional[Dict] = None) -> List[Document]:
         """
@@ -79,7 +61,7 @@ class RecursiveStrategy(ChunkingStrategy):
             self.logger.warning("Texto vazio fornecido para chunking.")
             return []
         try:
-            docs = self.model.create_documents(
+            docs = self.splitter.create_documents(
                 texts=[text], 
                 metadatas=[metadata] if metadata else None
             )
@@ -89,7 +71,7 @@ class RecursiveStrategy(ChunkingStrategy):
             self.logger.error(f"Erro ao dividir o texto em chunks (Langchain Document): {e}", exc_info=True)
             raise e
     
-    def create_chunks(self, text: str, metadata: Optional[Dict] = None) -> List[Chunk]:
+    def create_chunks(self, file: DocumentFile) -> List[Chunk]:
         """
         Divide o texto em objetos Chunk, enriquecidos com metadados.
 
@@ -101,32 +83,72 @@ class RecursiveStrategy(ChunkingStrategy):
         Returns:
             List[Chunk]: Lista de objetos Chunk criados.
         """
-        if not metadata or not isinstance(metadata, dict):
-             metadata = {}
-             self.logger.warning("Metadados nao fornecidos para create_chunks.")
+        document_chunks: List[Chunk] = []
+        page_counter = 0
+        metadata = {"document_id": file.id,
+                    "page_number": -1
+                    }
 
-        docs = self._chunk_text(text, metadata)
-
-        chunks_list: List[Chunk] = []
+        self.logger.info(f"Iniciando chunking recursivo para o documento: {file.id} ({file.name}) com {len(file.pages)} páginas.")
         try:
-            for chunk_index, doc in enumerate(docs):
-                doc_metadata = doc.metadata if hasattr(doc, 'metadata') else metadata
-                
-                start_index = doc_metadata.get("start_index", -1)
-                if start_index == -1:
-                     self.logger.warning(f"start_index nao encontrado nos metadados do chunk {chunk_index}. Usando -1.")
 
-                chunk = Chunk(
-                    document_id=doc_metadata.get("document_id", 0),
-                    page_number=doc_metadata.get("page_number", 0),
-                    chunk_page_index=chunk_index,
-                    chunk_start_char_position=start_index, 
-                    content=doc.page_content,
-                )
-                chunks_list.append(chunk)
-            
-            self.logger.info(f"Criados {len(chunks_list)} objetos Chunk.")
-            return chunks_list
+            for page in file.pages:
+                page_counter += 1
+                self.logger.debug(f"Processando pagina: {page_counter}/{len(file.pages)}")
+                
+                if not page.page_content:
+                    self.logger.warning(f"Página {page_counter} do documento {file.id} ({file.name}) está vazia. Pulando página.")
+                    continue
+
+                metadata["page_number"] = page.metadata.get("page")
+                
+                try:
+                    page_docs = self._chunk_text(page.page_content, metadata)
+
+                    if not page_docs:
+                        self.logger.warning(f"Nenhum Chunk (Langchain Document) gerado por _chunk_text para a página {page_counter} do arquivo {file.name}. Pulando página.")
+                        continue
+
+
+
+                    page_chunks: List[Chunk] = []
+                    for chunk_index, doc in enumerate(page_docs):
+                        doc_metadata = doc.metadata if hasattr(doc, 'metadata') else metadata
+                        
+                        start_index = doc_metadata.get("start_index", -1)
+                        if start_index == -1:
+                            self.logger.warning(f"start_index nao encontrado nos metadados do chunk {chunk_index}. Usando -1.")
+
+                        metadata = {"page_list": [doc_metadata.get("page_number", -1)]}
+                        chunk = Chunk(
+                            document_id=doc_metadata.get("document_id", -1),
+                            metadata=metadata,
+                            content=doc.page_content,
+                        )
+                        page_chunks.append(chunk)
+
+                    if not page_chunks:
+                        self.logger.warning(f"Nenhum objeto Chunk criado para a página {page_counter} do arquivo {file.name} (após conversão). Pulando página.")
+                        continue
+
+                    self.logger.info(f"Criados {len(page_chunks)} objetos Chunk recursivos para a página {page_counter} do arquivo {file.name}.")
+                    document_chunks.extend(page_chunks)
+
+                except Exception as e:
+                    self.logger.error(f"Erro ao processar chunks para a página {page_counter} do arquivo {file.id} ({file.name}): {e}", exc_info=True)
+                    continue
+                
         except Exception as e:
-            self.logger.error(f"Erro ao criar objetos Chunk: {e}", exc_info=True)
+            self.logger.error(f"Erro ao criar objetos Chunk para o arquivo {file.name}: {e}", exc_info=True)
             raise e
+            
+        self.logger.info(f"Chunking recursivo concluído para o arquivo {file.id}. Total de chunks criados: {len(document_chunks)}.")
+        
+        # Gera keywords para cada chunk
+        keywords = self._generate_keywords(document_chunks)
+        
+        for i, chunk in enumerate(document_chunks):
+            chunk.metadata["indices_list"] = [i]
+            chunk.metadata["keywords"] = keywords[i]
+
+        return document_chunks
