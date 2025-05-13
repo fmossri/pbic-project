@@ -57,7 +57,7 @@ def handle_submission():
     # --- Atualiza as configurações do domínio se necessário ---
     try:
         # Carrega a configuração do domínio
-        domain_config = domain_manager.load_domain_config(selected_domain_object.id)
+        domain_config = selected_domain_object.config
         if not domain_config:
             st.error(f"Erro: Configuração do domínio '{domain_name}' não encontrada.")
             logger.error("Configuracao do dominio nao encontrada.", selected_domain=domain_name)

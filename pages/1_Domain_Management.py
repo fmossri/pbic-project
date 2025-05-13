@@ -65,6 +65,7 @@ def refresh_domains_dataframe():
                     "total_documents": d.total_documents,
                     "db_path": d.db_path,
                     "vector_store_path": d.vector_store_path,
+                    "config": d.config,
                     "created_at": d.created_at,
                     "updated_at": d.updated_at
                 }
@@ -225,7 +226,7 @@ if st.session_state.selected_domain_name is not None:
 
             # Carrega e exibe a configuração do domínio
             try:
-                domain_config = domain_manager.load_domain_config(domain_id)
+                domain_config = selected_domain_series.get('config')
                 if domain_config:
                     with st.expander("Configurações do Domínio", expanded=False):
                         # Configurações de Embedding
