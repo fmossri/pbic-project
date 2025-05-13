@@ -53,12 +53,18 @@ Este sistema implementa um pipeline RAG (Retrieval-Augmented Generation) para pr
 │   │   ├── __init__.py
 │   │   ├── data_ingestion_orchestrator.py
 │   │   ├── document_processor.py
-│   │   └── text_chunker.py
+│   │   └── chunking_strategy/  # Estratégias de chunk e seu gerenciador
+│   │       ├── __init__.py
+│   │       ├── chunking_manager.py
+│   │       ├── chunking_strategy.py   # Abstract class
+│   │       ├── recursive_strategy.py
+│   │       └── semantic_cluster_strategy.py
 │   ├── models/             # Modelos Pydantic para estruturas de dados
 │   │   ├── __init__.py
 │   │   ├── chunk.py
 │   │   ├── document_file.py
-│   │   └── domain.py
+│   │   ├── domain.py
+│   │   └── domain_config.py
 │   ├── query_processing/   # Lógica de consulta e interação com LLM
 │   │   ├── __init__.py
 │   │   ├── hugging_face_manager.py
@@ -88,7 +94,6 @@ Este sistema implementa um pipeline RAG (Retrieval-Augmented Generation) para pr
 │   │   ├── __init__.py
 │   │   ├── test_data_ingestion_orchestrator.py
 │   │   ├── test_document_processor.py
-│   │   ├── test_text_chunker.py
 │   │   └── test_docs/
 │   │       └── generate_test_pdfs.py # (Script auxiliar para testes)
 │   ├── query_processing/
@@ -119,6 +124,7 @@ Este sistema implementa um pipeline RAG (Retrieval-Augmented Generation) para pr
 
 -   **`ConfigManager` (`src/config/config_manager.py`):** Gerencia o carregamento, validação, salvamento, backup e reset das configurações da aplicação (arquivo `config.toml`).
 -   **`DomainManager` (`src/utils/domain_manager.py`):** Responsável por gerenciar os domínios de conhecimento (criar, listar, atualizar, deletar) e seus respectivos arquivos (banco de dados, índice vetorial).
+-   **`ChunkingManager` (`src/data_ingestion/chunking_strategy/chunking_manager.py`):** Gerencia diferentes estratégias de chunking. Inicializa e delega para uma estratégia específica (ex. Recursive, SemanticCluster) de acordo com as definições de configuração.
 -   **`DataIngestionOrchestrator` (`src/data_ingestion/data_ingestion_orchestrator.py`):** Coordena o pipeline completo de ingestão de documentos para um domínio específico, desde a leitura do PDF até o armazenamento dos chunks e embeddings.
 -   **`QueryOrchestrator` (`src/query_processing/query_orchestrator.py`):** Gerencia o fluxo de consulta, incluindo a geração de embedding da query, busca no índice vetorial, recuperação de chunks, formatação do prompt e interação com o LLM.
 
@@ -130,7 +136,9 @@ Este sistema implementa um pipeline RAG (Retrieval-Augmented Generation) para pr
 ### Processamento de Documentos e Texto
 
 -   **`DocumentProcessor` (`src/data_ingestion/document_processor.py`):** Extrai texto de arquivos PDF e calcula hashes para detecção de duplicatas.
--   **`TextChunker` (`src/data_ingestion/text_chunker.py`):** Divide o texto extraído em chunks menores, utilizando estratégias como `RecursiveCharacterTextSplitter`.
+-   **`Chunking Strategies` (`src/data_ingestion/chunking_strategy/`):**
+    -   **`RecursiveStrategy` (`recursive_strategy.py`):** Realiza chunking por divisão recursiva de caracteres chave.
+    -   **`SemanticClusterStrategy` (`semantic_cluster_strategy.py`):** Realiza chunking por clusterização semântica de segmentos de texto. contextually coherent chunks.
 -   **`TextNormalizer` (`src/utils/text_normalizer.py`):** Aplica normalização ao texto (e.g., Unicode, lowercase) para consistência.
 -   **`EmbeddingGenerator` (`src/utils/embedding_generator.py`):** Gera embeddings vetoriais para os chunks de texto usando modelos da biblioteca `sentence-transformers`.
 
@@ -144,7 +152,7 @@ Este sistema implementa um pipeline RAG (Retrieval-Augmented Generation) para pr
 
 ### Modelos de Dados
 
--   **`src/models/`:** Contém as definições (usando Pydantic) para as estruturas de dados `Domain`, `DocumentFile`, e `Chunk`.
+-   **`src/models/`:** Contém as definições (usando Pydantic) para as estruturas de dados `Domain`, `DomainConfig`, `DocumentFile`, e `Chunk`.
 
 ## Requisitos
 
@@ -206,7 +214,7 @@ Este sistema implementa um pipeline RAG (Retrieval-Augmented Generation) para pr
 streamlit run Admin.py
 ```
 
-### Via CLI
+### Via CLI (Temporariamente indisponível)
 
 ** main.py --help (Incompleto)
 
@@ -241,10 +249,8 @@ python -m pytest
     - Pesquisar estratégias de avaliação de sistemas RAG 
     - Implementar testagem e coleta de métricas relevantes no sistema.
 
-2. **Chunking Semântico**
-    - Implementar estratégia de chunking semântico/agêntico e clusterização à aplicação
-    - Envolverá a refatoração do TextChunker
-    - Talvez permita escolher entre estratégias diferentes através de configuração.
+2. **Novos Testes de Chunking**
+    - Criar casos de teste para ChunkingManager, RecursiveStrategy e SemanticClusterStrategy
 
 ## Próximos Passos 🚀
 
@@ -253,6 +259,9 @@ python -m pytest
 
 2.  **Avaliação de Modelos:**
     - Avaliar o desempenho e a adequação de diferentes modelos de embedding e LLMs para as tarefas específicas da aplicação.
+
+3. **Remoção de Arquivos de um Domínio**
+    - Implementar remoção de um arquivo do domínio. A lógica para a remoção do arquivo e seus chunks do banco de dados já existe; Desenvolver lógica de remoção dos embeddings associados ao documento do índice Faiss.
 
 ### Possíveis Melhorias 💡
 
@@ -286,8 +295,6 @@ python -m pytest
 ## Problemas Conhecidos
 
 - **Erro do File Watcher do Streamlit com PyTorch:** Ao navegar para a página `Gerenciamento de Domínios`, um erro `RuntimeError: Tried to instantiate class '__path__._path'...` relacionado a `torch.classes` pode aparecer no console. Isso parece ser um problema com o file watcher do Streamlit tentando inspecionar a biblioteca `torch`. Tentativas de solucionar isso adicionando `torch` ou `.venv` à `folderWatchBlacklist` ou definindo `watchFileSystem = false` no arquivo `.streamlit/config.toml` não surtiram efeito. O erro parece ser apenas um ruído no console e não afeta a funcionalidade principal da GUI no momento. **Workaround: Silenciar Watcher em `.streamlit/config.toml` com `fileWatcherType = "none"`. Porém, ao modificarmos o código, necessitamos atualizar a página ou reiniciar o streamlit.
-
-- **Informações de configurações de Chunking do Domínio se perdem após criação** Como a classe `Domain` não possui os campos relativos à suas configurações de chunking, após criada essas informações se perdem. Necessário adicioná-las à classe, para que possam ser recuperadas do objeto para exibição no GUI.
 
 - **Visualização das configurações, em Configuration** A página `4_Configuration.py` mostra todas as propriedades da configuração atual, a partir da leitura do arquivo `config.toml`. Porém, após atualização do código, as definições de configuração relativas à Chunking, modelo de embedding, índice faiss e normalização de Embeddings foram passadas à área de criação de Domínio (Dado que essas configurações não podem ser mudadas após definidas, pois levam à inconsistência dos dados armazenados e potencialmente corrupção dos registros). Como a criação de um novo domínio não gera chamada à `ConfigManager.save_config()`, a exibição dos valores desses campos de configuração se torna incorreta. **Fix: Ou salvar o arquivo a cada novo domínio selecionado em DataIngestion (O que parece não ser desejável; o arquivo não deve ser alterado repetidamente); ou mover essas informações da seção `Configuração Atual` para a seção `Detalhes do Domínio`; ou fazer uma busca dessas informações no domínio armazenado na `session state`; ou dividir a seção em duas: Configurações gerais e configurações do domínio.
 
