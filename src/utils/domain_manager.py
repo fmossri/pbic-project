@@ -8,7 +8,7 @@ from src.config.models import AppConfig
 class DomainManager:
 
     def __init__(self, config: AppConfig, sqlite_manager: SQLiteManager, log_domain: str = "utils"):
-        self.config = config
+        self.config = config.model_copy(deep=True)
         self.sqlite_manager = sqlite_manager
         self.storage_base_path = config.system.storage_base_path
 
@@ -22,9 +22,10 @@ class DomainManager:
         Args:
             config (AppConfig): A nova configuração a ser aplicada.
         """
-        self.config = new_config
+
         self.storage_base_path = new_config.system.storage_base_path
         self.sqlite_manager.update_config(new_config.system)
+        self.config = new_config.model_copy(deep=True)
         self.logger.info("Configuracoes do DomainManager atualizadas com sucesso")
 
     def create_domain(self, new_domain_data: Dict[str, Any]) -> None:
@@ -107,24 +108,6 @@ class DomainManager:
             if conn:
                 conn.rollback()
             self.logger.error(f"Erro ao adicionar novo domínio de conhecimento: {e}", exc_info=True)
-            raise e
-
-    def load_domain_config(self, domain_id: int) -> DomainConfig:
-        """
-        Carrega a configuração de um domínio de conhecimento.
-        """
-        self.logger.info("Carregando configuracao de dominio", domain_id=domain_id)
-        try:
-            with self.sqlite_manager.get_connection(control=True) as conn:
-                domain_config = self.sqlite_manager.get_domain_config(conn=conn, domain_id=domain_id)
-                if not domain_config:
-                    self.logger.error("Configuracao de dominio nao encontrada", domain_id=domain_id)
-                    raise ValueError(f"Configuracao de dominio nao encontrada: domain_id={domain_id}")
-        
-            return domain_config
-
-        except Exception as e:
-            self.logger.error(f"Erro ao carregar configuracao de dominio: {e}", exc_info=True)
             raise e
 
     def remove_domain_registry_and_files(self, domain_name: str) -> None:
@@ -313,8 +296,8 @@ class DomainManager:
             [domain] = domain 
 
             if not os.path.exists(domain.db_path):
-                self.logger.error("Banco de dados do dominio nao encontrado", domain_db_path=domain.db_path)
-                raise FileNotFoundError(f"Banco de dados do domínio não encontrado: {domain.db_path}")
+                self.logger.warning("Banco de dados do dominio nao encontrado", domain_db_path=domain.db_path)
+                return []
             
             self.logger.info("Conectando ao banco de dados do dominio", domain_db_path=domain.db_path)
             with self.sqlite_manager.get_connection(db_path=domain.db_path) as conn:

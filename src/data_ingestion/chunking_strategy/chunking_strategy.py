@@ -9,7 +9,7 @@ from keybert import KeyBERT
 
 class ChunkingStrategy(ABC):
     def __init__(self, config: AppConfig, log_domain: str):
-        self.config = config
+        self.config = config.model_copy(deep=True)
         self.logger = get_logger(__name__, log_domain=log_domain)
         self.embedding_model = SentenceTransformer(self.config.embedding.model_name)
         self.keybert_model = KeyBERT(model=self.embedding_model)
@@ -43,7 +43,7 @@ class ChunkingStrategy(ABC):
             self.embedding_model.to(new_config.embedding.device)
             self.logger.info(f"Dispositivo de embedding do {self.__class__.__name__} alterado para: {new_config.embedding.device}")
 
-        self.config = new_config
+        self.config = new_config.model_copy(deep=True)
         self.logger.info(f"Configuracoes do {self.__class__.__name__} atualizadas com sucesso")
 
     def _generate_keywords(self, big_chunks: List[str]) -> List[List[str]]:

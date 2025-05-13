@@ -20,7 +20,7 @@ class EmbeddingGenerator:
             log_domain (str): Domínio para o logger.
         """
         self.logger = get_logger(__name__, log_domain=log_domain)
-        self.config = config
+        self.config = config.model_copy(deep=True)
         self.logger.info(f"Inicializando o EmbeddingGenerator com configuração: {config}")
         
         self.model = SentenceTransformer(config.model_name, device=config.device)
@@ -54,7 +54,7 @@ class EmbeddingGenerator:
             self.model.to(new_config.device)
             self.logger.debug(f"Dispositivo de embedding atualizado para {new_config.device}")
 
-        self.config = new_config
+        self.config = new_config.model_copy(deep=True)
             
         self.logger.info("Configuracoes do EmbeddingGenerator atualizadas com sucesso")
     

@@ -28,7 +28,7 @@ class DataIngestionOrchestrator:
         self.logger.info("Inicializando o DataIngestionOrchestrator")
         
         self.metrics_data = {}
-        self.config = config
+        self.config = config.model_copy(deep=True)
         self.document_processor = DocumentProcessor(log_domain=self.DEFAULT_LOG_DOMAIN)
         self.text_chunker = ChunkingManager(config, log_domain=self.DEFAULT_LOG_DOMAIN)
         self.text_normalizer = TextNormalizer(config.text_normalizer, log_domain=self.DEFAULT_LOG_DOMAIN)
@@ -67,7 +67,7 @@ class DataIngestionOrchestrator:
                 case "system":
                     self.sqlite_manager.update_config(new_config.system)
 
-        self.config = new_config
+        self.config = new_config.model_copy(deep=True)
         self.logger.info("Configuracoes do DataIngestionOrchestrator atualizadas com sucesso")
 
     def _find_original_document(self, duplicate_hash: str, conn: sqlite3.Connection) -> DocumentFile:

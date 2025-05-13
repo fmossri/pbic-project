@@ -23,7 +23,7 @@ class ChunkingManager:
             log_domain (str): Domínio para o logger.
         """
         self.logger = get_logger(__name__, log_domain=log_domain)
-        self.config = config
+        self.config = config.model_copy(deep=True)
         self.logger.info("Inicializando o TextChunker.", config_data=config.model_dump())
         self.chunker = self._create_chunker(self.config)
 
@@ -44,9 +44,9 @@ class ChunkingManager:
 
         else:
             self.chunker.update_config(new_config)
-            self.logger.info(f"Parametros de chunking alterados para: {new_config.model_dump()}")
+            self.logger.info(f"Parametros de configuração de chunking alterados")
 
-        self.config = new_config
+        self.config = new_config.model_copy(deep=True)
         self.logger.info("Configuracoes do TextChunker atualizadas com sucesso")
 
 

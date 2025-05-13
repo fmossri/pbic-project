@@ -16,7 +16,7 @@ class HuggingFaceManager:
             log_domain (str): Domínio para o logger.
         """
         self.logger = get_logger(__name__, log_domain=log_domain)
-        self.config = config
+        self.config = config.model_copy(deep=True)
         self.logger.info(f"Inicializando o HuggingFaceManager com configuração: {config}")
         self.max_retries = self.config.max_retries
         self.retry_delay = self.config.retry_delay_seconds
@@ -37,11 +37,11 @@ class HuggingFaceManager:
         self.retry_delay = new_config.retry_delay_seconds
 
         if new_config.model_repo_id != self.config.model_repo_id:
-            self.config = new_config
+            self.config = new_config.model_copy(deep=True)
             self.client = self._initialize_client()
 
         else:
-            self.config = new_config
+            self.config = new_config.model_copy(deep=True)
         
         self.logger.info("Configuracoes do HuggingFaceManager atualizadas com sucesso")
 

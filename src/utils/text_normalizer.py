@@ -8,7 +8,7 @@ class TextNormalizer:
 
     def __init__(self, config: TextNormalizerConfig, log_domain: str = "utils"):
         """Inicializa o TextNormalizer."""
-        self.config = config
+        self.config = config.model_copy(deep=True)
         self.logger = get_logger(__name__, log_domain=log_domain)
         self.logger.info("Inicializando o TextNormalizer", config=config.model_dump())
 
@@ -23,7 +23,7 @@ class TextNormalizer:
             self.logger.info("Nenhuma alteracao na configuracao detectada")
             return
         
-        self.config = new_config
+        self.config = new_config.model_copy(deep=True)
         self.logger.info("Configuracoes do TextNormalizer atualizadas com sucesso")
 
     def normalize(self, texts: list[str] | str) -> list[str]:

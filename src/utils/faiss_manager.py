@@ -24,7 +24,7 @@ class FaissManager:
             log_domain (str): Domínio para o logger.
         """
         self.logger = get_logger(__name__, log_domain=log_domain)
-        self.config = config
+        self.config = config.model_copy(deep=True)
         self.logger.info("FaissManager inicializado.", 
                          vector_store_config=self.config.vector_store.model_dump(),
                          query_config=self.config.query.model_dump()
@@ -37,7 +37,7 @@ class FaissManager:
         Args:
             config (AppConfig): A nova configuração a ser aplicada.
         """
-        self.config = new_config
+        self.config = new_config.model_copy(deep=True)
         self.logger.info("Configuracoes do DomainManager atualizadas com sucesso")
 
     def _create_vector_store(self, index_path: str, dimension: int) -> faiss.Index:

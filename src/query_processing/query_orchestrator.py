@@ -19,7 +19,7 @@ class QueryOrchestrator:
         self.logger.info("Inicializando o QueryOrchestrator")
 
         self.metrics_data = {}
-        self.config = config
+        self.config = config.model_copy(deep=True)
         self.text_normalizer = TextNormalizer(config.text_normalizer, log_domain=self.DEFAULT_LOG_DOMAIN)
         self.embedding_generator = EmbeddingGenerator(config.embedding, log_domain=self.DEFAULT_LOG_DOMAIN)
         self.faiss_manager = FaissManager(config, log_domain=self.DEFAULT_LOG_DOMAIN)
@@ -56,7 +56,7 @@ class QueryOrchestrator:
                 case "system":
                     self.sqlite_manager.update_config(new_config.system)
 
-        self.config = new_config
+        self.config = new_config.model_copy(deep=True)
         self.logger.info("Configuracoes do QueryOrchestrator atualizadas com sucesso")
 
     def _process_query(self, query: str, domain: Domain) -> np.ndarray:
@@ -71,8 +71,8 @@ class QueryOrchestrator:
         """
         self.logger.info("Iniciando o tratamento da query")
 
-        if not self.embedding_generator.config.model_name == domain.embeddings_model:
-            self.embedding_generator.config.model_name = domain.embeddings_model
+        if not self.embedding_generator.config.model_name == domain.config.embeddings_model:
+            self.embedding_generator.config.model_name = domain.config.embeddings_model
             self.logger.info("Reconfigurando o gerador de embeddings")
             self.embedding_generator = EmbeddingGenerator(config=self.embedding_generator.config, log_domain=self.DEFAULT_LOG_DOMAIN)
 
