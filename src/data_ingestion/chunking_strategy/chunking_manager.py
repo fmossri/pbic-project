@@ -38,9 +38,9 @@ class ChunkingManager:
             self.logger.info("Nenhuma alteracao na configuracao detectada")
             return
         
-        if new_config.ingestion.chunk_strategy != self.config.ingestion.chunk_strategy:
-            self.chunker = self._create_chunker(new_config.ingestion.chunk_strategy)
-            self.logger.info(f"Estrategia de chunking alterada para: {new_config.ingestion.chunk_strategy}")
+        if new_config.ingestion.chunking_strategy != self.config.ingestion.chunking_strategy:
+            self.chunker = self._create_chunker(new_config)
+            self.logger.info(f"Estrategia de chunking alterada para: {new_config.ingestion.chunking_strategy}")
 
         else:
             self.chunker.update_config(new_config)
@@ -60,7 +60,7 @@ class ChunkingManager:
         """
         chunker = None
         try:
-            match new_config.ingestion.chunk_strategy:
+            match new_config.ingestion.chunking_strategy:
                 case "recursive":
                     chunker = RecursiveStrategy(new_config, log_domain=self.logger.log_domain)
 
@@ -68,7 +68,7 @@ class ChunkingManager:
                     chunker = SemanticClusterStrategy(new_config, log_domain=self.logger.log_domain)
 
                 case _:
-                    raise ValueError(f"Estrategia de chunking nao suportada: {new_config.ingestion.chunk_strategy}")
+                    raise ValueError(f"Estrategia de chunking nao suportada: {new_config.ingestion.chunking_strategy}")
                 
             return chunker
 
