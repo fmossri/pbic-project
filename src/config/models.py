@@ -6,13 +6,13 @@ class SystemConfig(BaseModel):
     control_db_filename: str = "control.db"
 
 class IngestionConfig(BaseModel):
-    chunk_strategy: Literal["recursive", "semantic-cluster"] = "recursive"  # Adicionar "semantic" depois
+    chunking_strategy: Literal["recursive", "semantic-cluster"] = "recursive"  # Adicionar "semantic" depois
     chunk_size: PositiveInt = 1000
     chunk_overlap: conint(ge=0) = 200 # type: ignore
 
     @property
-    def chunk_strategy_options(self):
-        return self.model_fields['chunk_strategy'].annotation.__args__
+    def chunking_strategy_options(self):
+        return self.model_fields['chunking_strategy'].annotation.__args__
 
 class EmbeddingConfig(BaseModel):
     model_name: Literal[
@@ -26,7 +26,7 @@ class EmbeddingConfig(BaseModel):
     batch_size: PositiveInt = 32
     normalize_embeddings: bool = True
     weight: float = 0.7
-
+    combine_embeddings: bool = False
     @property
     def embedding_options(self):
         return self.model_fields['model_name'].annotation.__args__

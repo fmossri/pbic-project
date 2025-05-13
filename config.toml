@@ -4,7 +4,7 @@ control_db_filename = "control.db"
 
 [ingestion]
 # Estratégia de chunking: "recursive" ou potencialmente "semantic" depois
-chunk_strategy = "recursive"
+chunking_strategy = "recursive"
 
 # --- Parâmetros para RecursiveCharacterTextSplitter ---
 
