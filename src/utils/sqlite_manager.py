@@ -4,7 +4,7 @@ import json
 
 from typing import List, Optional, Dict, Any
 
-from src.models import DocumentFile, Chunk, Domain
+from src.models import DocumentFile, Chunk, Domain, DomainConfig
 from src.utils.logger import get_logger
 from src.config.models import SystemConfig
 
@@ -320,6 +320,12 @@ class SQLiteManager:
                               domain_vector_store_path=domain.vector_store_path,
                               domain_db_path=domain.db_path,
                               domain_embeddings_dimension=domain.embeddings_dimension)
+            
+            cursor.execute("SELECT last_insert_rowid()")
+            domain_id = cursor.fetchone()[0]
+            
+            return domain_id
+
         except sqlite3.Error as e:
             self.logger.error(f"Erro ao inserir o domínio de conhecimento: {e}")
             raise e
@@ -339,21 +345,13 @@ class SQLiteManager:
             all_domains : List[Domain] = []
             domain_data = cursor.fetchall()
             if domain_data:
+                # Recupera os nomes das colunas
+                columns = [description[0] for description in cursor.description]
+                
                 for row in domain_data:
-                    domain = Domain(
-                        id=row[0],
-                        name=row[1],
-                        description=row[2],
-                        keywords=row[3],
-                        total_documents=row[4],
-                        vector_store_path=row[5],
-                        db_path=row[6],
-                        embeddings_model=row[7],
-                        embeddings_dimension=row[8],
-                        faiss_index_type=row[9],
-                        created_at=row[10],
-                        updated_at=row[11]
-                    )
+                    # Cria um dicionário com os nomes das colunas e os valores da linha
+                    domain_dict = dict(zip(columns, row))
+                    domain = Domain(**domain_dict)
                     all_domains.append(domain)
                 return all_domains
             else:
@@ -405,3 +403,51 @@ class SQLiteManager:
             self.logger.error(f"Erro ao deletar o dominio de conhecimento: {e}")
             raise e
     
+    def insert_domain_config(self, domain_config: DomainConfig, conn: sqlite3.Connection) -> None:
+        """
+        Insere uma configuração de domínio no banco de dados de controle.
+        """
+        self.logger.debug(f"Inserindo configuração de domínio no banco de dados: {domain_config.domain_id}")
+
+        params = []
+        field_names_list = []
+        field_cont = 0
+        for field, value in domain_config.model_dump().items():
+            if value is not None:
+                field_cont += 1
+                field_names_list.append(f"{field}")
+                params.append(value)
+        placeholders = ", ".join("?" * field_cont)
+
+        field_names = ", ".join(field_names_list)
+        query = f"INSERT INTO knowledge_domain_configs ({field_names}) VALUES ({placeholders})"
+
+        try:
+            cursor = conn.cursor()
+            cursor.execute(query, params)
+            conn.commit()
+
+        except sqlite3.Error as e:
+            self.logger.error(f"Erro ao inserir a configuração de domínio: {e}")
+            raise e
+
+    def get_domain_config(self, conn: sqlite3.Connection, domain_id: int) -> Optional[DomainConfig]:
+        """
+        Recupera a configuração de domínio do banco de dados de controle.
+        """
+        self.logger.debug(f"Recuperando configuração de domínio do banco de dados: {domain_id}")
+        try:
+            cursor = conn.cursor()
+            cursor.execute("SELECT * FROM knowledge_domain_configs WHERE domain_id = ?", (domain_id,))
+            domain_config_data = cursor.fetchone()
+            if domain_config_data:
+                # Recupera os nomes das colunas
+                columns = [description[0] for description in cursor.description]
+                # Cria um dicionário com os nomes das colunas e os valores da linha
+                domain_config_dict = dict(zip(columns, domain_config_data))
+                return DomainConfig(**domain_config_dict)
+            else:
+                return None
+        except sqlite3.Error as e:
+            self.logger.error(f"Erro ao recuperar a configuração de domínio: {e}")
+            raise e

@@ -3,7 +3,7 @@ import shutil
 from typing import Dict, Any, List, Tuple
 from src.utils.sqlite_manager import SQLiteManager
 from src.utils.logger import get_logger
-from src.models import Domain, DocumentFile
+from src.models import Domain, DocumentFile, DomainConfig
 from src.config.models import AppConfig
 class DomainManager:
 
@@ -62,8 +62,6 @@ class DomainManager:
             "name": new_domain_data["name"],
             "description": new_domain_data["description"],
             "keywords": new_domain_data["keywords"],
-            "embeddings_model": new_domain_data["embeddings_model"],
-            "faiss_index_type": new_domain_data["faiss_index_type"],
             "db_path": domain_db_path,
             "vector_store_path": vector_store_path,
         }
@@ -83,12 +81,50 @@ class DomainManager:
 
                 # Cria o domínio e insere no banco de dados
                 domain = Domain(**domain_data)
-                self.sqlite_manager.insert_domain(domain, conn)
+                domain_id = self.sqlite_manager.insert_domain(domain, conn)
+
+                domain_config_data = {
+                    "domain_id": domain_id,
+                    "embeddings_model": new_domain_data["embeddings_model"],
+                    "faiss_index_type": new_domain_data["faiss_index_type"],
+                    "chunking_strategy": new_domain_data["chunking_strategy"],
+                    "chunk_size": new_domain_data["chunk_size"],
+                    "chunk_overlap": new_domain_data["chunk_overlap"],
+                    "cluster_distance_threshold": new_domain_data["cluster_distance_threshold"],
+                    "chunk_max_words": new_domain_data["chunk_max_words"],
+                    "normalize_embeddings": new_domain_data["normalize_embeddings"],
+                    "combine_embeddings": new_domain_data["combine_embeddings"],
+                    "embedding_weight": new_domain_data["embedding_weight"],
+                }
+
+                domain_config = DomainConfig(**domain_config_data)
+                self.sqlite_manager.insert_domain_config(domain_config, conn)
+
                 conn.commit()
                 self.logger.info("Dominio de conhecimento adicionado com sucesso", domain_name=domain_data["name"])
 
         except Exception as e:
+            if conn:
+                conn.rollback()
             self.logger.error(f"Erro ao adicionar novo domínio de conhecimento: {e}", exc_info=True)
+            raise e
+
+    def load_domain_config(self, domain_id: int) -> DomainConfig:
+        """
+        Carrega a configuração de um domínio de conhecimento.
+        """
+        self.logger.info("Carregando configuracao de dominio", domain_id=domain_id)
+        try:
+            with self.sqlite_manager.get_connection(control=True) as conn:
+                domain_config = self.sqlite_manager.get_domain_config(conn=conn, domain_id=domain_id)
+                if not domain_config:
+                    self.logger.error("Configuracao de dominio nao encontrada", domain_id=domain_id)
+                    raise ValueError(f"Configuracao de dominio nao encontrada: domain_id={domain_id}")
+        
+            return domain_config
+
+        except Exception as e:
+            self.logger.error(f"Erro ao carregar configuracao de dominio: {e}", exc_info=True)
             raise e
 
     def remove_domain_registry_and_files(self, domain_name: str) -> None:
@@ -112,6 +148,7 @@ class DomainManager:
                 # Remove o diretório e os arquivos do domínio
                 treated_domain_name = domain.name.lower().replace(" ", "_")
                 domain_dir = os.path.join(self.storage_base_path, treated_domain_name)
+
                 if os.path.isdir(domain_dir):
                     shutil.rmtree(domain_dir)
                     self.logger.info("Diretorio e arquivos do dominio removidos com sucesso", domain_directory=domain_dir)
