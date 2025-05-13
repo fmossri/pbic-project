@@ -20,10 +20,8 @@ CREATE TABLE IF NOT EXISTS document_files (
 CREATE TABLE IF NOT EXISTS chunks (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     document_id INTEGER NOT NULL,
-    page_number INTEGER NOT NULL,
-    chunk_page_index INTEGER NOT NULL,
-    chunk_start_char_position INTEGER NOT NULL,
     content TEXT NOT NULL UNIQUE,
+    metadata TEXT NOT NULL,  -- JSON string containing page_list, index_list, keywords, filename
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (document_id) REFERENCES document_files(id)
         ON DELETE CASCADE
