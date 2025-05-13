@@ -285,7 +285,7 @@ class DataIngestionOrchestrator:
                 
                 try:
                     # processa o documento, adicionando as páginas, hash e total de páginas ao objeto DocumentFile
-                    self.document_processor.process_document(file)
+                    self.document_processor.process_document(file, normalize_whitespace=self.config.text_normalizer.use_remove_extra_whitespace)
 
                     file_metrics["total_pages"] = len(file.pages)
                     # Verifica se o documento é uma réplica

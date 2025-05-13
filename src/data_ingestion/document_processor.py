@@ -1,5 +1,6 @@
 import hashlib
 import os
+import re
 
 from typing import List
 from langchain_community.document_loaders import PyPDFLoader
@@ -8,6 +9,7 @@ from langchain.schema import Document
 
 from src.models import DocumentFile
 from src.utils.logger import get_logger
+
 class DocumentProcessor:
     """Processa documentos PDF para extração de texto."""
 
@@ -75,7 +77,7 @@ class DocumentProcessor:
             raise PdfStreamError(f"Erro ao processar PDF: {str(e)}") 
         
     # TODO: Extrair data de publicação do documento
-    def process_document(self, file: DocumentFile) -> None:
+    def process_document(self, file: DocumentFile, normalize_whitespace: bool) -> None:
         """
         Processa um documento PDF, extraindo texto página por página, calculando o hash do documento e atualizando o objeto DocumentFile.
         
@@ -84,9 +86,15 @@ class DocumentProcessor:
         
         self.logger.info(f"Iniciando o processamento do documento {file.name}", file_path=file.path)
 
-        # Extrai o texto do PDF
         try:
+            # Extrai o texto do PDF
             pages = self._extract_text(file.path)
+            
+            # Normaliza espaços em branco
+            if normalize_whitespace:
+                for page in pages:
+                    page.page_content = re.sub(r'\s+', ' ', page.page_content.strip())
+
             file.pages = pages
             file.total_pages = len(pages)
 
