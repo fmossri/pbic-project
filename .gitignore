@@ -55,3 +55,6 @@ config-brainstorm.txt
 # Databases and faiss index files
 storage/domains/
 storage/control.db
+
+# Other custom dev files
+clustering_experiment.py
