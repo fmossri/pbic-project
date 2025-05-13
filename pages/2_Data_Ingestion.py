@@ -151,7 +151,7 @@ with st.form("data_ingestion_form"):
     col1, col2 = st.columns(2)
     with col1:
         embedding_device = st.selectbox(
-            "Dispositivo Embedding", 
+            "Dispositivo para Embedding", 
             options=embedding_options, 
             index=default_index,
             key="embedding_device_select",

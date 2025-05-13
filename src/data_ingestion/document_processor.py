@@ -74,7 +74,7 @@ class DocumentProcessor:
             self.logger.error("Erro ao processar PDF", error=str(e))
             raise PdfStreamError(f"Erro ao processar PDF: {str(e)}") 
         
-
+    # TODO: Extrair data de publicação do documento
     def process_document(self, file: DocumentFile) -> None:
         """
         Processa um documento PDF, extraindo texto página por página, calculando o hash do documento e atualizando o objeto DocumentFile.

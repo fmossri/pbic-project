@@ -263,7 +263,7 @@ if st.session_state.selected_domain_name is not None:
                         with action_cols[0]:
                             if st.button("✔️", key=confirm_key, help=f"Confirmar remoção de {doc_name}", type="primary"):
                                 st.toast(f"Removendo documento '{doc_name}'...", icon="⏳")
-                                success = delete_document_from_domain(domain_manager, selected_domain_name, doc)
+                                success = print("delete doc placeholder")#delete_document_from_domain(domain_manager, selected_domain_name, doc)
                                 if success:
                                     st.toast(f"Documento '{doc_name}' removido com sucesso!", icon="✅")
                                     st.session_state.confirming_delete_doc_id = None   
