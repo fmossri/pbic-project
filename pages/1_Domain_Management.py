@@ -137,7 +137,6 @@ if not original_domain_df.empty:
                         domain_manager.remove_domain_registry_and_files(selected_domain_name)
                         st.toast(f"Domínio '{selected_domain_name}' removido com sucesso!", icon="✅")
                         st.session_state.confirming_delete_name = None # Reset confirmation state
-                        st.session_state.selected_domain_name = None # Reset selection
                         st.rerun()
                     except ValueError as ve:
                         st.error(f"Erro ao remover {selected_domain_name}: {ve}")
@@ -174,7 +173,7 @@ if st.session_state.selected_domain_name is not None:
     
     if selected_domain_series is not None:
         original_name = selected_domain_series['name'] 
-        domain_id = selected_domain_series['ID']
+        domain_id = int(selected_domain_series['ID'])
 
         # --- Two-Column Layout for Details/Edit ---
         col_left, col_right = st.columns(2)
@@ -223,6 +222,40 @@ if st.session_state.selected_domain_name is not None:
             st.code(selected_domain_series["db_path"], language=None)
             st.markdown(f"**Caminho Vector Store:**")
             st.code(selected_domain_series["vector_store_path"], language=None)
+
+            # Carrega e exibe a configuração do domínio
+            try:
+                domain_config = domain_manager.load_domain_config(domain_id)
+                if domain_config:
+                    with st.expander("Configurações do Domínio", expanded=False):
+                        # Configurações de Embedding
+                        st.markdown("**Configurações de Embedding:**")
+                        st.markdown(f"- Modelo: `{domain_config.embeddings_model}`")
+                        st.markdown(f"- Normalizar Embeddings: `{bool(domain_config.normalize_embeddings)}`")
+                        st.markdown(f"- Combinar Embeddings: `{bool(domain_config.combine_embeddings)}`")
+                        st.markdown(f"- Peso do Embedding: `{float(domain_config.embedding_weight)}`")
+                        
+                        # Configurações de Vector Store
+                        st.markdown("**Configurações de Vector Store:**")
+                        st.markdown(f"- Tipo de Índice: `{domain_config.faiss_index_type}`")
+                        
+                        # Configurações de Chunking
+                        st.markdown("**Configurações de Chunking:**")
+                        st.markdown(f"- Estratégia: `{domain_config.chunking_strategy}`")
+                        st.markdown(f"- Tamanho do Chunk: `{int(domain_config.chunk_size)}`")
+                        st.markdown(f"- Overlap: `{int(domain_config.chunk_overlap)}`")
+                        
+                        # Configurações específicas do semantic-cluster
+                        if domain_config.chunking_strategy == "semantic-cluster":
+                            st.markdown("**Configurações de Clustering:**")
+                            st.markdown(f"- Threshold de Distância: `{float(domain_config.cluster_distance_threshold)}`")
+                            st.markdown(f"- Máximo de Palavras: `{int(domain_config.chunk_max_words)}`")
+            except ValueError as ve: # Handle cases where config might not be found or other value errors
+                st.warning(f"Configuração do domínio não encontrada ou inválida: {ve}")
+                logger.warning(f"Configuracao do dominio nao encontrada ou invalida para domain_id={domain_id}: {ve}")
+            except Exception as e:
+                st.error(f"Erro ao carregar configurações do domínio: {e}")
+                logger.error("Erro ao carregar configuracoes do dominio", error=str(e), exc_info=True)
 
 
         # --- Seção da lista de documentos ---

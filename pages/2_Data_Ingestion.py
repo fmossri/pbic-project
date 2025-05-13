@@ -56,17 +56,39 @@ def handle_submission():
 
     # --- Atualiza as configurações do domínio se necessário ---
     try:
-        if selected_domain_object.embeddings_model != config.embedding.model_name or selected_domain_object.faiss_index_type != config.vector_store.index_type:
-            logger.info("Configuracoes de embeddings ou vector store nao correspondem aos valores do dominio. Atualizando configuracoes.", selected_domain=domain_name)
-            config.embedding.model = selected_domain_object.embeddings_model
-            config.vector_store.faiss.index_type = selected_domain_object.faiss_index_type
-            try:
-                orchestrator.update_config(config)
-            except Exception as e:
-                logger.error("Erro ao atualizar configuracoes.", selected_domain=domain_name, error=str(e), exc_info=True)
-                st.error(f"Erro ao atualizar configuracoes: {e}")
-                st.stop()
+        # Carrega a configuração do domínio
+        domain_config = domain_manager.load_domain_config(selected_domain_object.id)
+        if not domain_config:
+            st.error(f"Erro: Configuração do domínio '{domain_name}' não encontrada.")
+            logger.error("Configuracao do dominio nao encontrada.", selected_domain=domain_name)
+            return
 
+        # Atualiza as configurações com base no domínio e sua configuração
+        logger.info("Atualizando configuracoes com base no dominio e sua configuracao.", selected_domain=domain_name)
+        
+        # Atualiza configurações de embedding e vector store
+        config.embedding.model_name = domain_config.embeddings_model
+        config.vector_store.index_type = domain_config.faiss_index_type
+        
+        # Atualiza configurações de chunking
+        config.ingestion.chunking_strategy = domain_config.chunking_strategy
+        config.ingestion.chunk_size = domain_config.chunk_size
+        config.ingestion.chunk_overlap = domain_config.chunk_overlap
+        
+        # Se for semantic-cluster, atualiza as configurações específicas
+        if domain_config.chunking_strategy == "semantic-cluster":
+            config.embedding.weight = domain_config.embedding_weight
+            config.embedding.normalize_embeddings = domain_config.normalize_embeddings
+            config.embedding.combine_embeddings = domain_config.combine_embeddings
+            config.clustering.distance_threshold = domain_config.cluster_distance_threshold
+            config.clustering.max_words = domain_config.chunk_max_words
+        
+        try:
+            orchestrator.update_config(config)
+        except Exception as e:
+            logger.error("Erro ao atualizar configuracoes.", selected_domain=domain_name, error=str(e), exc_info=True)
+            st.error(f"Erro ao atualizar configuracoes: {e}")
+            st.stop()
 
         results = orchestrator.process_directory(directory_path=dir_path, domain_name=domain_name) 
         

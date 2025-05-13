@@ -87,6 +87,10 @@ st.divider()
 
 st.header("Criar Novo Domínio")
 # === Formulario de Criação de Domínio ===
+
+# Move the chunking strategy selection outside the form
+ingestion_chunking_strategy = st.selectbox("Estratégia de chunking", options=["recursive", "semantic-cluster"], index=0, key="ingestion_chunking_strategy")
+
 with st.form("create_domain_form", clear_on_submit=True):
     col1, col2 = st.columns(2)
     with col1:
@@ -95,8 +99,6 @@ with st.form("create_domain_form", clear_on_submit=True):
         keywords = st.text_input("Palavras-chave (separadas por vírgula)", key="keywords", placeholder="Ex: RAG, Ingestão de Dados, Processamento de Texto")
     
     with col2:
-
-        ingestion_chunk_strategy = st.selectbox("Estratégia de chunking", options=["recursive"], index=0, key="ingestion_chunk_strategy") # Only recursive for now
         ingestion_chunk_size = st.number_input("Tamanho do chunk em chars", min_value=50, step=10, value=config.ingestion.chunk_size, key="ingestion_chunk_size")
         ingestion_chunk_overlap = st.number_input("Overlap", min_value=0, step=10, value=config.ingestion.chunk_overlap, key="ingestion_chunk_overlap")
               
@@ -113,9 +115,15 @@ with st.form("create_domain_form", clear_on_submit=True):
             key="embedding_model_name_select",
             help="Modelo de Embedding usado para criar representações vetoriais dos documentos e da query. Não pode ser alterado após a criação do domínio."
             )
-        embedding_normalize_embeddings = st.checkbox("Normaliza Embeddings", value=config.embedding.normalize_embeddings, key="embedding_normalize_embeddings")
-            
+        
+        # Config para semantic-cluster-strategy
+        if ingestion_chunking_strategy == "semantic-cluster":
+            embedding_weight = st.number_input("Peso do Embedding", min_value=0.0, max_value=1.0, value=config.embedding.weight, key="embedding_weight")
+            cluster_distance_threshold = st.number_input("Threshold de Cluster", min_value=0.0, max_value=1.0, value=config.clustering.distance_threshold, key="cluster_distance_threshold")
+            chunk_max_words = st.number_input("Máximo de Palavras por Chunk", min_value=10, step=1, value=config.clustering.max_words, key="chunk_max_words")
+            embedding_combine_embeddings = st.checkbox("Combina Embeddings", value=config.embedding.combine_embeddings, key="embedding_combine_embeddings")
 
+        embedding_normalize_embeddings = st.checkbox("Normaliza Embeddings", value=config.embedding.normalize_embeddings, key="embedding_normalize_embeddings")
 
     submitted = st.form_submit_button("Criar Domínio")
     if submitted:
@@ -129,10 +137,14 @@ with st.form("create_domain_form", clear_on_submit=True):
                     "keywords": keywords,
                     "embeddings_model": embedding_model,
                     "faiss_index_type": faiss_index_type,
-                    #"ingestion_chunk_strategy": ingestion_chunk_strategy,
-                    #"ingestion_chunk_size": ingestion_chunk_size,
-                    #"ingestion_chunk_overlap": ingestion_chunk_overlap,
-                    #"embedding_normalize_embeddings": embedding_normalize_embeddings
+                    "chunking_strategy": ingestion_chunking_strategy,
+                    "chunk_size": ingestion_chunk_size,
+                    "chunk_overlap": ingestion_chunk_overlap,
+                    "normalize_embeddings": embedding_normalize_embeddings,
+                    "combine_embeddings": embedding_combine_embeddings if ingestion_chunking_strategy == "semantic-cluster" else False,
+                    "embedding_weight": embedding_weight if ingestion_chunking_strategy == "semantic-cluster" else 0.7,
+                    "cluster_distance_threshold": cluster_distance_threshold if ingestion_chunking_strategy == "semantic-cluster" else 0.85,
+                    "chunk_max_words": chunk_max_words if ingestion_chunking_strategy == "semantic-cluster" else 250
                 }
                 domain_manager.create_domain(domain_data)
                 st.success(f"Domínio '{domain_name}' criado com sucesso!")
