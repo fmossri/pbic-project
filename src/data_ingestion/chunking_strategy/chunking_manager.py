@@ -25,7 +25,7 @@ class ChunkingManager:
         self.logger = get_logger(__name__, log_domain=log_domain)
         self.config = config
         self.logger.info("Inicializando o TextChunker.", config_data=config.model_dump())
-        self.chunker = self._create_chunker(config.chunk_strategy)
+        self.chunker = self._create_chunker(self.config)
 
     def update_config(self, new_config: AppConfig) -> None:
         """
