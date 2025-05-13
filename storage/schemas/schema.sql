@@ -28,6 +28,8 @@ CREATE TABLE IF NOT EXISTS chunks (
         ON UPDATE CASCADE
 );
 
+DROP TRIGGER IF EXISTS update_document_file_updated_at;
+
 CREATE TRIGGER update_document_file_updated_at
     AFTER UPDATE ON document_files
     FOR EACH ROW
