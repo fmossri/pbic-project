@@ -1,10 +1,13 @@
 import sqlite3
 import os
+import json
+
 from typing import List, Optional, Dict, Any
+
 from src.models import DocumentFile, Chunk, Domain
 from src.utils.logger import get_logger
 from src.config.models import SystemConfig
-import datetime
+
 
 class SQLiteManager:
     """Gerenciador de banco de dados SQLite."""
@@ -216,8 +219,8 @@ class SQLiteManager:
             try:
                     cursor = conn.cursor()
                     cursor.execute(
-                        "INSERT INTO chunks (document_id, page_number, content, chunk_page_index, chunk_start_char_position) VALUES (?, ?, ?, ?, ?)", 
-                        (file_id, chunk.page_number, chunk.content, chunk.chunk_page_index, chunk.chunk_start_char_position)
+                        "INSERT INTO chunks (document_id, content, metadata) VALUES (?, ?, ?)", 
+                        (file_id, chunk.content, json.dumps(chunk.metadata))
                     )
                     chunk.id = cursor.lastrowid
                     inserted_ids.append(chunk.id)
@@ -271,11 +274,9 @@ class SQLiteManager:
                     chunk = Chunk(
                         id=row[0],
                         document_id=row[1],
-                        page_number=row[2],
-                        chunk_page_index=row[3],
-                        chunk_start_char_position=row[4],
-                        content=row[5],
-                        created_at=row[6]
+                        content=row[2],
+                        metadata=json.loads(row[3]), 
+                        created_at=row[4]
                     )
                     chunks.append(chunk)
 

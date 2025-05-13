@@ -19,11 +19,13 @@ class EmbeddingConfig(BaseModel):
         "sentence-transformers/all-MiniLM-L6-v2", 
         "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2", 
         "sentence-transformers/all-mpnet-base-v2", 
+        "sentence-transformers/LaBSE",
         "intfloat/e5-large-v2"
         ] = "sentence-transformers/all-MiniLM-L6-v2"
     device: Literal["cpu", "cuda"] = "cpu"
     batch_size: PositiveInt = 32
     normalize_embeddings: bool = True
+    weight: float = 0.7
 
     @property
     def embedding_options(self):
@@ -32,6 +34,10 @@ class EmbeddingConfig(BaseModel):
     @property
     def device_options(self):
         return self.model_fields['device'].annotation.__args__
+    
+class ClusteringConfig(BaseModel):
+    distance_threshold: float = 0.85
+    max_words: int = 250
 
 class VectorStoreConfig(BaseModel):
     index_type: Literal["IndexFlatL2"] = "IndexFlatL2" # IndexFlatL2 possui um IndexIDMap wrapper
@@ -75,10 +81,10 @@ class AppConfig(BaseModel):
     query: QueryConfig = Field(default_factory=QueryConfig)
     llm: LLMConfig = Field(default_factory=LLMConfig)
     text_normalizer: TextNormalizerConfig = Field(default_factory=TextNormalizerConfig)
-
+    clustering: ClusteringConfig = Field(default_factory=ClusteringConfig)
     model_config = ConfigDict(
         # Opcional: Se desejar permitir campos extras no TOML
         # que não estão definidos nos modelos (útil durante o desenvolvimento)
         # extra = 'ignore'
-        # Add any other settings from the old Config class here
+        # Adicione outras configurações da classe Config antiga (pydantic) aqui
     ) 

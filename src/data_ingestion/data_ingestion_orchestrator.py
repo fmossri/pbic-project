@@ -7,7 +7,7 @@ from src.models import DocumentFile, Chunk
 from src.utils import TextNormalizer, EmbeddingGenerator, FaissManager, SQLiteManager
 from src.utils.logger import get_logger
 from .document_processor import DocumentProcessor
-from .chunking_strategy import ChunkingManager
+from .chunking_strategy.chunking_manager import ChunkingManager
 from src.config import AppConfig, check_config_changes
 class DataIngestionOrchestrator:
     """Componente principal para gerenciar o processamento de arquivos PDF."""
@@ -29,12 +29,12 @@ class DataIngestionOrchestrator:
         
         self.metrics_data = {}
         self.config = config
-        self.document_processor: DocumentProcessor = DocumentProcessor(log_domain=self.DEFAULT_LOG_DOMAIN)
-        self.text_chunker: ChunkingManager = ChunkingManager(config.ingestion, log_domain=self.DEFAULT_LOG_DOMAIN)
-        self.text_normalizer: TextNormalizer = TextNormalizer(config.text_normalizer, log_domain=self.DEFAULT_LOG_DOMAIN)
-        self.embedding_generator: EmbeddingGenerator = EmbeddingGenerator(config.embedding, log_domain=self.DEFAULT_LOG_DOMAIN)
-        self.sqlite_manager: SQLiteManager = SQLiteManager(config.system, log_domain=self.DEFAULT_LOG_DOMAIN)
-        self.faiss_manager: FaissManager = FaissManager(config, log_domain=self.DEFAULT_LOG_DOMAIN)
+        self.document_processor = DocumentProcessor(log_domain=self.DEFAULT_LOG_DOMAIN)
+        self.text_chunker = ChunkingManager(config, log_domain=self.DEFAULT_LOG_DOMAIN)
+        self.text_normalizer = TextNormalizer(config.text_normalizer, log_domain=self.DEFAULT_LOG_DOMAIN)
+        self.embedding_generator = EmbeddingGenerator(config.embedding, log_domain=self.DEFAULT_LOG_DOMAIN)
+        self.sqlite_manager = SQLiteManager(config.system, log_domain=self.DEFAULT_LOG_DOMAIN)
+        self.faiss_manager = FaissManager(config, log_domain=self.DEFAULT_LOG_DOMAIN)
         self.document_hashes: Dict[str, str] = {}
 
     def update_config(self, new_config: AppConfig) -> None:
@@ -57,11 +57,11 @@ class DataIngestionOrchestrator:
         for field in update_fields:
             match field:
                 case "ingestion":
-                    self.text_chunker.update_config(new_config.ingestion)
+                    self.text_chunker.update_config(new_config)
                 case "embedding":
                     self.embedding_generator.update_config(new_config.embedding)
                 case "vector_store":
-                    self.faiss_manager.update_config(new_config.vector_store)
+                    self.faiss_manager.update_config(new_config)
                 case "text_normalizer":
                     self.text_normalizer.update_config(new_config.text_normalizer)
                 case "system":
@@ -153,8 +153,8 @@ class DataIngestionOrchestrator:
         self.metrics_data["process"] = "Ingestão de dados"
         self.metrics_data["start_time"] = start_time
         self.metrics_data["text_chunker"] = type(self.text_chunker.chunker).__name__
-        self.metrics_data["chunk_size"] = self.text_chunker.config.chunk_size
-        self.metrics_data["chunk_overlap"] = self.text_chunker.config.chunk_overlap
+        self.metrics_data["chunk_size"] = self.text_chunker.config.ingestion.chunk_size
+        self.metrics_data["chunk_overlap"] = self.text_chunker.config.ingestion.chunk_overlap
         self.metrics_data["embedding_model"] = self.embedding_generator.config.model_name
         self.metrics_data["embedding_dimension"] = None
         self.metrics_data["faiss_index_path"] = None
@@ -329,34 +329,10 @@ class DataIngestionOrchestrator:
                         conn.rollback()
                         continue
 
-
                     self.logger.info(f"Total de paginas: {len(file.pages)}")
                     self.logger.info(f"Iniciando a criacao de chunks")
-                    document_chunks : List[Chunk] = []
-                    page_counter = 0
-
-                    # Processa cada página e coleta seus chunks
-                    for page in file.pages:
-                        page_counter += 1
-                        self.logger.debug(f"Processando pagina: {page_counter}/{len(file.pages)}")
-
-                        # Divide a página criando objetos Chunk com conteúdo, document_id e outros metadados
-                        page_chunks = self.text_chunker.create_chunks(
-                            text=page.page_content,
-                            metadata={
-                                    "page_number": page.metadata["page"],
-                                    "document_id": file.id,
-                                }
-                            )
-
-                        if not page_chunks:
-                            self.logger.warning(f"Pagina vazia encontrada: {page.metadata['page']}", file_path=file.path)
-                            continue
-                        
-                        #Adiciona os chunks da página à lista de chunks do documento
-                        document_chunks.extend(page_chunks)
-                    
-
+                    # Cria os chunks para o documento de acordo com a estratégia selecionada    
+                    document_chunks : List[Chunk] = self.text_chunker.create_chunks(file)
                     if not document_chunks:
                         self.logger.error(f"Nenhum chunk gerado", file_path=file.path)
                         self.logger.error(f"Descartando alteracoes da transacao")
