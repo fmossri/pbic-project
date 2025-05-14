@@ -46,8 +46,8 @@ retrieval_k = 5
 
 [llm]
 # ID do repositório do modelo Hugging Face Hub para inferência
-# Default: "HuggingFaceH4/zephyr-7b-beta"
-model_repo_id = "HuggingFaceH4/zephyr-7b-beta"
+# Default: "mistralai/Mistral-7B-Instruct-v0.3"
+model_repo_id = "mistralai/Mistral-7B-Instruct-v0.3"
 
 # --- Parâmetros da Geração de Texto --- 
 
