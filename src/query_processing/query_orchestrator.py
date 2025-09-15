@@ -14,7 +14,7 @@ class QueryOrchestrator:
     Orquestrador de queries para o sistema de busca.
     """
     DEFAULT_LOG_DOMAIN = "Processamento de queries"
-    def __init__(self, config: AppConfig):
+    def __init__(self, config: AppConfig, sqlite_manager: Optional[SQLiteManager] = None):
         self.logger = get_logger(__name__, log_domain=self.DEFAULT_LOG_DOMAIN)
         self.logger.info("Inicializando o QueryOrchestrator")
 
@@ -23,7 +23,7 @@ class QueryOrchestrator:
         self.text_normalizer = TextNormalizer(config.text_normalizer, log_domain=self.DEFAULT_LOG_DOMAIN)
         self.embedding_generator = EmbeddingGenerator(config.embedding, log_domain=self.DEFAULT_LOG_DOMAIN)
         self.faiss_manager = FaissManager(config, log_domain=self.DEFAULT_LOG_DOMAIN)
-        self.sqlite_manager = SQLiteManager(config.system, log_domain=self.DEFAULT_LOG_DOMAIN)
+        self.sqlite_manager = sqlite_manager if sqlite_manager else SQLiteManager(config.system, log_domain=self.DEFAULT_LOG_DOMAIN)
         self.hugging_face_manager = HuggingFaceManager(config.llm, log_domain=self.DEFAULT_LOG_DOMAIN)
 
     def update_config(self, new_config: AppConfig) -> None:
@@ -111,8 +111,8 @@ class QueryOrchestrator:
             raise ValueError("Query vazia ou inválida")
         
         prepared_prompt = f"""
-        Você é um especialista em selecionar domínios relevantes para uma query.
-        Sua tarefa é selecionar os domínios que são mais relevantes para a query.
+        Você é um especialista em selecionar domínios de conhecimento relevantes para uma query.
+        Sua tarefa é selecionar os domínios de conhecimentoque são mais relevantes para a query.
         Sua resposta deve ser sempre um nome de domínio ou uma lista de nomes de domínios separados por pipes "|".
         Você deve selecionar apenas um domínio, a não ser que a query seja muito ampla e possa precisar ser respondida por mais de um domínio.
         Retorne apenas o nome do domínio selecionado. Se mais de um domínio for relevante, retorne uma lista com os nomes dos domínios selecionados separados por pipes "|".
@@ -125,7 +125,7 @@ class QueryOrchestrator:
         "Domínio 1|Domínio 2|Domínio 3"
 
         ================================================
-        Domínios disponíveis:
+        Estes são os domínios de conhecimento disponíveis:
         """
 
 
@@ -157,15 +157,15 @@ class QueryOrchestrator:
                     self.logger.info("Enviando prompt para o LLM para selecao de dominio", domain_selection_prompt=prepared_prompt)
 
                     try:
-                        response: str = self.hugging_face_manager.generate_answer(query, prepared_prompt)
+                        llm_response: str = self.hugging_face_manager.generate_answer(query, prepared_prompt)
                         self.logger.debug("chamada ao LLM para selecao de dominio realizada com sucesso.")
                     except Exception as llm_error:
                         self.logger.error("Erro durante a chamada ao LLM para selecao de dominio", exc_info=True)
                         raise llm_error
 
-                    self.logger.debug("Resposta bruta do LLM para selecao de dominio:", raw_response=response)
+                    self.logger.debug("Resposta bruta do LLM para selecao de dominio:", raw_response=llm_response)
                     
-                    response_domain_names = response.split("|")
+                    response_domain_names = llm_response.split("|")
                     response_domain_names = [name.strip() for name in response_domain_names]
                     self.logger.debug(f"Dominios selecionados: {response_domain_names}")
                     self.logger.info(f"Dominios selecionados: {response_domain_names}")
@@ -346,6 +346,9 @@ class QueryOrchestrator:
 
             context_prompt = self._prepare_context_prompt(query, chunks)
             self.logger.debug("Prompt final sendo enviado ao LLM:", final_prompt=context_prompt)
+
+
+
 
             answer = self.hugging_face_manager.generate_answer(query, context_prompt)
             print(f"{answer}")
