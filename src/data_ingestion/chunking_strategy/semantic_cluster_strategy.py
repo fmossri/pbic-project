@@ -1,10 +1,8 @@
 import numpy as np
 
-from typing import Optional, Dict, List
+from typing import Dict, List
 
 from langchain.text_splitter import RecursiveCharacterTextSplitter
-from sentence_transformers import SentenceTransformer
-from keybert import KeyBERT
 from sklearn.cluster import AgglomerativeClustering
 
 

@@ -45,12 +45,14 @@ logs/
 
 # Arquivos do plantUML
 *.png
-components-diagram.puml
+*.puml
+out/
 
-# resumos
+# resumos e diagramas
 summary.txt
 update.txt
 config-brainstorm.txt
+DATA_INGESTION_SEQUENCE.md
 
 # Databases and faiss index files
 storage/domains/

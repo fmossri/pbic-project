@@ -60,16 +60,16 @@ class ChunkingManager:
         """
         chunker = None
         try:
-            match new_config.ingestion.chunking_strategy:
-                case "recursive":
-                    chunker = RecursiveStrategy(new_config, log_domain=self.logger.log_domain)
+            #match new_config.ingestion.chunking_strategy:
+            #    case "recursive":
+            #        chunker = RecursiveStrategy(new_config, log_domain=self.logger.log_domain)
 
-                case "semantic-cluster":
-                    chunker = SemanticClusterStrategy(new_config, log_domain=self.logger.log_domain)
+            #    case "semantic-cluster":
+            #        chunker = SemanticClusterStrategy(new_config, log_domain=self.logger.log_domain)
 
-                case _:
-                    raise ValueError(f"Estrategia de chunking nao suportada: {new_config.ingestion.chunking_strategy}")
-                
+            #    case _:
+            #        raise ValueError(f"Estrategia de chunking nao suportada: {new_config.ingestion.chunking_strategy}")
+            chunker = SemanticClusterStrategy(new_config, log_domain=self.logger.log_domain)
             return chunker
 
         except Exception as e:

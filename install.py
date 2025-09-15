@@ -87,6 +87,8 @@ def main():
           Subprojeto: Ingestão de Dados para Agentes Conversacionais: Construção de Bases de Conhecimento com VectorRAG
           Aluno desenvolvedor: Francisco de Bulhões Mossri
           Orientador: João Carlos Néto
+
+          CREDITOS: #TODO
           """
           )
     

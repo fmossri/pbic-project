@@ -6,7 +6,7 @@ class SystemConfig(BaseModel):
     control_db_filename: str = "control.db"
 
 class IngestionConfig(BaseModel):
-    chunking_strategy: Literal["recursive", "semantic-cluster"] = "recursive"  # Adicionar "semantic" depois
+    chunking_strategy: Literal["recursive", "semantic-cluster"] = "semantic-cluster"
     chunk_size: PositiveInt = 1000
     chunk_overlap: conint(ge=0) = 200 # type: ignore
 
@@ -21,7 +21,7 @@ class EmbeddingConfig(BaseModel):
         "sentence-transformers/all-mpnet-base-v2", 
         "sentence-transformers/LaBSE",
         "intfloat/e5-large-v2"
-        ] = "sentence-transformers/all-MiniLM-L6-v2"
+        ] = "sentence-transformers/all-mpnet-base-v2"
     device: Literal["cpu", "cuda"] = "cpu"
     batch_size: PositiveInt = 32
     normalize_embeddings: bool = True
@@ -40,7 +40,7 @@ class ClusteringConfig(BaseModel):
     max_words: int = 250
 
 class VectorStoreConfig(BaseModel):
-    index_type: Literal["IndexFlatL2"] = "IndexFlatL2" # IndexFlatL2 possui um IndexIDMap wrapper
+    index_type: Literal["IndexFlatL2"] = "IndexFlatL2" # IndexFlatL2 possui um IndexIDMap wrapper em nosso sistema
     index_params: Optional[Dict[str, Any]] = None
     
     @property
