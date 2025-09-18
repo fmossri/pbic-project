@@ -40,14 +40,14 @@ class RAGInterface:
     and generating answers using the LLM.
     """
     
-    def __init__(self, config_path: Optional[str] = None, config: Optional[AppConfig] = None):
+    def __init__(self, config_path: Optional[str] = None, config: Optional[AppConfig] = None, llm_generator: Optional[Generator] = None):
         """
         Initialize the RAG Interface.
         
         Args:
             config_path: Path to config.toml file. If None, uses default path.
             config: Pre-configured AppConfig instance. If provided, config_path is ignored.
-            
+            llm_generator: Pre-configured LLM generator instance. If provided, config_path and config are ignored.
         Raises:
             RAGInterfaceError: If initialization fails.
         """
@@ -83,7 +83,7 @@ class RAGInterface:
             )
             
             # Initialize query orchestrator
-            self.query_orchestrator = QueryOrchestrator(self.config, self.sqlite_manager)
+            self.query_orchestrator = QueryOrchestrator(self.config, self.sqlite_manager, llm_generator)
             
             self.logger.info("RAG Interface initialized successfully")
             

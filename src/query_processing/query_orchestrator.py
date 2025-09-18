@@ -8,13 +8,14 @@ from src.models import Domain, Chunk
 from src.utils import TextNormalizer, EmbeddingGenerator, FaissManager, SQLiteManager
 from src.utils.logger import get_logger
 from .hugging_face_manager import HuggingFaceManager
+from agent.Generator import Generator
 
 class QueryOrchestrator:
     """
     Orquestrador de queries para o sistema de busca.
     """
     DEFAULT_LOG_DOMAIN = "Processamento de queries"
-    def __init__(self, config: AppConfig, sqlite_manager: Optional[SQLiteManager] = None):
+    def __init__(self, config: AppConfig, sqlite_manager: Optional[SQLiteManager] = None, llm_generator: Optional[Generator] = None):
         self.logger = get_logger(__name__, log_domain=self.DEFAULT_LOG_DOMAIN)
         self.logger.info("Inicializando o QueryOrchestrator")
 
@@ -24,7 +25,7 @@ class QueryOrchestrator:
         self.embedding_generator = EmbeddingGenerator(config.embedding, log_domain=self.DEFAULT_LOG_DOMAIN)
         self.faiss_manager = FaissManager(config, log_domain=self.DEFAULT_LOG_DOMAIN)
         self.sqlite_manager = sqlite_manager if sqlite_manager else SQLiteManager(config.system, log_domain=self.DEFAULT_LOG_DOMAIN)
-        self.hugging_face_manager = HuggingFaceManager(config.llm, log_domain=self.DEFAULT_LOG_DOMAIN)
+        self.llm_generator = llm_generator if llm_generator else HuggingFaceManager(config.llm, log_domain=self.DEFAULT_LOG_DOMAIN)
 
     def update_config(self, new_config: AppConfig) -> None:
         """
@@ -46,7 +47,8 @@ class QueryOrchestrator:
         for field in update_fields:
             match field:
                 case "llm":
-                    self.hugging_face_manager.update_config(new_config.llm)
+                    #self.llm_generator.update_config(new_config.llm)
+                    pass
                 case "embedding":
                     self.embedding_generator.update_config(new_config.embedding)
                 case "vector_store" | "query":
@@ -155,9 +157,12 @@ class QueryOrchestrator:
 
                     self.logger.debug(f"Prompt preparado: {prepared_prompt}")
                     self.logger.info("Enviando prompt para o LLM para selecao de dominio", domain_selection_prompt=prepared_prompt)
-
+                    messages = [
+                        {"role": "system", "content": prepared_prompt},
+                        {"role": "user", "content": query}
+                    ]
                     try:
-                        llm_response: str = self.hugging_face_manager.generate_answer(query, prepared_prompt)
+                        llm_response: str = self.llm_generator.generate_answer(messages)
                         self.logger.debug("chamada ao LLM para selecao de dominio realizada com sucesso.")
                     except Exception as llm_error:
                         self.logger.error("Erro durante a chamada ao LLM para selecao de dominio", exc_info=True)
@@ -235,7 +240,7 @@ class QueryOrchestrator:
             self.logger.error(f"Erro ao recuperar chunks de conteudo: para o dominio {domain.name}: {str(e)}")
             raise e
     
-    def _prepare_context_prompt(self, query: str, chunks_content: List[Chunk]) -> str:
+    def _prepare_context_prompt(self, chunks_content: List[Chunk]) -> str:
         """
         Prepara o prompt para ser enviado ao modelo LLM usando o template da configuração.
 
@@ -251,9 +256,6 @@ class QueryOrchestrator:
                         tiver placeholders ausentes.
         """
         self.logger.info("Preparando o prompt de contexto a partir de chunks recuperados")
-        if not query:
-            self.logger.error("Erro ao preparar o prompt de contexto: Query vazia ou invalida")
-            raise ValueError("Query vazia ou inválida")
         
         if not chunks_content:
             self.logger.error("Erro ao preparar o prompt de contexto: Lista de chunks vazia ou invalida")
@@ -262,13 +264,16 @@ class QueryOrchestrator:
         context_str = "\n\n".join([chunk.content for chunk in chunks_content])
         
         # Obtém o template da configuração do LLM
-        template = self.hugging_face_manager.config.prompt_template
+
+        template = self.config.llm.prompt_template
+
+
 
         # Formata o prompt usando o template
         try:
-            context_and_query = """\n\nContexto:\n{context}\n\nPergunta:\n{query}\n\nResposta útil:"""
+            context_content = """\n\nContexto:\n{context}\n\n"""
 
-            context_prompt = template + context_and_query.format(context=context_str, query=query)
+            context_prompt = template + context_and_query.format(context=context_str)
             self.logger.debug("Prompt de contexto preparado com sucesso usando template.")
             return context_prompt
         except KeyError as e:
@@ -344,13 +349,17 @@ class QueryOrchestrator:
             
             self.logger.debug(f"Chunks recuperados para contexto ({len(chunks)} total)")
 
-            context_prompt = self._prepare_context_prompt(query, chunks)
-            self.logger.debug("Prompt final sendo enviado ao LLM:", final_prompt=context_prompt)
+            context_prompt = self._prepare_context_prompt(chunks)
+            self.logger.debug("Prompt de contexto sendo enviado ao LLM:", final_prompt=context_prompt)
+
+            messages = [
+                {"role": "system", "content": context_prompt},
+                {"role": "user", "content": query}
+            ]
 
 
 
-
-            answer = self.hugging_face_manager.generate_answer(query, context_prompt)
+            answer = self.llm_generator.generate_answer(messages)
             print(f"{answer}")
             print(f"{self.config.model_dump().items()}")
             self.logger.debug("Resposta do LLM:", answer=answer)

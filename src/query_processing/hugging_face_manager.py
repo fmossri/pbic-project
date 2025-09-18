@@ -57,7 +57,7 @@ class HuggingFaceManager:
         self.logger.debug(f"Inicializado InferenceClient do Hugging Face para o modelo: {self.config.model_repo_id}")
         return InferenceClient(
             token=token,
-            model=self.config.model_repo_id,
+            #model=self.config.model_repo_id,
         )
 
 
