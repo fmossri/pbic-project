@@ -2,8 +2,8 @@ import streamlit as st
 import traceback
 import pandas as pd
 
-from gui.streamlit_utils import update_log_levels_callback, initialize_logging_session, load_configuration, get_domain_manager
-from src.utils.logger import get_logger
+from rag.gui.streamlit_utils import update_log_levels_callback, initialize_logging_session, load_configuration, get_domain_manager
+from rag.src.utils.logger import get_logger
 
 st.set_page_config(
     layout="wide",
